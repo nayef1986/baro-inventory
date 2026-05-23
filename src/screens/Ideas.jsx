@@ -713,43 +713,54 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
   const [bT,   setBT]   = useState(null);
   const [bP,   setBP]   = useState(null);
 
-  // حساب البيانات — مع حد أقصى لعدد المنتجات لمنع التعليق
-  const PRODUCTS = useMemo(() => {
-    if (!products || products.length === 0) return [];
-    return products.slice(0, 200).map(p => {
-      const bought  = totalPurchases(p);
-      const sold    = periods.slice(-4).reduce((s, per) =>
-        s + Object.values(per.sales ?? {}).reduce((ss, d) => ss + num(d[p.barcode]?.qty ?? 0), 0), 0);
-      const closing = Math.max(0, bought - sold);
-      const soldPct = bought > 0 ? (sold/bought)*100 : 0;
-      const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
-      return { ...p, qty: bought, soldPct, buyPrice, closing };
-    });
-  }, [products, periods]);
+  // حساب البيانات بعد الفتح لمنع التعليق
+  const [PRODUCTS,  setProds]  = useState([]);
+  const [FACTORIES, setFacts]  = useState([]);
+  const [BRANCHES,  setBrancs] = useState([]);
+  const [ready,     setReady]  = useState(false);
 
-  const FACTORIES = useMemo(() => {
-    if (PRODUCTS.length === 0) return [];
-    const codes = [...new Set(PRODUCTS.map(p => getFactoryCode(p.barcode)).filter(Boolean))].slice(0, 20);
-    return codes.map(code => {
-      const prods   = PRODUCTS.filter(p => getFactoryCode(p.barcode) === code);
-      const bought  = prods.reduce((s,p) => s+p.qty, 0);
-      const sold    = prods.reduce((s,p) => s+Math.round(p.qty*p.soldPct/100), 0);
-      const soldPct = bought > 0 ? (sold/bought)*100 : 0;
-      const lostVal = prods.reduce((s,p) => s + p.closing * p.buyPrice, 0);
-      return { code, name: settings?.factories?.[code] ?? "", products: prods.length, soldPct, lostVal };
-    }).filter(f => f.soldPct < 40 && f.lostVal > 0).sort((a,b) => a.soldPct-b.soldPct).slice(0, 3);
-  }, [PRODUCTS, settings]);
+  useEffect(() => {
+    if (!products || products.length === 0) { setReady(true); return; }
+    
+    // نحسب بعد 100ms عشان الشاشة تفتح أولاً
+    const timer = setTimeout(() => {
+      const prods = products.slice(0, 100).map(p => {
+        const bought   = totalPurchases(p);
+        const lastPer  = periods[periods.length-1];
+        const sold     = Object.values(lastPer?.sales ?? {}).reduce((s,d)=>s+num(d[p.barcode]?.qty??0),0);
+        const closing  = Math.max(0, bought - sold);
+        const soldPct  = bought > 0 ? (sold/bought)*100 : 0;
+        const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+        return { ...p, qty: bought, soldPct, buyPrice, closing };
+      });
+      setProds(prods);
 
-  const BRANCHES = useMemo(() => {
-    if (periods.length === 0) return [];
-    const branches = allBranches(periods).slice(0, 10);
-    const lastPeriod = periods[periods.length - 1];
-    return branches.map(b => {
-      const rev = Object.values(lastPeriod?.sales?.[b] ?? {}).reduce((s,v)=>s+num(v.totalPrice),0);
-      const weak = products.filter(p => !lastPeriod?.sales?.[b]?.[p.barcode]).map(p=>p.name).slice(0,3);
-      return { name:b, rev, rank:0, weak };
-    }).sort((a,b)=>b.rev-a.rev).map((b,i)=>({...b,rank:i+1})).filter(b=>b.rank>=3).slice(0,3);
-  }, [products, periods]);
+      const codes = [...new Set(prods.map(p=>getFactoryCode(p.barcode)).filter(Boolean))].slice(0,10);
+      const facts = codes.map(code => {
+        const fp    = prods.filter(p=>getFactoryCode(p.barcode)===code);
+        const bought = fp.reduce((s,p)=>s+p.qty,0);
+        const sold   = fp.reduce((s,p)=>s+Math.round(p.qty*p.soldPct/100),0);
+        const soldPct = bought>0?(sold/bought)*100:0;
+        const lostVal = fp.reduce((s,p)=>s+p.closing*p.buyPrice,0);
+        return { code, name:settings?.factories?.[code]??"", products:fp.length, soldPct, lostVal };
+      }).filter(f=>f.soldPct<40&&f.lostVal>0).sort((a,b)=>a.soldPct-b.soldPct).slice(0,3);
+      setFacts(facts);
+
+      if (periods.length > 0) {
+        const lastPer = periods[periods.length-1];
+        const brs = allBranches(periods).slice(0,8).map(b=>{
+          const rev  = Object.values(lastPer?.sales?.[b]??{}).reduce((s,v)=>s+num(v.totalPrice),0);
+          const weak = products.filter(p=>!lastPer?.sales?.[b]?.[p.barcode]).map(p=>p.name).slice(0,3);
+          return { name:b, rev, rank:0, weak };
+        }).sort((a,b)=>b.rev-a.rev).map((b,i)=>({...b,rank:i+1})).filter(b=>b.rank>=3).slice(0,3);
+        setBrancs(brs);
+      }
+
+      setReady(true);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [products, periods, settings]);
 
   const onBuild = (type, prod) => { setBT(type); setBP(prod); setTab("builder"); };
 
@@ -776,7 +787,12 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
           <p style={{fontSize:"14px",color:"rgba(212,168,83,0.7)"}}>اقتراحات ذكية · بطاقات عروض احترافية</p>
         </div>
 
-        {PRODUCTS.length === 0 ? (
+        {!ready ? (
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:"32px",marginBottom:"12px"}}>⏳</div>
+            <div style={{fontSize:"15px",color:"rgba(212,168,83,0.7)"}}>جاري التحليل…</div>
+          </div>
+        ) : PRODUCTS.length === 0 ? (
           <div style={{textAlign:"center",padding:"48px 20px"}}>
             <div style={{fontSize:"48px",marginBottom:"16px"}}>💡</div>
             <div style={{fontSize:"20px",fontWeight:"900",color:"#ffffff",marginBottom:"8px"}}>مختبر الأفكار</div>
@@ -784,6 +800,11 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
               ارفع فاتورة شراء وملف مبيعات<br/>لتظهر الاقتراحات والتحليلات
             </div>
           </div>
+        ) : (
+          <>
+            <SmartAlert onBuild={onBuild} />
+            <TodayCard onBuild={onBuild} />
+          </>
         ) : (
           <>
             <SmartAlert onBuild={onBuild} />
