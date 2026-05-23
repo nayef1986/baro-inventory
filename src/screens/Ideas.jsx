@@ -789,8 +789,9 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
 
         {!ready ? (
           <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:"32px",marginBottom:"12px"}}>⏳</div>
+            <div style={{fontSize:"32px",marginBottom:"12px",animation:"spin 1s linear infinite"}}>⏳</div>
             <div style={{fontSize:"15px",color:"rgba(212,168,83,0.7)"}}>جاري التحليل…</div>
+            <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
           </div>
         ) : PRODUCTS.length === 0 ? (
           <div style={{textAlign:"center",padding:"48px 20px"}}>
@@ -800,11 +801,6 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
               ارفع فاتورة شراء وملف مبيعات<br/>لتظهر الاقتراحات والتحليلات
             </div>
           </div>
-        ) : (
-          <>
-            <SmartAlert onBuild={onBuild} />
-            <TodayCard onBuild={onBuild} />
-          </>
         ) : (
           <>
             <SmartAlert onBuild={onBuild} />
