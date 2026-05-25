@@ -1,18 +1,124 @@
 // ============================================================
-// Sales.jsx — شاشة المبيعات
+// Sales.jsx — شاشة المبيعات مع معاينة قبل الاعتماد
 // ============================================================
 
-import { useState, memo } from "react";
+import { useState, useMemo, memo } from "react";
 import {
   Card, Btn, StatPill, EmptyState, SectionHeader,
-  ConfirmModal, useToast, fmtN, fmtM,
+  ConfirmModal, SearchBar, useToast, fmtN, fmtM,
 } from "../components/UI.jsx";
 import { parseSalesFile } from "../lib/parsers.js";
+import { num } from "../lib/calc.js";
 
-export default function SalesScreen({ periods, onAddPeriod, onDeletePeriod }) {
+// ─── شاشة المراجعة قبل الاعتماد ─────────────────────────────
+
+function PreviewScreen({ period, products = [], onConfirm, onCancel }) {
+  const [search, setSearch] = useState("");
+
+  const branches = Object.keys(period.sales ?? {});
+  const totalUnits = branches.reduce((s, b) =>
+    s + Object.values(period.sales[b]).reduce((ss, v) => ss + num(v.qty), 0), 0);
+  const totalRev = branches.reduce((s, b) =>
+    s + Object.values(period.sales[b]).reduce((ss, v) => ss + num(v.totalPrice), 0), 0);
+
+  // نجمع كل المنتجات من كل الفروع
+  const allProducts = useMemo(() => {
+    const map = {};
+    branches.forEach(branch => {
+      Object.entries(period.sales[branch]).forEach(([barcode, data]) => {
+        if (!map[barcode]) map[barcode] = { barcode, totalQty: 0, totalRev: 0, branches: {} };
+        map[barcode].totalQty += num(data.qty);
+        map[barcode].totalRev += num(data.totalPrice);
+        map[barcode].branches[branch] = { qty: num(data.qty), price: num(data.totalPrice) };
+      });
+    });
+    return Object.values(map).sort((a, b) => b.totalQty - a.totalQty);
+  }, [period]);
+
+  const filtered = allProducts.filter(p =>
+    !search || p.barcode.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // تنبيهات
+  const warnings = [];
+  if (allProducts.some(p => !p.barcode)) warnings.push("⚠️ يوجد منتجات بدون باركود");
+  if (allProducts.some(p => p.totalQty > 1000)) warnings.push("⚠️ يوجد كميات غير منطقية (أكثر من 1000)");
+  const unknownBarcodes = products.length > 0
+    ? allProducts.filter(p => !products.some(pr => pr.barcode === p.barcode))
+    : [];
+  if (unknownBarcodes.length > 0)
+    warnings.push(`⚠️ ${unknownBarcodes.length} باركود غير موجود في المخزون: ${unknownBarcodes.slice(0,3).map(p=>p.barcode).join(", ")}${unknownBarcodes.length>3?" ...":""}`);
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader icon="🔍" title="مراجعة الفاتورة" subtitle="تأكد من البيانات قبل الاعتماد" />
+
+      {/* ملخص */}
+      <Card>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <StatPill label="الفروع"    value={branches.length}     color="text-blue-400" />
+          <StatPill label="المنتجات"  value={allProducts.length}  color="text-amber-400" />
+          <StatPill label="إجمالي الوحدات" value={fmtN(totalUnits)} color="text-emerald-400" />
+          <StatPill label="إجمالي الإيرادات" value={fmtM(totalRev)} color="text-purple-400" />
+        </div>
+        <div className="text-sm font-bold text-slate-100 mb-1">📅 الفترة: {period.label}</div>
+        <div className="text-xs text-slate-400">{branches.length} فرع نشط</div>
+      </Card>
+
+      {/* تنبيهات */}
+      {warnings.map((w, i) => (
+        <div key={i} className="bg-amber-900/20 border border-amber-700/40 rounded-xl px-4 py-3 text-amber-300 text-sm">{w}</div>
+      ))}
+
+      {/* قائمة المنتجات */}
+      <SearchBar value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالباركود…" />
+
+      <div className="space-y-2">
+        {filtered.slice(0, 50).map(p => (
+          <Card key={p.barcode} className="!p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-mono text-blue-400 text-sm font-bold">{p.barcode}</div>
+              <div className="text-right">
+                <div className="font-black text-emerald-400 tabular-nums">{fmtN(p.totalQty)} وحدة</div>
+                <div className="text-xs text-slate-400">{fmtM(p.totalRev)}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(p.branches).filter(([,v]) => v.qty > 0).map(([branch, v]) => (
+                <span key={branch} className="text-xs bg-slate-700 text-slate-300 rounded-lg px-2 py-0.5">
+                  {branch}: {fmtN(v.qty)}
+                </span>
+              ))}
+            </div>
+          </Card>
+        ))}
+        {filtered.length > 50 && (
+          <div className="text-center text-slate-500 text-sm py-2">عرض أول 50 من {filtered.length}</div>
+        )}
+      </div>
+
+      {/* أزرار */}
+      <div className="grid grid-cols-2 gap-3 sticky bottom-20 bg-slate-900 pb-2 pt-2">
+        <button onClick={onCancel}
+          className="py-3 rounded-2xl border border-slate-600 bg-slate-700 text-slate-200 font-bold text-sm">
+          ← تراجع
+        </button>
+        <button onClick={onConfirm}
+          className="py-3 rounded-2xl bg-emerald-600 text-white font-black text-sm">
+          ✅ اعتماد الفاتورة
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── الشاشة الرئيسية ─────────────────────────────────────────
+
+export default function SalesScreen({ periods, products = [], onAddPeriod, onDeletePeriod, onGetPeriods }) {
   const [loading,      setLoading]      = useState(false);
   const [label,        setLabel]        = useState("");
   const [log,          setLog]          = useState([]);
+  const [preview,      setPreview]      = useState(null); // الفاتورة في انتظار المراجعة
   const [deleteTarget, setDeleteTarget] = useState(null);
   const { show, ToastContainer } = useToast();
 
@@ -37,33 +143,60 @@ export default function SalesScreen({ periods, onAddPeriod, onDeletePeriod }) {
         return;
       }
 
-      const result = await onAddPeriod(period);
-
-      if (!result.ok) {
-        if (result.reason?.includes("مرفوعة") || result.reason?.includes("مكرر")) {
-          setLog(p => [...p, { type: "warning", text: `⚠️ ${result.reason}` }]);
-          show(result.reason, "warning");
-        } else {
-          setLog(p => [...p, { type: "error", text: `فشل الحفظ: ${result.reason}` }]);
-        }
-      } else {
-        const branchCount = Object.keys(period.sales ?? {}).length;
-        const totalSold   = Object.values(period.sales ?? {}).reduce((s, d) =>
-          s + Object.values(d).reduce((ss, v) => ss + (v.qty || 0), 0), 0);
-
-        setLog(p => [...p,
-          { type: "success", text: `✅ تم حفظ الفترة "${period.label}"` },
-          { type: "info",    text: `${branchCount} فرع · ${fmtN(totalSold)} وحدة مباعة` },
-        ]);
-        show(`✅ تم حفظ "${period.label}"`);
-        setLabel("");
+      // تحقق من التكرار قبل المراجعة
+      const existingPeriods = onGetPeriods?.() ?? [];
+      const isDuplicate = existingPeriods.some(p =>
+        p.fingerprint && period.fingerprint && p.fingerprint === period.fingerprint
+      );
+      if (isDuplicate) {
+        setLog(p => [...p, {
+          type: "warning",
+          text: "⚠️ هذا الملف مرفوع مسبقاً — نفس الأرقام موجودة في النظام"
+        }]);
+        setLoading(false);
+        e.target.value = "";
+        return;
       }
+
+      // نعرض المراجعة بدل الحفظ المباشر
+      setPreview(period);
+
     } catch (err) {
       setLog(p => [...p, { type: "error", text: `خطأ: ${err.message}` }]);
     }
 
     setLoading(false);
     e.target.value = "";
+  };
+
+  const handleConfirm = async () => {
+    if (!preview) return;
+    setLoading(true);
+
+    const result = await onAddPeriod(preview);
+
+    if (!result.ok) {
+      if (result.reason?.includes("مرفوعة") || result.reason?.includes("مكرر")) {
+        setLog(p => [...p, { type: "warning", text: `⚠️ ${result.reason}` }]);
+        show(result.reason, "warning");
+      } else {
+        setLog(p => [...p, { type: "error", text: `فشل الحفظ: ${result.reason}` }]);
+      }
+    } else {
+      const branchCount = Object.keys(preview.sales ?? {}).length;
+      const totalSold   = Object.values(preview.sales ?? {}).reduce((s, d) =>
+        s + Object.values(d).reduce((ss, v) => ss + (v.qty || 0), 0), 0);
+
+      setLog(p => [...p,
+        { type: "success", text: `✅ تم حفظ الفترة "${preview.label}"` },
+        { type: "info",    text: `${branchCount} فرع · ${fmtN(totalSold)} وحدة مباعة` },
+      ]);
+      show(`✅ تم حفظ "${preview.label}"`);
+      setLabel("");
+    }
+
+    setPreview(null);
+    setLoading(false);
   };
 
   const LOG_COLORS = {
@@ -73,118 +206,107 @@ export default function SalesScreen({ periods, onAddPeriod, onDeletePeriod }) {
     info:    "text-blue-400",
   };
 
+  // لو في معاينة — نعرض شاشة المراجعة
+  if (preview) {
+    return (
+      <PreviewScreen
+        period={preview}
+        products={products}
+        onConfirm={handleConfirm}
+        onCancel={() => { setPreview(null); setLog([]); }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <ToastContainer />
 
       {deleteTarget && (
         <ConfirmModal
-          title="حذف الفترة"
-          message={`هل تريد حذف فترة "${deleteTarget.label}"؟ لا يمكن التراجع.`}
+          title="حذف فترة المبيعات"
+          message={`هل تريد حذف "${deleteTarget.label}"؟`}
           onConfirm={async () => {
-            await onDeletePeriod(deleteTarget.id);
+            const r = await onDeletePeriod(deleteTarget.id);
             setDeleteTarget(null);
-            show("تم الحذف");
+            if (r?.ok) show("تم الحذف");
+            else show(r?.error ?? "فشل الحذف", "error");
           }}
           onCancel={() => setDeleteTarget(null)}
         />
       )}
 
-      {/* رفع */}
+      <SectionHeader icon="📊" title="المبيعات" subtitle={today} />
+
+      {/* رفع ملف */}
       <Card>
-        <SectionHeader icon="📊" title="رفع ملف مبيعات" />
-
-        <div className="text-xs text-slate-500 space-y-0.5 mb-3 bg-slate-700/50 rounded-xl p-3">
-          <div>📌 صف 2: أسماء الفروع (كل فرع 4 أعمدة)</div>
-          <div>📌 صف 5+: [باركود] اسم المنتج</div>
-          <div className="text-slate-600">الأعمدة: طلبات | كمية | إجمالي | cost</div>
-        </div>
-
-        {/* تسمية */}
-        <div className="mb-3">
-          <label className="text-xs text-slate-400 block mb-1">تسمية الفترة (اختياري)</label>
+        <SectionHeader icon="📤" title="رفع ملف مبيعات" />
+        <div className="space-y-3">
           <input
             value={label}
             onChange={e => setLabel(e.target.value)}
-            placeholder={`أسبوع ${today}`}
+            placeholder="اسم الفترة (اختياري)"
             className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
           />
+          <label className="w-full border-2 border-dashed border-slate-600 hover:border-blue-500 rounded-2xl p-5 flex flex-col items-center gap-2 cursor-pointer transition-colors">
+            {loading ? (
+              <div className="text-blue-400 font-bold text-sm animate-pulse">⏳ جاري القراءة…</div>
+            ) : (
+              <>
+                <span className="text-3xl">📊</span>
+                <span className="text-slate-300 font-bold text-sm">اختر ملف Excel للمبيعات</span>
+                <span className="text-slate-500 text-xs">سيُعرض للمراجعة قبل الحفظ</span>
+              </>
+            )}
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={loading} />
+          </label>
         </div>
 
-        <label className={`w-full border-2 border-dashed rounded-2xl p-6 flex flex-col items-center gap-2
-          cursor-pointer transition-colors ${loading ? "border-blue-500 bg-blue-900/10" : "border-slate-600 hover:border-blue-500"}`}>
-          <span className="text-4xl">{loading ? "⏳" : "📊"}</span>
-          <span className="text-slate-300 font-bold text-sm">{loading ? "جاري المعالجة…" : "اسحب ملف المبيعات هنا"}</span>
-          <span className="text-slate-500 text-xs">Excel (.xlsx) — تقرير المبيعات</span>
-          <input type="file" accept=".xlsx,.xls" onChange={handleFile} disabled={loading} className="hidden" />
-          {!loading && (
-            <span className="bg-green-600 text-white px-6 py-2 rounded-xl font-bold text-sm">اختر ملف</span>
-          )}
-        </label>
-
         {log.length > 0 && (
-          <div className="mt-3 bg-slate-900 rounded-xl p-3 space-y-1 max-h-32 overflow-y-auto">
+          <div className="mt-3 space-y-1 bg-slate-800/50 rounded-xl p-3">
             {log.map((l, i) => (
-              <div key={i} className={`text-xs ${LOG_COLORS[l.type] ?? "text-slate-400"}`}>{l.text}</div>
+              <div key={i} className={`text-xs font-mono ${LOG_COLORS[l.type]}`}>{l.text}</div>
             ))}
           </div>
         )}
       </Card>
 
       {/* الفترات */}
-      {periods.length > 0 && (
-        <div>
-          <SectionHeader icon="📅" title="الفترات المحفوظة" subtitle={`${periods.length} فترة · الأحدث أولاً`} />
-          <div className="space-y-3">
-            {[...periods].reverse().map(period => {
-              const branchCount = Object.keys(period.sales ?? {}).length;
-              const totalSold   = Object.values(period.sales ?? {}).reduce((s, d) =>
-                s + Object.values(d).reduce((ss, v) => ss + (v.qty || 0), 0), 0);
-              const totalRev = Object.values(period.sales ?? {}).reduce((s, d) =>
-                s + Object.values(d).reduce((ss, v) => ss + (v.totalPrice || 0), 0), 0);
+      <SectionHeader icon="📅" title={`الفترات (${periods.length})`} />
 
-              const branches = Object.keys(period.sales ?? {});
+      {periods.length === 0 ? (
+        <EmptyState icon="📅" title="لا توجد فترات" subtitle="ارفع ملف مبيعات للبداية" />
+      ) : (
+        <div className="space-y-2">
+          {[...periods].reverse().map(period => {
+            const branchCount  = Object.keys(period.sales ?? {}).length;
+            const productCount = new Set(
+              Object.values(period.sales ?? {}).flatMap(d => Object.keys(d))
+            ).size;
+            const totalSold = Object.values(period.sales ?? {}).reduce((s, d) =>
+              s + Object.values(d).reduce((ss, v) => ss + num(v.qty), 0), 0);
+            const totalRev = Object.values(period.sales ?? {}).reduce((s, d) =>
+              s + Object.values(d).reduce((ss, v) => ss + num(v.totalPrice), 0), 0);
 
-              return (
-                <Card key={period.id}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="font-black text-slate-100 text-base">{period.label}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        📅 {period.uploadDate} · {branchCount} فرع نشط
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setDeleteTarget(period)}
-                      className="text-slate-500 hover:text-red-400 text-xl w-8 h-8 flex items-center justify-center"
-                    >✕</button>
+            return (
+              <Card key={period.id} className="!p-3">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="font-black text-slate-100 text-sm">{period.label}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">📅 {period.uploadDate} · {branchCount} فرع نشط</div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <StatPill label="إجمالي إيرادات" value={fmtM(totalRev)}   color="text-emerald-400" />
-                    <StatPill label="إجمالي مباع"    value={fmtN(totalSold)}  color="text-amber-400" />
-                  </div>
-
-                  {/* الفروع */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {branches.slice(0, 5).map(b => (
-                      <span key={b} className="bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded-lg">{b}</span>
-                    ))}
-                    {branches.length > 5 && (
-                      <span className="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded-lg font-bold">
-                        {branches.length - 5}+
-                      </span>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                  <button onClick={() => setDeleteTarget(period)}
+                    className="text-red-400 hover:text-red-300 text-lg shrink-0">🗑</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatPill label="المنتجات"  value={fmtN(productCount)} color="text-blue-400" />
+                  <StatPill label="مباع"       value={fmtN(totalSold)}    color="text-amber-400" />
+                  <StatPill label="الإيرادات"  value={fmtM(totalRev)}     color="text-emerald-400" />
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      )}
-
-      {periods.length === 0 && (
-        <EmptyState icon="📊" title="لا توجد فترات مبيعات" subtitle="ارفع ملف مبيعات للبدء" />
       )}
     </div>
   );

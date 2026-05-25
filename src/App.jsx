@@ -12,7 +12,7 @@ import ContainersScreen from "./screens/Containers.jsx";
 import SalesScreen      from "./screens/Sales.jsx";
 import BranchesScreen   from "./screens/Branches.jsx";
 import CompareScreen    from "./screens/Compare.jsx";
-import IdeasScreen      from "./screens/Ideas.jsx";
+import IdeasScreen      from "./screens/Ideas/index.jsx";
 import ReportsScreen    from "./screens/Reports.jsx";
 import SettingsScreen   from "./screens/Settings.jsx";
 import AIChat           from "./components/AIChat.jsx";
@@ -76,6 +76,15 @@ export default function App() {
     dispatch({ type: "SET_PRODUCTS", payload: products });
     await saveProducts(products);
   }, []);
+
+  // حذف كونتينر مع عكس الكميات
+  const handleDeleteContainer = useCallback(async (container) => {
+    // نحذف كل المنتجات التابعة لهذا الكونتينر
+    const updatedProducts = state.products.filter(p => p.container !== container);
+    dispatch({ type: "SET_PRODUCTS", payload: updatedProducts });
+    await saveProducts(updatedProducts);
+    return { ok: true };
+  }, [state.products]);
 
   const handleAddPeriod = useCallback(async (period) => {
     const result = await addPeriod(period);
@@ -158,6 +167,7 @@ export default function App() {
     onUpdateProducts: handleUpdateProducts,
     onAddPeriod:      handleAddPeriod,
     onDeletePeriod:   handleDeletePeriod,
+    onGetPeriods:     () => state.periods,
     onSaveSettings:   handleSaveSettings,
     onSaveImage:      handleSaveImage,
     onRemoveImage:    handleRemoveImage,
@@ -193,6 +203,15 @@ export default function App() {
             </div>
           </div>
 
+          <a
+            href="https://baro-ideas-gamma.vercel.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-gradient-to-r from-amber-600 to-yellow-500 text-white px-3 py-2 rounded-xl
+              text-sm font-bold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+          >
+            💡 <span>أفكار</span>
+          </a>
           <button
             onClick={() => setShowAI(true)}
             className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-2 rounded-xl

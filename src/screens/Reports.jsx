@@ -24,9 +24,11 @@ import {
 const FactoryReportView = memo(({ products, periods, settings, images, onSaveImage, onRemoveImage, onBack }) => {
   const [selectedFactory, setSelectedFactory] = useState("");
   const [threshold,       setThreshold]       = useState(60);
+  const [search,          setSearch]          = useState("");
+  const [openCont,        setOpenCont]        = useState({});
+  const [productSearch,   setProductSearch]   = useState("");
   const { show, ToastContainer } = useToast();
 
-  // مصانع مجمّعة تحت الكونتينر
   const containerFactories = useMemo(() => {
     const containers = allContainers(products);
     return containers.map(cont => {
@@ -36,12 +38,36 @@ const FactoryReportView = memo(({ products, periods, settings, images, onSaveIma
     }).filter(c => c.codes.length > 0);
   }, [products]);
 
+  // فلترة بالبحث
+  const filteredContainers = useMemo(() => {
+    if (!search) return containerFactories;
+    const s = search.toLowerCase();
+    return containerFactories.map(({ cont, codes }) => ({
+      cont,
+      codes: codes.filter(code =>
+        code.toLowerCase().includes(s) ||
+        (settings?.factories?.[code] ?? "").toLowerCase().includes(s) ||
+        cont.toLowerCase().includes(s)
+      )
+    })).filter(c => c.codes.length > 0);
+  }, [containerFactories, search, settings]);
+
   const report = useMemo(() => {
     if (!selectedFactory) return null;
     return factoryReport(products, periods, selectedFactory);
   }, [products, periods, selectedFactory]);
 
   const factoryName = settings?.factories?.[selectedFactory] ?? "";
+
+  const filteredProducts = useMemo(() => {
+    if (!report) return [];
+    let list = [...report.products].sort((a,b) => b.soldPct - a.soldPct);
+    if (productSearch) {
+      const s = productSearch.toLowerCase();
+      list = list.filter(p => p.barcode.toLowerCase().includes(s) || p.name.toLowerCase().includes(s));
+    }
+    return list;
+  }, [report, productSearch]);
 
   const STATUS_COLOR = { جيد: "text-emerald-400", منخفض: "text-amber-400", نفد: "text-red-400" };
 
@@ -53,32 +79,52 @@ const FactoryReportView = memo(({ products, periods, settings, images, onSaveIma
       <Card>
         <SectionHeader icon="🏭" title="تقرير المصنع" />
 
-        <div className="space-y-3">
-          {containerFactories.map(({ cont, codes }) => (
-            <div key={cont}>
-              <div className="text-xs text-blue-400 font-bold mb-1.5">📦 {cont}</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {codes.map(code => (
-                  <button key={code}
-                    onClick={() => setSelectedFactory(code)}
-                    className={`text-right px-3 py-2 rounded-xl text-xs transition-colors
-                      ${selectedFactory === code ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}>
-                    <div className="font-bold font-mono">{code}</div>
-                    {settings?.factories?.[code] && <div className="text-slate-400 truncate">{settings.factories[code]}</div>}
-                  </button>
-                ))}
-              </div>
+        {/* بحث */}
+        <div className="relative mb-3">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="🔍 بحث برقم أو اسم المصنع…"
+            className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+          />
+          {search && <button onClick={() => setSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 text-sm">✕</button>}
+        </div>
+
+        {/* كونتينرات قابلة للطي */}
+        <div className="space-y-2">
+          {filteredContainers.map(({ cont, codes }) => (
+            <div key={cont} className="bg-slate-700/30 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setOpenCont(p => ({ ...p, [cont]: !p[cont] }))}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-400 text-xs font-bold">📦 {cont}</span>
+                  <span className="text-slate-500 text-xs">({codes.length} مصنع)</span>
+                </div>
+                <span className="text-slate-400 text-sm">{openCont[cont] ? "▲" : "▼"}</span>
+              </button>
+              {(openCont[cont] || search) && (
+                <div className="grid grid-cols-2 gap-1.5 px-3 pb-3">
+                  {codes.map(code => (
+                    <button key={code}
+                      onClick={() => { setSelectedFactory(code); setProductSearch(""); }}
+                      className={`text-right px-3 py-2 rounded-xl text-xs transition-colors
+                        ${selectedFactory === code ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}>
+                      <div className="font-bold font-mono">{code}</div>
+                      {settings?.factories?.[code] && <div className="text-slate-400 truncate">{settings.factories[code]}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
 
         {selectedFactory && (
-          <div className="mt-3">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-xs text-slate-400">نسبة النجاح:</span>
-              <NumberInput value={threshold} onChange={setThreshold} min={0} max={100} className="w-16" />
-              <span className="text-xs text-slate-400">%</span>
-            </div>
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-xs text-slate-400">نسبة النجاح:</span>
+            <NumberInput value={threshold} onChange={setThreshold} min={0} max={100} className="w-16" />
+            <span className="text-xs text-slate-400">%</span>
           </div>
         )}
       </Card>
@@ -88,7 +134,7 @@ const FactoryReportView = memo(({ products, periods, settings, images, onSaveIma
           <Card>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="font-black text-slate-100">{selectedFactory}</div>
+                <div className="font-black text-slate-100 text-lg">{selectedFactory}</div>
                 {factoryName && <div className="text-xs text-slate-400">{factoryName}</div>}
               </div>
               <div className="text-right">
@@ -97,43 +143,61 @@ const FactoryReportView = memo(({ products, periods, settings, images, onSaveIma
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 mb-3">
-              <StatPill label={`✓ ناجح (≥${threshold}%)`} value={fmtN(report.successful.length)} color="text-emerald-400" />
-              <StatPill label={`✗ ضعيف (<${threshold}%)`} value={fmtN(report.weak.length)}       color="text-red-400" />
+              <StatPill label={`✓ ناجح ≥${threshold}%`} value={fmtN(report.successful.length)} color="text-emerald-400" />
+              <StatPill label={`✗ ضعيف <${threshold}%`} value={fmtN(report.weak.length)}       color="text-red-400" />
             </div>
-            <ExportBar
-              onExcel={() => {
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <button onClick={() => {
                 const r = exportFactoryReport(report, factoryName, threshold);
                 if (!r.ok) show(r.error, "error"); else show("تم التصدير ✓");
-              }}
-            />
+              }} className="flex flex-col items-center gap-1 bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-2xl font-black transition-colors">
+                <span className="text-2xl">📊</span><span className="text-sm">Excel</span>
+              </button>
+              <button onClick={() => show("الطباعة قريباً", "info")}
+                className="flex flex-col items-center gap-1 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 py-3 rounded-2xl font-black transition-colors">
+                <span className="text-2xl">🖨️</span><span className="text-sm">طباعة</span>
+              </button>
+            </div>
           </Card>
 
+          {/* بحث في المنتجات */}
+          <div className="relative">
+            <input
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              placeholder="🔍 بحث بالباركود أو اسم المنتج…"
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+            />
+            {productSearch && <button onClick={() => setProductSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 text-sm">✕</button>}
+          </div>
+
           <div className="space-y-2">
-            {report.products
-              .sort((a, b) => b.soldPct - a.soldPct)
-              .map(p => (
-                <Card key={p.barcode} className="!p-3">
-                  <div className="flex items-start gap-3 mb-2">
-                    <ProductImage barcode={p.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="md" name={p.name} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-slate-100 text-sm leading-tight">{p.name}</div>
-                      <div className="text-xs text-slate-400 font-mono">{p.barcode}</div>
-                      <div className="text-xs text-blue-400">📦 {p.container}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className={`text-xl font-black tabular-nums ${p.soldPct >= threshold ? "text-emerald-400" : "text-red-400"}`}>
-                        {fmtPct(p.soldPct)}
-                      </div>
-                      <div className={`text-xs font-bold ${STATUS_COLOR[p.status] ?? "text-slate-400"}`}>{p.status}</div>
-                    </div>
+            {filteredProducts.map(p => (
+              <Card key={p.barcode} className="!p-3">
+                <div className="flex items-start gap-3 mb-2">
+                  <ProductImage barcode={p.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="md" name={p.name} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-100 text-sm leading-tight">{p.name}</div>
+                    <div className="text-xs text-slate-400 font-mono">{p.barcode}</div>
+                    <div className="text-xs text-blue-400">📦 {p.container}</div>
                   </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    <StatPill label="مشتريات" value={fmtN(p.bought)}  color="text-blue-400" />
-                    <StatPill label="مباع"    value={fmtN(p.sold)}    color="text-amber-400" />
-                    <StatPill label="متبقي"   value={fmtN(p.closing)} color={p.closing === 0 ? "text-red-400" : "text-slate-300"} />
+                  <div className="text-right shrink-0">
+                    <div className={`text-xl font-black tabular-nums ${p.soldPct >= threshold ? "text-emerald-400" : "text-red-400"}`}>
+                      {fmtPct(p.soldPct)}
+                    </div>
+                    <div className={`text-xs font-bold ${STATUS_COLOR[p.status] ?? "text-slate-400"}`}>{p.status}</div>
                   </div>
-                </Card>
-              ))}
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  <StatPill label="مشتريات" value={fmtN(p.bought)}  color="text-blue-400" />
+                  <StatPill label="مباع"    value={fmtN(p.sold)}    color="text-amber-400" />
+                  <StatPill label="متبقي"   value={fmtN(p.closing)} color={p.closing === 0 ? "text-red-400" : "text-slate-300"} />
+                </div>
+              </Card>
+            ))}
+            {filteredProducts.length === 0 && report && (
+              <div className="text-center text-slate-500 text-sm py-4">لا توجد نتائج</div>
+            )}
           </div>
         </>
       )}
@@ -366,12 +430,7 @@ export default function ReportsScreen({ products, periods, settings, images, onS
         subtitle="أداء كل مصنع مع نسبة النجاح"
         onClick={() => setView("factory")}
       />
-      <ReportCard
-        icon="📦"
-        title="تقرير الكونتينر"
-        subtitle="ملخص الكونتينر مع Excel وطباعة"
-        onClick={() => setView("container")}
-      />
+
     </div>
   );
 }

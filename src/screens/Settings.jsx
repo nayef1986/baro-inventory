@@ -9,6 +9,113 @@ import {
 } from "../components/UI.jsx";
 import { allContainers, allFactoryCodes, getFactoryCode } from "../lib/calc.js";
 
+// ─── رفع ذكي مع قراءة باركود ──────────────────────────────────
+
+function SmartScanUpload({ products, onBulkSaveImage }) {
+  const [scanning,  setScanning]  = useState(false);
+  const [results,   setResults]   = useState([]);
+  const [error,     setError]     = useState("");
+
+  const handleFiles = async (files) => {
+    setScanning(true);
+    setResults([]);
+    setError("");
+
+    const fileArr = Array.from(files);
+    const newResults = [];
+
+    for (const file of fileArr) {
+      // نضغط الصورة
+      const base64 = await new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 800;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+
+      try {
+        // نرسل لـ Gemini للقراءة
+        const response = await fetch("/api/scan-barcode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64 }),
+        });
+        const data = await response.json();
+
+        if (data.barcode) {
+          // نتحقق من وجود المنتج
+          const product = products.find(p => p.barcode === data.barcode);
+          if (product) {
+            // نحفظ الصورة
+            if (onBulkSaveImage) {
+              await onBulkSaveImage(data.barcode, base64);
+            }
+            newResults.push({ file: file.name, barcode: data.barcode, product: product.name, status: "success" });
+          } else {
+            newResults.push({ file: file.name, barcode: data.barcode, product: null, status: "not_found" });
+          }
+        } else {
+          newResults.push({ file: file.name, barcode: null, product: null, status: "no_barcode", message: data.message });
+        }
+      } catch (e) {
+        newResults.push({ file: file.name, barcode: null, product: null, status: "error", message: e.message });
+      }
+
+      setResults([...newResults]);
+    }
+
+    setScanning(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      <label
+        className="w-full border-2 border-dashed border-slate-600 hover:border-purple-500 rounded-2xl p-5 flex flex-col items-center gap-2 cursor-pointer transition-colors"
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+      >
+        <span className="text-3xl">{scanning ? "⏳" : "🤖"}</span>
+        <span className="text-slate-300 font-bold text-sm">{scanning ? "جاري القراءة…" : "ارفع صورة منتج أو كرتون"}</span>
+        <span className="text-slate-500 text-xs">Gemini يقرأ الباركود تلقائياً · يدعم السحب والإفلات</span>
+        <input type="file" accept="image/*" multiple className="hidden"
+          onChange={e => handleFiles(e.target.files)} disabled={scanning} />
+      </label>
+
+      {results.length > 0 && (
+        <div className="space-y-2">
+          {results.map((r, i) => (
+            <div key={i} className={`rounded-xl px-3 py-2.5 text-xs ${
+              r.status === "success"   ? "bg-emerald-900/20 border border-emerald-700/40" :
+              r.status === "not_found" ? "bg-amber-900/20 border border-amber-700/40" :
+              "bg-red-900/20 border border-red-700/40"
+            }`}>
+              <div className="font-bold text-slate-100 truncate">{r.file}</div>
+              {r.barcode && <div className="font-mono text-blue-400 mt-0.5">{r.barcode}</div>}
+              {r.product  && <div className="text-emerald-400 mt-0.5">✅ {r.product}</div>}
+              {r.status === "not_found" && <div className="text-amber-400 mt-0.5">⚠️ الباركود غير موجود في النظام</div>}
+              {r.status === "no_barcode" && <div className="text-red-400 mt-0.5">❌ لم يُعثر على باركود</div>}
+              {r.status === "error" && <div className="text-red-400 mt-0.5">❌ خطأ: {r.message}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsScreen({ products, periods, settings, onSaveSettings, onClearAll, onBulkSaveImage }) {
   const [brandName, setBrandName] = useState(settings?.brandName ?? "البارو");
   const [minStock,  setMinStock]  = useState(settings?.minStock ?? 12);
@@ -107,6 +214,15 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
           <div className="text-slate-600">مثال: 26052611B001.jpg</div>
           <div className="text-slate-600">يدعم: jpg, jpeg, png, webp</div>
         </div>
+
+      {/* قراءة الباركود تلقائياً من الصورة */}
+      <Card>
+        <SectionHeader icon="🤖" title="قراءة الباركود من الصورة" subtitle="Gemini يقرأ الباركود تلقائياً" />
+        <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3">
+          ارفع صورة منتج أو كرتون — سيقرأ الباركود ويربط الصورة بالمنتج تلقائياً
+        </div>
+        <SmartScanUpload products={products} onBulkSaveImage={onBulkSaveImage} />
+      </Card>
 
         <label className="w-full border-2 border-dashed border-slate-600 hover:border-blue-500 rounded-2xl p-5 flex flex-col items-center gap-2 cursor-pointer transition-colors">
           <span className="text-3xl">🖼️</span>

@@ -9,7 +9,7 @@ import {
   ProgressBar, useToast, fmtN, fmtM, fmtPct,
 } from "../components/UI.jsx";
 import { ProductImage } from "../components/ProductImage.jsx";
-import { parsePurchaseFile, applyPurchases } from "../lib/parsers.js";
+import { parsePurchaseFile, applyPurchases, reversePurchases } from "../lib/parsers.js";
 import {
   containerSummary, allContainers, allFactoryCodes,
   getFactoryCode, arabicIncludes, calcProduct,
@@ -19,9 +19,84 @@ import { exportContainerReport, printContainerReport } from "../lib/exporters.js
 
 // ─── رفع الكونتينر ───────────────────────────────────────────
 
+// ─── معاينة فاتورة الشراء ────────────────────────────────────
+
+const PurchasePreview = memo(({ items, container, products, onConfirm, onCancel }) => {
+  const [search, setSearch] = useState("");
+
+  const filtered = items.filter(p =>
+    !search || p.barcode.includes(search) || p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalQty  = items.reduce((s, p) => s + p.qty, 0);
+  const totalCost = items.reduce((s, p) => s + p.qty * p.buyPrice, 0);
+
+  // تنبيهات
+  const warnings = [];
+  const existing = items.filter(p => products.some(ep => ep.barcode === p.barcode));
+  const newProds  = items.filter(p => !products.some(ep => ep.barcode === p.barcode));
+  if (newProds.length > 0) warnings.push(`✨ ${newProds.length} منتج جديد سيُضاف`);
+  if (existing.length > 0) warnings.push(`🔄 ${existing.length} منتج موجود سيُجمع`);
+  if (items.some(p => p.buyPrice === 0)) warnings.push("⚠️ يوجد منتجات بسعر شراء صفر");
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader icon="🔍" title="مراجعة فاتورة الشراء" subtitle="تأكد من البيانات قبل الاعتماد" />
+
+      <Card>
+        <div className="font-black text-slate-100 text-base mb-3">📦 {container}</div>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <StatPill label="المنتجات"  value={fmtN(items.length)} color="text-blue-400" />
+          <StatPill label="إجمالي الكميات" value={fmtN(totalQty)} color="text-amber-400" />
+          <StatPill label="التكلفة الكلية" value={fmtM(totalCost)} color="text-red-400" />
+        </div>
+        {warnings.map((w, i) => (
+          <div key={i} className="text-xs text-amber-300 bg-amber-900/20 rounded-lg px-3 py-1.5 mb-1">{w}</div>
+        ))}
+      </Card>
+
+      <SearchBar value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالباركود أو الاسم…" />
+
+      <div className="space-y-2">
+        {filtered.slice(0, 100).map((p, i) => (
+          <Card key={i} className="!p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
+                <div className="font-mono text-blue-400 text-xs mt-0.5">{p.barcode}</div>
+                <div className="text-xs text-slate-400 mt-0.5">📦 {p.container}</div>
+              </div>
+              <div className="text-right shrink-0 mr-3">
+                <div className="font-black text-emerald-400 tabular-nums">{fmtN(p.qty)} قطعة</div>
+                <div className="text-xs text-red-300">شراء: {fmtM(p.buyPrice)}</div>
+                <div className="text-xs text-blue-300">بيع: {fmtM(p.sellPrice)}</div>
+              </div>
+            </div>
+          </Card>
+        ))}
+        {filtered.length > 100 && (
+          <div className="text-center text-slate-500 text-sm py-2">عرض أول 100 من {filtered.length}</div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sticky bottom-20 bg-slate-900 pb-2 pt-2">
+        <button onClick={onCancel}
+          className="py-3 rounded-2xl border border-slate-600 bg-slate-700 text-slate-200 font-bold text-sm">
+          ← تراجع
+        </button>
+        <button onClick={onConfirm}
+          className="py-3 rounded-2xl bg-emerald-600 text-white font-black text-sm">
+          ✅ اعتماد الفاتورة
+        </button>
+      </div>
+    </div>
+  );
+});
+
 const UploadSection = memo(({ products, onUpdate }) => {
-  const [loading, setLoading] = useState(false);
-  const [log,     setLog]     = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [log,      setLog]      = useState([]);
+  const [preview,  setPreview]  = useState(null);
   const { show, ToastContainer } = useToast();
 
   const handleFile = async (e) => {
@@ -39,14 +114,21 @@ const UploadSection = memo(({ products, onUpdate }) => {
         return;
       }
       warnings.forEach(w => setLog(p => [...p, { type: "warning", text: w }]));
-      const updated = applyPurchases(products, items, container);
-      const newCount = updated.length - products.length;
-      await onUpdate(updated);
-      setLog(p => [...p,
-        { type: "success", text: `✅ ${container} — ${items.length} منتج` },
-        { type: "info",    text: `${newCount} جديد · ${items.length - newCount} تم الجمع` },
-      ]);
-      show(`✅ ${container} — ${items.length} منتج`);
+      // تحقق من تكرار الكونتينر
+      const existingContainers = products.map(p => p.container).filter(Boolean);
+      const containerExists = products.some(p =>
+        p.container === container &&
+        p.purchases?.some(pur => pur.container === container)
+      );
+      if (containerExists) {
+        setLog(p => [...p, {
+          type: "warning",
+          text: `⚠️ الكونتينر ${container} مرفوع مسبقاً — ستُضاف الكميات للموجود`
+        }]);
+      }
+
+      // نعرض المراجعة بدل الحفظ المباشر
+      setPreview({ items, container, isDuplicate: containerExists });
     } catch (err) {
       setLog(p => [...p, { type: "error", text: `خطأ: ${err.message}` }]);
     }
@@ -54,7 +136,38 @@ const UploadSection = memo(({ products, onUpdate }) => {
     e.target.value = "";
   };
 
+  const handleConfirm = async () => {
+    if (!preview) return;
+    setLoading(true);
+    try {
+      const updated  = applyPurchases(products, preview.items, preview.container);
+      const newCount = updated.filter(p => !products.some(ep => ep.barcode === p.barcode)).length;
+      await onUpdate(updated);
+      setLog(p => [...p,
+        { type: "success", text: `✅ ${preview.container} — ${preview.items.length} منتج` },
+        { type: "info",    text: `${newCount} جديد · ${preview.items.length - newCount} تم الجمع` },
+      ]);
+      show(`✅ ${preview.container} — ${preview.items.length} منتج`);
+    } catch (err) {
+      setLog(p => [...p, { type: "error", text: `خطأ: ${err.message}` }]);
+    }
+    setPreview(null);
+    setLoading(false);
+  };
+
   const LOG_COLORS = { success: "text-emerald-400", error: "text-red-400", warning: "text-amber-400", info: "text-blue-400" };
+
+  if (preview) {
+    return (
+      <PurchasePreview
+        items={preview.items}
+        container={preview.container}
+        products={products}
+        onConfirm={handleConfirm}
+        onCancel={() => { setPreview(null); setLog([]); }}
+      />
+    );
+  }
 
   return (
     <div>
@@ -69,7 +182,7 @@ const UploadSection = memo(({ products, onUpdate }) => {
         <label className={`w-full border-2 border-dashed rounded-2xl p-6 flex flex-col items-center gap-2 cursor-pointer transition-colors ${loading ? "border-blue-500 bg-blue-900/10" : "border-slate-600 hover:border-blue-500"}`}>
           <span className="text-4xl">{loading ? "⏳" : "📤"}</span>
           <span className="text-slate-300 font-bold text-sm">{loading ? "جاري المعالجة…" : "اسحب ملف الفاتورة هنا"}</span>
-          <span className="text-slate-500 text-xs">Excel (.xlsx)</span>
+          <span className="text-slate-500 text-xs">Excel (.xlsx) — سيُعرض للمراجعة قبل الحفظ</span>
           <input type="file" accept=".xlsx,.xls" onChange={handleFile} disabled={loading} className="hidden" />
           {!loading && <span className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold text-sm">اختر ملف</span>}
         </label>
@@ -433,7 +546,7 @@ const SalesRateTab = memo(({ summary, images, onSaveImage, onRemoveImage, settin
 
 // ─── تفاصيل الكونتينر ────────────────────────────────────────
 
-const ContainerDetail = memo(({ container, products, periods, images, onSaveImage, onRemoveImage, settings, onBack }) => {
+const ContainerDetail = memo(({ container, products, periods, images, onSaveImage, onRemoveImage, settings, onBack, onUpdateProducts }) => {
   const [tab, setTab] = useState("summary");
 
   const summary = useMemo(
@@ -447,9 +560,22 @@ const ContainerDetail = memo(({ container, products, periods, images, onSaveImag
     { key: "need",      label: "🔴 احتياج" },
   ];
 
+  const handleDelete = async () => {
+    if (!window.confirm(`حذف كونتينر ${container}؟\nسيتم عكس جميع الكميات من المخزون.`)) return;
+    const { products: updated } = reversePurchases(products, container);
+    await onUpdateProducts(updated);
+    onBack();
+  };
+
   return (
     <div className="space-y-4">
-      <BackBtn onClick={onBack} label="رجوع للكونتينرات" />
+      <div className="flex items-center justify-between">
+        <BackBtn onClick={onBack} label="رجوع للكونتينرات" />
+        <button onClick={handleDelete}
+          className="px-3 py-2 rounded-xl border border-red-700/50 bg-red-900/20 text-red-400 text-xs font-bold">
+          🗑️ حذف الكونتينر
+        </button>
+      </div>
 
       {/* عنوان */}
       <div className="flex items-center justify-between">
@@ -524,7 +650,7 @@ const ContainerList = memo(({ products, periods, onSelect }) => {
 
 // ─── الشاشة الرئيسية ─────────────────────────────────────────
 
-export default function ContainersScreen({ products, periods, settings, images, onUpdateProducts, onSaveImage, onRemoveImage }) {
+export default function ContainersScreen({ products, periods, settings, images, onUpdateProducts, onSaveImage, onRemoveImage, onDeleteContainer }) {
   const [selected, setSelected] = useState(null);
 
   if (selected) {
@@ -537,6 +663,7 @@ export default function ContainersScreen({ products, periods, settings, images, 
         onSaveImage={onSaveImage}
         onRemoveImage={onRemoveImage}
         settings={settings}
+        onUpdateProducts={onUpdateProducts}
         onBack={() => setSelected(null)}
       />
     );

@@ -2,7 +2,7 @@
 // ProductImage.jsx — صورة المنتج (احترافي)
 // ============================================================
 
-import { memo, useState, useRef } from "react";
+import { memo, useState, useRef, useCallback } from "react";
 
 const MAX_SIZE = 500 * 1024;
 
@@ -27,6 +27,110 @@ function compressImage(file) {
     img.onerror = reject;
     img.src = url;
   });
+}
+
+// ─── مسح الباركود بالكاميرا ──────────────────────────────────
+
+export function CameraScanner({ products, onFound, onClose }) {
+  const videoRef  = useRef();
+  const canvasRef = useRef();
+  const streamRef = useRef(null);
+  const [scanning, setScanning] = useState(false);
+  const [error,    setError]    = useState("");
+  const [result,   setResult]   = useState(null);
+
+  const startCamera = useCallback(async () => {
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+    } catch { setError("تعذر فتح الكاميرا — تأكد من الصلاحيات"); }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  useState(() => { startCamera(); return () => stopCamera(); });
+
+  const capture = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    setScanning(true); setError("");
+    const video = videoRef.current, canvas = canvasRef.current;
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const base64 = canvas.toDataURL("image/jpeg", 0.85);
+    try {
+      const res  = await fetch("/api/scan-barcode", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+      const data = await res.json();
+      if (data.barcode) {
+        const product = products?.find(p => p.barcode === data.barcode);
+        setResult({ barcode: data.barcode, product });
+        stopCamera();
+      } else {
+        setError("لم يُعثر على باركود — حاول مرة أخرى");
+      }
+    } catch { setError("خطأ في الاتصال"); }
+    setScanning(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="flex items-center justify-between px-4 pt-12 pb-3 bg-black/80">
+        <div className="text-white font-bold text-lg">📷 مسح الباركود</div>
+        <button onClick={() => { stopCamera(); onClose(); }} className="text-white/70 text-2xl w-10 h-10 flex items-center justify-center">✕</button>
+      </div>
+      <div className="flex-1 relative overflow-hidden">
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        <canvas ref={canvasRef} className="hidden" />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-64 h-40 border-2 border-amber-400 rounded-xl relative">
+            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-amber-400 rounded-tl-lg" />
+            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-amber-400 rounded-tr-lg" />
+            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-amber-400 rounded-bl-lg" />
+            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-amber-400 rounded-br-lg" />
+            <div className="absolute inset-x-0 top-1/2 h-0.5 bg-amber-400/60 animate-pulse" />
+          </div>
+        </div>
+        <div className="absolute bottom-4 inset-x-0 text-center text-white/60 text-sm">وجّه الكاميرا نحو الباركود</div>
+      </div>
+      {result && (
+        <div className="bg-slate-900 px-4 py-4">
+          <div className="bg-emerald-900/40 border border-emerald-700/50 rounded-xl p-3 mb-3">
+            <div className="text-emerald-400 font-bold text-sm mb-1">✅ تم القراءة</div>
+            <div className="font-mono text-white text-lg font-black">{result.barcode}</div>
+            {result.product && <div className="text-slate-300 text-sm mt-1">{result.product.name}</div>}
+            {!result.product && <div className="text-amber-400 text-xs mt-1">⚠️ غير موجود في المخزون</div>}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => { onFound(result); onClose(); }} className="py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm">✅ استخدم هذا</button>
+            <button onClick={() => { setResult(null); startCamera(); }} className="py-3 rounded-xl bg-slate-700 text-slate-200 font-bold text-sm">🔄 مسح مرة أخرى</button>
+          </div>
+        </div>
+      )}
+      {error && !result && (
+        <div className="bg-slate-900 px-4 py-3">
+          <div className="text-red-400 text-sm mb-2">{error}</div>
+          <button onClick={capture} className="w-full py-3 rounded-xl bg-slate-700 text-white font-bold text-sm">🔄 حاول مرة أخرى</button>
+        </div>
+      )}
+      {!result && (
+        <div className="bg-black px-4 pb-8 pt-3 flex justify-center">
+          <button onClick={capture} disabled={scanning}
+            className="w-20 h-20 rounded-full bg-white border-4 border-slate-400 flex items-center justify-center text-3xl disabled:opacity-50">
+            {scanning ? "⏳" : "📷"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export const ProductImage = memo(({ barcode, images = {}, onSave, onRemove, size = "md", name = "" }) => {

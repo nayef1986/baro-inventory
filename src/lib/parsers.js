@@ -23,13 +23,21 @@ function uuid() {
 }
 
 function fingerprint(sales) {
+  // نعتمد على إجمالي الكميات + أول 20 باركود مرتبة
+  // بدون أسماء الفروع لأنها قد تختلف بين رفعتين لنفس الملف
   const total    = Object.values(sales).reduce((s, b) =>
     s + Object.values(b).reduce((ss, v) => ss + num(v.qty), 0), 0);
-  const branches = Object.keys(sales).sort().join(",");
   const barcodes = [...new Set(
     Object.values(sales).flatMap(b => Object.keys(b))
-  )].sort().slice(0, 10).join(",");
-  return `${total}_${branches}_${barcodes}`;
+  )].sort().slice(0, 20).join(",");
+  // نضيف مجموع كل باركود كـ checksum إضافي
+  const perBarcode = [...new Set(
+    Object.values(sales).flatMap(b => Object.keys(b))
+  )].sort().slice(0, 10).map(bc => {
+    const qty = Object.values(sales).reduce((s, b) => s + num(b[bc]?.qty ?? 0), 0);
+    return `${bc}:${qty}`;
+  }).join("|");
+  return `${total}_${barcodes}_${perBarcode}`;
 }
 
 // ─── فاتورة المشتريات ────────────────────────────────────────
@@ -122,11 +130,28 @@ export function parseSalesFile(buffer, label = "") {
   branchRow.forEach((val, colIdx) => {
     if (!val || typeof val !== "string") return;
     const str = val.trim();
-    if (!str || str.includes("غير مستخدَم") || str.includes("غير مستخدم")) return;
+    if (!str) return;
+
+    // نستخرج الاسم من القوسين لو موجود
     const parenMatch = str.match(/\(([^)]+)\)\s*$/);
-    const name = parenMatch ? parenMatch[1].trim() : str;
+    let name;
+
+    if (parenMatch) {
+      const inner = parenMatch[1].trim();
+      if (inner === "غير مستخدَم" || inner === "غير مستخدم") {
+        // نستخدم الاسم الكامل من قبل القوسين كاسم للفرع
+        name = str.replace(/\s*\([^)]+\)\s*$/, "").trim();
+      } else {
+        name = inner;
+      }
+    } else {
+      name = str;
+    }
+
     if (!name) return;
-    if (Object.values(branches).includes(name)) return;
+    // نتجنب التكرار بالاسم الكامل فقط
+    const alreadyExists = Object.values(branches).some(b => b === name);
+    if (alreadyExists) return;
     branches[colIdx] = name;
   });
 
@@ -186,6 +211,27 @@ export function parseSalesFile(buffer, label = "") {
   };
 
   return { period, errors, warnings };
+}
+
+// ─── حذف كونتينر وعكس تأثيره ────────────────────────────────
+
+export function reversePurchases(existingProducts, container) {
+  // نحذف كل purchases المرتبطة بهذا الكونتينر
+  const result = existingProducts.map(p => {
+    const purchases = (p.purchases ?? []).filter(pur => pur.container !== container);
+    // لو المنتج ما عنده أي purchases تانية نحذفه كلياً
+    if (purchases.length === 0 && (p.purchases ?? []).some(pur => pur.container === container)) {
+      return null; // سيُحذف
+    }
+    return { ...p, purchases };
+  }).filter(Boolean);
+
+  const removedCount = existingProducts.length - result.length;
+  const updatedCount = result.filter((p, i) =>
+    JSON.stringify(p.purchases) !== JSON.stringify(existingProducts[i]?.purchases)
+  ).length;
+
+  return { products: result, removedCount, updatedCount };
 }
 
 // ─── تطبيق قرارات الكونتينر ──────────────────────────────────
