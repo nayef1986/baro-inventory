@@ -2,7 +2,7 @@
 // ProductImage.jsx — صورة المنتج (احترافي)
 // ============================================================
 
-import { memo, useState, useRef, useCallback } from "react";
+import { memo, useState, useEffect, useRef, useCallback } from "react";
 
 const MAX_SIZE = 500 * 1024;
 
@@ -32,18 +32,40 @@ function compressImage(file) {
 // ─── مسح الباركود بالكاميرا ──────────────────────────────────
 
 export function CameraScanner({ products, onFound, onClose }) {
-  const videoRef  = useRef();
-  const canvasRef = useRef();
-  const streamRef = useRef(null);
-  const [scanning, setScanning] = useState(false);
-  const [error,    setError]    = useState("");
-  const [result,   setResult]   = useState(null);
+  const videoRef    = useRef();
+  const canvasRef   = useRef();
+  const streamRef   = useRef(null);
+  const intervalRef = useRef(null);
+  const [scanning,  setScanning]  = useState(false);
+  const [error,     setError]     = useState("");
+  const [result,    setResult]    = useState(null);
+  const [autoMode,  setAutoMode]  = useState(true);
+
+  // صوت النجاح
+  const playBeep = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.2);
+    } catch {}
+    try { navigator.vibrate?.(100); } catch {}
+  }, []);
 
   const startCamera = useCallback(async () => {
     setError("");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1280 }, height: { ideal: 720 },
+          advanced: [{ torch: false }],
+        }
       });
       streamRef.current = stream;
       if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
@@ -51,19 +73,20 @@ export function CameraScanner({ products, onFound, onClose }) {
   }, []);
 
   const stopCamera = useCallback(() => {
+    clearInterval(intervalRef.current);
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
   }, []);
 
   useState(() => { startCamera(); return () => stopCamera(); });
 
-  const capture = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+  const capture = useCallback(async () => {
+    if (!videoRef.current || !canvasRef.current || scanning) return;
     setScanning(true); setError("");
     const video = videoRef.current, canvas = canvasRef.current;
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
-    const base64 = canvas.toDataURL("image/jpeg", 0.85);
+    const base64 = canvas.toDataURL("image/jpeg", 0.8);
     try {
       const res  = await fetch("/api/scan-barcode", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -71,15 +94,25 @@ export function CameraScanner({ products, onFound, onClose }) {
       });
       const data = await res.json();
       if (data.barcode) {
+        playBeep();
         const product = products?.find(p => p.barcode === data.barcode);
         setResult({ barcode: data.barcode, product });
+        clearInterval(intervalRef.current);
         stopCamera();
-      } else {
+      } else if (!autoMode) {
         setError("لم يُعثر على باركود — حاول مرة أخرى");
       }
     } catch { setError("خطأ في الاتصال"); }
     setScanning(false);
-  };
+  }, [scanning, products, playBeep, stopCamera, autoMode]);
+
+  // وضع تلقائي — مسح كل ثانيتين
+  useEffect(() => {
+    if (autoMode && !result) {
+      intervalRef.current = setInterval(() => { capture(); }, 2000);
+      return () => clearInterval(intervalRef.current);
+    }
+  }, [autoMode, result, capture]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -122,11 +155,24 @@ export function CameraScanner({ products, onFound, onClose }) {
         </div>
       )}
       {!result && (
-        <div className="bg-black px-4 pb-8 pt-3 flex justify-center">
-          <button onClick={capture} disabled={scanning}
-            className="w-20 h-20 rounded-full bg-white border-4 border-slate-400 flex items-center justify-center text-3xl disabled:opacity-50">
-            {scanning ? "⏳" : "📷"}
-          </button>
+        <div className="bg-black px-4 pb-8 pt-3 flex flex-col items-center gap-3">
+          <div className="flex gap-3 items-center">
+            <button onClick={() => setAutoMode(p => !p)}
+              className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors
+                ${autoMode ? "bg-amber-600 text-white border-amber-500" : "bg-slate-700 text-slate-400 border-slate-600"}`}>
+              {autoMode ? "⚡ تلقائي" : "👆 يدوي"}
+            </button>
+            {scanning && <span className="text-amber-400 text-xs animate-pulse">جاري المسح…</span>}
+          </div>
+          {!autoMode && (
+            <button onClick={capture} disabled={scanning}
+              className="w-20 h-20 rounded-full bg-white border-4 border-slate-400 flex items-center justify-center text-3xl disabled:opacity-50">
+              {scanning ? "⏳" : "📷"}
+            </button>
+          )}
+          {autoMode && (
+            <div className="text-slate-500 text-xs text-center">الكاميرا تمسح تلقائياً كل ثانيتين</div>
+          )}
         </div>
       )}
     </div>

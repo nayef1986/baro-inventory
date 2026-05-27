@@ -65,6 +65,209 @@ export function soldAllPeriods(barcode, periods) {
   }, 0);
 }
 
+// تحليل إعادة الطلب والترند
+// ─── التنبيهات الذكية ────────────────────────────────────────
+
+export function getSmartAlerts(products, periods) {
+  if (!periods || periods.length < 2) return [];
+
+  const sorted = [...periods].sort((a,b) =>
+    (a.uploadDate??a.label) > (b.uploadDate??b.label) ? 1 : -1
+  );
+
+  const alerts = [];
+
+  products.forEach(p => {
+    const monthly = sorted.map(per => ({
+      label: per.label,
+      qty: Object.values(per.sales ?? {}).reduce((s,b) =>
+        s + num(b[p.barcode]?.qty ?? 0), 0),
+    }));
+
+    const nonZero = monthly.filter(m => m.qty > 0);
+    if (nonZero.length < 2) return;
+
+    const last3  = nonZero.slice(-3);
+    const prev3  = nonZero.slice(-6, -3);
+    const lastQ  = last3.reduce((s,m)=>s+m.qty,0);
+    const prevQ  = prev3.length > 0 ? prev3.reduce((s,m)=>s+m.qty,0) : lastQ;
+    const growth = prevQ > 0 ? ((lastQ - prevQ) / prevQ) * 100 : 0;
+
+    const bought  = totalPurchases(p);
+    const allSold = nonZero.reduce((s,m)=>s+m.qty,0);
+    const closing = Math.max(0, bought - allSold);
+    const avgMonth = lastQ / Math.max(last3.length, 1);
+    const daysLeft = avgMonth > 0 ? Math.round((closing / avgMonth) * 30) : 999;
+
+    // صاعد قوي
+    if (growth > 50) {
+      alerts.push({
+        type: "rising", icon: "📈", color: "green",
+        title: p.name, barcode: p.barcode,
+        message: `دخل مرحلة صعود قوية +${Math.round(growth)}%`,
+        detail: `مبيعات آخر فترة: ${num(last3[last3.length-1]?.qty)}`,
+      });
+    }
+
+    // هابط قوي
+    if (growth < -40 && prevQ > 10) {
+      alerts.push({
+        type: "falling", icon: "📉", color: "red",
+        title: p.name, barcode: p.barcode,
+        message: `بدأ يفقد الترند ${Math.round(growth)}%`,
+        detail: `راجع المخزون والتسعير`,
+      });
+    }
+
+    // يحتاج إعادة طلب عاجل
+    if (daysLeft <= 14 && closing > 0 && growth >= 0) {
+      alerts.push({
+        type: "reorder", icon: "🔔", color: "amber",
+        title: p.name, barcode: p.barcode,
+        message: `أعد الطلب خلال ${daysLeft} يوم`,
+        detail: `متبقي ${num(closing)} · معدل ${Math.round(avgMonth)}/شهر`,
+      });
+    }
+  });
+
+  // نرتب: عاجل أولاً
+  const order = { reorder: 0, falling: 1, rising: 2 };
+  return alerts.sort((a,b) => (order[a.type]??3) - (order[b.type]??3)).slice(0, 30);
+}
+
+// ─── ربط الترند بالفروع ──────────────────────────────────────
+
+export function branchTrendAnalysis(products, periods) {
+  if (!periods || periods.length < 2) return [];
+
+  const sorted = [...periods].sort((a,b) =>
+    (a.uploadDate??a.label) > (b.uploadDate??b.label) ? 1 : -1
+  );
+
+  const branches = allBranches(periods);
+
+  return branches.map(branch => {
+    const monthly = sorted.map(per => ({
+      label: per.label,
+      rev: Object.values(per.sales?.[branch] ?? {}).reduce((s,v)=>s+num(v.totalPrice),0),
+      qty: Object.values(per.sales?.[branch] ?? {}).reduce((s,v)=>s+num(v.qty),0),
+    }));
+
+    const nonZero = monthly.filter(m => m.qty > 0);
+    if (nonZero.length < 2) return null;
+
+    const last  = nonZero[nonZero.length-1];
+    const prev  = nonZero[nonZero.length-2];
+    const growth = prev.qty > 0 ? ((last.qty - prev.qty) / prev.qty) * 100 : 0;
+    const totalRev = nonZero.reduce((s,m)=>s+m.rev,0);
+
+    // أكثر المنتجات ربحية في الفرع
+    const topProducts = products.map(p => {
+      const qty = sorted.slice(-1).reduce((s,per) =>
+        s + num(per.sales?.[branch]?.[p.barcode]?.qty ?? 0), 0);
+      const rev = sorted.slice(-1).reduce((s,per) =>
+        s + num(per.sales?.[branch]?.[p.barcode]?.totalPrice ?? 0), 0);
+      const cost = qty * num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+      return { name: p.name, barcode: p.barcode, qty, rev, profit: rev - cost };
+    }).filter(p => p.qty > 0).sort((a,b) => b.profit - a.profit).slice(0, 5);
+
+    return { branch, growth, totalRev, lastQty: last.qty, monthly, topProducts };
+  }).filter(Boolean).sort((a,b) => b.totalRev - a.totalRev);
+}
+
+// ─── أكثر المنتجات ربحية وأسرعها دوراناً ────────────────────
+
+export function topProductsAnalysis(products, periods) {
+  if (!periods || periods.length === 0) return { profitable: [], fastest: [] };
+
+  return {
+    profitable: products.map(p => {
+      const sold = periods.reduce((s, per) =>
+        s + Object.values(per.sales ?? {}).reduce((ss,b) => ss + num(b[p.barcode]?.qty ?? 0), 0), 0);
+      const rev  = periods.reduce((s, per) =>
+        s + Object.values(per.sales ?? {}).reduce((ss,b) => ss + num(b[p.barcode]?.totalPrice ?? 0), 0), 0);
+      const cost = sold * num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+      return { ...p, sold, rev, profit: rev - cost, margin: rev > 0 ? ((rev-cost)/rev)*100 : 0 };
+    }).filter(p => p.sold > 0).sort((a,b) => b.profit - a.profit).slice(0, 20),
+
+    fastest: products.map(p => {
+      const bought = totalPurchases(p);
+      const sold   = periods.reduce((s, per) =>
+        s + Object.values(per.sales ?? {}).reduce((ss,b) => ss + num(b[p.barcode]?.qty ?? 0), 0), 0);
+      const turnover = bought > 0 ? (sold / bought) * 100 : 0;
+      return { ...p, sold, bought, turnover };
+    }).filter(p => p.bought > 0).sort((a,b) => b.turnover - a.turnover).slice(0, 20),
+  };
+}
+
+export function analyzeReorder(product, periods) {
+  if (!periods || periods.length < 2) return null;
+
+  const sorted = [...periods].sort((a,b) =>
+    (a.uploadDate??a.label) > (b.uploadDate??b.label) ? 1 : -1
+  );
+
+  // مبيعات كل فترة
+  const monthlySales = sorted.map(per => ({
+    label: per.label,
+    qty: Object.values(per.sales ?? {}).reduce((s,b) =>
+      s + num(b[product.barcode]?.qty ?? 0), 0),
+  })).filter(m => m.qty > 0);
+
+  if (monthlySales.length < 2) return null;
+
+  const avgSales = monthlySales.reduce((s,m) => s+m.qty, 0) / monthlySales.length;
+  const lastSales = monthlySales[monthlySales.length-1].qty;
+  const prevSales = monthlySales[monthlySales.length-2].qty;
+
+  const bought  = totalPurchases(product);
+  const allSold = monthlySales.reduce((s,m) => s+m.qty, 0);
+  const closing = Math.max(0, bought - allSold);
+
+  // أيام حتى النفاد (بافتراض نفس معدل البيع)
+  const daysToEmpty = avgSales > 0 ? Math.round((closing / avgSales) * 30) : 999;
+
+  // تحليل الترند
+  const growth = prevSales > 0 ? ((lastSales - prevSales) / prevSales) * 100 : 0;
+
+  let status = "normal";
+  let message = "";
+  let urgent = false;
+
+  if (daysToEmpty <= 14 && closing > 0) {
+    status = "urgent";
+    message = `أعد الطلب خلال ${daysToEmpty} يوم`;
+    urgent = true;
+  } else if (daysToEmpty <= 30 && closing > 0) {
+    status = "soon";
+    message = `يحتاج إعادة طلب قريباً (${daysToEmpty} يوم)`;
+  } else if (closing === 0) {
+    status = "empty";
+    message = "نفد من المخزون";
+    urgent = true;
+  }
+
+  const trend = growth > 30 ? "rising" : growth < -30 ? "falling" : "stable";
+  const trendMsg = growth > 30
+    ? `📈 صاعد +${Math.round(growth)}% — ارفع الكمية`
+    : growth < -30
+    ? `📉 هابط ${Math.round(growth)}% — راقب المخزون`
+    : null;
+
+  return { avgSales, lastSales, closing, daysToEmpty, growth, status, message, urgent, trend, trendMsg };
+}
+
+export function getSalesNames(barcode, periods) {
+  const names = new Set();
+  periods.forEach(per => {
+    Object.values(per.sales ?? {}).forEach(branch => {
+      const item = branch[barcode];
+      if (item?.salesNames) item.salesNames.forEach(n => names.add(n));
+    });
+  });
+  return [...names];
+}
+
 export function calcProduct(product, periods) {
   const bought  = totalPurchases(product);
   const sold    = soldAllPeriods(product.barcode, periods);

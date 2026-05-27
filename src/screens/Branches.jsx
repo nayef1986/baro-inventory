@@ -96,6 +96,11 @@ function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, a
         <ProductImage barcode={item.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="lg" name={item.name} />
         <div className="flex-1 min-w-0">
           <div className="font-black text-slate-100 text-sm leading-tight">{item.name}</div>
+          {item.salesNames?.filter(n => n !== item.name).length > 0 && (
+            <div className="text-xs text-amber-400/80 mt-0.5 leading-relaxed">
+              {item.salesNames.filter(n => n !== item.name).slice(0,2).join(" / ")}
+            </div>
+          )}
           <div className="text-xs text-slate-400 font-mono mt-0.5">{item.barcode}</div>
           <div className="text-xs text-blue-400 mt-0.5">📦 {item.container} · 🏭 {getFactoryCode(item.barcode)}{settings?.factories?.[getFactoryCode(item.barcode)] ? ` · ${settings.factories[getFactoryCode(item.barcode)]}` : ""}</div>
           <div className="flex gap-2 text-xs mt-1">
@@ -343,6 +348,7 @@ function SmartSearch({ products, periods, settings, images, onSaveImage, onRemov
 // ─── شاشة الاحتياج ───────────────────────────────────────────
 
 const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings }) => {
+  const allPeriods = periods; // لاستخدامها في getSalesNames
   const [periodId,    setPeriodId]    = useState(periods[periods.length-1]?.id ?? "");
   const [filterVal,   setFilterVal]   = useState("");
   const [minStock,    setMinStock]    = useState(settings?.minStock ?? 12);
@@ -366,11 +372,13 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const needQty   = Math.max(0, minStock - remaining);
         const bought    = totalPurchases(p);
         const closingAll = Math.max(0, bought - soldAllPeriods(p.barcode, periods));
+        const salesNames = allPeriods ? getSalesNames(p.barcode, allPeriods) : [];
         return {
           ...p, sold, given, remaining, needQty,
           closingAll,
-          buyPrice:  num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0),
-          sellPrice: num(p.sellPrice),
+          buyPrice:   num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0),
+          sellPrice:  num(p.sellPrice),
+          salesNames,
         };
       })
       .filter(i => i.needQty > 0)

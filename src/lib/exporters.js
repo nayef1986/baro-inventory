@@ -5,6 +5,28 @@
 import * as XLSX from "xlsx";
 import { num, fmtN, fmtM, fmtPct } from "./calc.js";
 
+// التاريخ الميلادي والهجري
+const todayMiladi = () =>
+  new Date().toLocaleDateString("ar-SA", {
+    calendar: "gregory",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  });
+
+const todayHijri = () => {
+  try {
+    return new Date().toLocaleDateString("ar-SA", {
+      calendar: "islamic",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    });
+  } catch { return ""; }
+};
+
+const todayBoth = () => {
+  const m = new Date().toLocaleDateString("ar-SA", { calendar:"gregory", year:"numeric", month:"2-digit", day:"2-digit" });
+  const h = todayHijri();
+  return h ? `${m} م  |  ${h} هـ` : m;
+};
+
 const todayLabel = () =>
   new Date().toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
 
@@ -166,7 +188,7 @@ function openPrint(html) {
 function printPage(title, meta, statsHtml, tableHtml) {
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escHtml(title)}</title>
   <style>${PRINT_CSS}</style></head><body>
-  <div class="header"><h1>${escHtml(title)}</h1><div class="meta">📅 ${todayLabel()}${meta ? ` · ${escHtml(meta)}` : ""}</div></div>
+  <div class="header"><h1>${escHtml(title)}</h1><div class="meta">📅 ${todayBoth()}${meta ? ` · ${escHtml(meta)}` : ""}</div></div>
   ${statsHtml}${tableHtml}
   <script>setTimeout(()=>window.print(),600);<\/script></body></html>`;
 }

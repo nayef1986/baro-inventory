@@ -243,17 +243,27 @@ const NAV_ITEMS = [
 ];
 
 export const NavBar = memo(({ active, onChange }) => (
-  <nav className="fixed bottom-0 right-0 left-0 bg-slate-900 border-t border-slate-700 z-30">
+  <nav style={{
+    position:"fixed", bottom:0, right:0, left:0,
+    background:"#0f172a",
+    borderTop:"1px solid #1e293b",
+    zIndex:50,
+    paddingBottom:"env(safe-area-inset-bottom, 0px)",
+    WebkitBackfaceVisibility:"hidden",
+    transform:"translateZ(0)",
+    willChange:"transform",
+  }}>
     <div className="flex">
       {NAV_ITEMS.map(({ key, icon, label }) => (
         <button
           key={key}
           onClick={() => onChange(key)}
+          style={{ WebkitTapHighlightColor:"transparent" }}
           className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-bold transition-colors
             ${active === key ? "text-blue-400" : "text-slate-500"}`}
         >
-          <span className="text-xl">{icon}</span>
-          <span>{label}</span>
+          <span className="text-xl leading-none">{icon}</span>
+          <span className="leading-none mt-0.5">{label}</span>
         </button>
       ))}
     </div>

@@ -7,7 +7,7 @@ import {
   Card, Btn, StatPill, EmptyState, SectionHeader,
   ConfirmModal, SearchBar, useToast, fmtN, fmtM,
 } from "../components/UI.jsx";
-import { parseSalesFile } from "../lib/parsers.js";
+import { parseSalesFile, parseMonthlyFile } from "../lib/parsers.js";
 import { num } from "../lib/calc.js";
 
 // ─── شاشة المراجعة قبل الاعتماد ─────────────────────────────
@@ -169,6 +169,23 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
     e.target.value = "";
   };
 
+  const handleConfirmMonthly = async () => {
+    if (!preview || preview.type !== "monthly") return;
+    setLoading(true);
+    let saved = 0, skipped = 0;
+    for (const period of preview.periods) {
+      const result = await onAddPeriod(period);
+      if (result.ok) saved++;
+      else skipped++;
+    }
+    setLog(p => [...p,
+      { type: "success", text: `✅ تم حفظ ${saved} فترة` },
+      ...(skipped > 0 ? [{ type: "warning", text: `⚠️ ${skipped} فترة مكررة تم تجاهلها` }] : []),
+    ]);
+    setPreview(null);
+    setLoading(false);
+  };
+
   const handleConfirm = async () => {
     if (!preview) return;
     setLoading(true);
@@ -258,8 +275,29 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
                 <span className="text-slate-500 text-xs">سيُعرض للمراجعة قبل الحفظ</span>
               </>
             )}
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={loading} />
+            <input type="file" accept=".xlsx,.xls" className="hidden"
+              onChange={uploadType === "monthly" ? handleMonthlyFile : handleFile}
+              disabled={loading} />
           </label>
+
+          {/* toggle نوع الرفع */}
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => setUploadType("single")}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors
+                ${uploadType==="single" ? "bg-blue-600 text-white border-blue-500" : "bg-slate-700 text-slate-400 border-slate-600"}`}>
+              📊 فترة واحدة
+            </button>
+            <button onClick={() => setUploadType("monthly")}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors
+                ${uploadType==="monthly" ? "bg-purple-600 text-white border-purple-500" : "bg-slate-700 text-slate-400 border-slate-600"}`}>
+              📅 شهري (1-12 شهر)
+            </button>
+          </div>
+          {uploadType === "monthly" && (
+            <div className="text-xs text-purple-300/70 text-center mt-1">
+              يقرأ جميع الشهور والفروع دفعة واحدة
+            </div>
+          )}
         </div>
 
         {log.length > 0 && (

@@ -174,8 +174,11 @@ export function parseSalesFile(buffer, label = "") {
     const bcMatch = rawKey.match(/\[([^\]]+)\]/);
     if (!bcMatch) continue;
 
-    const barcode = cleanBarcode(bcMatch[1]);
+    const barcode  = cleanBarcode(bcMatch[1]);
     if (!barcode) continue;
+
+    // استخراج الاسم من السطر: [BARCODE] اسم المنتج
+    const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
 
     Object.entries(branches).forEach(([colStr, branchName]) => {
       const col        = parseInt(colStr);
@@ -186,9 +189,14 @@ export function parseSalesFile(buffer, label = "") {
 
       if (sales[branchName][barcode]) {
         sales[branchName][barcode].qty        += qty;
+        // نضيف الاسم لو مختلف
+        if (salesName && !sales[branchName][barcode].salesNames?.includes(salesName)) {
+          sales[branchName][barcode].salesNames = sales[branchName][barcode].salesNames ?? [];
+          sales[branchName][barcode].salesNames.push(salesName);
+        }
         sales[branchName][barcode].totalPrice += totalPrice;
       } else {
-        sales[branchName][barcode] = { qty, totalPrice };
+        sales[branchName][barcode] = { qty, totalPrice, salesNames: salesName ? [salesName] : [] };
       }
     });
   }
@@ -265,4 +273,128 @@ export function applyPurchases(existingProducts, newItems, container) {
   });
 
   return result;
+}
+
+
+// ─── رفع ملف شهري (1-12 شهر) ─────────────────────────────────
+
+export function parseMonthlyFile(buffer) {
+  const wb   = XLSX.read(buffer, { type: "array" });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+  if (rows.length < 5) return { periods: [], errors: ["الملف فارغ أو غير صحيح"] };
+
+  const monthRow  = rows[1] ?? [];
+  const branchRow = rows[2] ?? [];
+
+  // ─── نجمع مواضع الشهور ───────────────────────────────────
+  const monthCols = [];
+  monthRow.forEach((val, colIdx) => {
+    if (!val || typeof val !== "string") return;
+    const s = val.trim();
+    if (!s || s === "الإجمالي" || s === "Total") return;
+    monthCols.push({ col: colIdx, name: s });
+  });
+
+  if (monthCols.length === 0) {
+    return { periods: [], errors: ["لم يُعثر على شهور في الصف الثاني"] };
+  }
+
+  // ─── لكل شهر نحدد فروعه ─────────────────────────────────
+  const monthData = monthCols.map((m, i) => {
+    const start = m.col;
+    const end   = i + 1 < monthCols.length ? monthCols[i + 1].col : branchRow.length;
+
+    const branches = {};
+    for (let col = start; col < end; col++) {
+      const val = branchRow[col];
+      if (!val || typeof val !== "string") continue;
+      const s = val.trim();
+      if (!s) continue;
+
+      const parenMatch = s.match(/\(([^)]+)\)\s*$/);
+      let name;
+      if (parenMatch) {
+        const inner = parenMatch[1].trim();
+        name = (inner === "غير مستخدَم" || inner === "غير مستخدم")
+          ? s.replace(/\s*\([^)]+\)\s*$/, "").trim()
+          : inner;
+      } else {
+        name = s;
+      }
+
+      if (!name) continue;
+      const alreadyExists = Object.values(branches).some(b => b === name);
+      if (alreadyExists) continue;
+      branches[col] = name;
+    }
+
+    return { name: m.name, start, end, branches };
+  });
+
+  // ─── نقرأ البيانات لكل شهر ───────────────────────────────
+  const periods = [];
+
+  monthData.forEach(month => {
+    const sales = {};
+    Object.values(month.branches).forEach(b => { sales[b] = {}; });
+
+    let totalUnits = 0;
+
+    for (let i = 5; i < rows.length; i++) {
+      const row    = rows[i];
+      const rawKey = String(row[0] ?? "").trim();
+      if (!rawKey || rawKey === "الإجمالي" || rawKey === "Total") continue;
+
+      const bcMatch = rawKey.match(/\[([^\]]+)\]/);
+      if (!bcMatch) continue;
+      const barcode = cleanBarcode(bcMatch[1]);
+      if (!barcode) continue;
+
+      // استخراج الاسم من السطر
+      const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
+
+      Object.entries(month.branches).forEach(([colStr, branchName]) => {
+        const col        = parseInt(colStr);
+        const qty        = toNum(row[col + 1]);
+        const totalPrice = toNum(row[col + 2]);
+
+        if (qty <= 0) return;
+
+        if (sales[branchName][barcode]) {
+          sales[branchName][barcode].qty        += qty;
+          sales[branchName][barcode].totalPrice += totalPrice;
+          if (salesName && !sales[branchName][barcode].salesNames?.includes(salesName)) {
+            sales[branchName][barcode].salesNames = sales[branchName][barcode].salesNames ?? [];
+            sales[branchName][barcode].salesNames.push(salesName);
+          }
+        } else {
+          sales[branchName][barcode] = { qty, totalPrice, salesNames: salesName ? [salesName] : [] };
+        }
+        totalUnits += qty;
+      });
+    }
+
+    // إجمالي كل فرع
+    const branchTotals = {};
+    Object.entries(sales).forEach(([branch, data]) => {
+      branchTotals[branch] = Object.values(data).reduce((s, v) => s + v.qty, 0);
+    });
+
+    const fp = fingerprint(sales);
+    const id = `monthly_${month.name.replace(/\s+/g, "_")}_${fp.slice(0, 8)}`;
+
+    periods.push({
+      id,
+      label:      month.name,
+      uploadDate: new Date().toISOString().slice(0, 10),
+      fingerprint: fp,
+      sales,
+      totalUnits,
+      branchTotals,
+    });
+  });
+
+  return { periods, errors: [], warnings: [] };
 }
