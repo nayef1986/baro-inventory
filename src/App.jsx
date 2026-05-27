@@ -2,7 +2,7 @@
 // App.jsx — التطبيق الرئيسي
 // ============================================================
 
-import { useState, useEffect, useCallback, useReducer } from "react";
+import { useState, useEffect, useCallback, useMemo, useReducer } from "react";
 import {
   initStorage, loadAll,
   saveProducts, addPeriod, deletePeriod,
@@ -57,6 +57,47 @@ export default function App() {
   const [screen,   setScreen]   = useState("containers");
   const [showAI,   setShowAI]   = useState(false);
   const [aiModel,  setAiModel]  = useState("gemini");
+
+  // نحسب branchSummary مرة واحدة عند تغيير البيانات
+  const branchSummary = useMemo(() => {
+    const products = state.products;
+    const periods  = state.periods;
+    if (!products.length || !periods.length) return {};
+
+    // productMap للأسعار
+    const productMap = {};
+    products.forEach(p => {
+      productMap[p.barcode] = Number(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    });
+
+    // نجمع كل الفروع
+    const allBranches = new Set();
+    periods.forEach(per => {
+      Object.keys(per.sales ?? {}).forEach(b => allBranches.add(b));
+    });
+
+    // نحسب لكل فرع دفعة واحدة
+    const summary = {};
+    allBranches.forEach(branch => {
+      let qty = 0, rev = 0, cost = 0;
+      periods.forEach(per => {
+        const data = per.sales?.[branch] ?? {};
+        Object.entries(data).forEach(([barcode, v]) => {
+          const q = Number(v.qty ?? 0);
+          qty  += q;
+          rev  += Number(v.totalPrice ?? 0);
+          cost += q * (productMap[barcode] ?? 0);
+        });
+      });
+      const profit   = rev - cost;
+      const perfLevel = rev > 0
+        ? (profit/rev > 0.3 ? "green" : profit/rev > 0.1 ? "amber" : "red")
+        : "red";
+      summary[branch] = { qty, rev, profit, perfLevel };
+    });
+
+    return summary;
+  }, [state.products, state.periods]);
   const [showSettings, setShowSettings] = useState(false);
 
   // تحميل البيانات
@@ -170,6 +211,7 @@ export default function App() {
     onDeletePeriod:   handleDeletePeriod,
     onGetPeriods:     () => state.periods,
     onSaveSettings:   handleSaveSettings,
+    branchSummary:    branchSummary,
     onSaveImage:      handleSaveImage,
     onRemoveImage:    handleRemoveImage,
     onClearAll:       handleClearAll,

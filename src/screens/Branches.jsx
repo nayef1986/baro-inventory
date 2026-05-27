@@ -691,50 +691,24 @@ const BranchDetail = memo(({ branch, products, periods, images, onSaveImage, onR
 
 // ─── قائمة الفروع ────────────────────────────────────────────
 
-const BranchSelector = memo(({ branches, periods, products, settings, onSelect }) => {
-  const [search,    setSearch]    = useState("");
-  const [sortBy,    setSortBy]    = useState("revenue");
-  const [searchMode,  setSearchMode]  = useState("branch"); // branch | barcode
-  const [showCamera,  setShowCamera]   = useState(false);
+const BranchSelector = memo(({ branches, periods, products, settings, onSelect, branchSummary }) => {
+  const [search,     setSearch]     = useState("");
+  const [sortBy,     setSortBy]     = useState("revenue");
+  const [searchMode, setSearchMode] = useState("branch");
+  const [showCamera, setShowCamera] = useState(false);
 
+  // نستخدم branchSummary الجاهزة من App.jsx — صفر حسابات هنا
   const branchStats = useMemo(() => {
-    // نبني index واحد لكل شيء مسبقاً
-    const productMap = {};
-    products.forEach(p => {
-      productMap[p.barcode] = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
-    });
-
-    // نبني branchTotals من كل الفترات مرة واحدة
-    const totals = {};
-    branches.forEach(b => { totals[b] = { qty:0, rev:0, cost:0 }; });
-
-    periods.forEach(per => {
-      branches.forEach(branch => {
-        const data = per.sales?.[branch] ?? {};
-        Object.entries(data).forEach(([barcode, v]) => {
-          const q = num(v.qty);
-          if (!totals[branch]) return;
-          totals[branch].qty  += q;
-          totals[branch].rev  += num(v.totalPrice);
-          totals[branch].cost += q * (productMap[barcode] ?? 0);
-        });
-      });
-    });
-
     return branches.map(branch => {
-      const { qty, rev, cost } = totals[branch] ?? { qty:0, rev:0, cost:0 };
-      const profit = rev - cost;
-      const perfLevel = rev > 0
-        ? (profit / rev > 0.3 ? "green" : profit / rev > 0.1 ? "amber" : "red")
-        : "red";
-      return { branch, qty, rev, profit, perfLevel };
+      const s = branchSummary?.[branch] ?? { qty:0, rev:0, profit:0, perfLevel:"red" };
+      return { branch, ...s };
     }).sort((a,b) => {
       if (sortBy === "revenue") return b.rev - a.rev;
       if (sortBy === "units")   return b.qty - a.qty;
       if (sortBy === "profit")  return b.profit - a.profit;
       return b.rev - a.rev;
     });
-  }, [branches, periods, products, sortBy]);
+  }, [branches, branchSummary, sortBy]);
 
   // بحث الباركود — يعرض الفروع التي فيها مبيعات لهذا الباركود
   const barcodeResults = useMemo(() => {
@@ -854,7 +828,7 @@ const BranchSelector = memo(({ branches, periods, products, settings, onSelect }
 
 // ─── الشاشة الرئيسية ─────────────────────────────────────────
 
-export default function BranchesScreen({ products, periods, settings, images, onSaveImage, onRemoveImage }) {
+export default function BranchesScreen({ products, periods, settings, images, onSaveImage, onRemoveImage, branchSummary }) {
   const [selected, setSelected] = useState(null);
   const branches = useMemo(() => allBranches(periods), [periods]);
 
