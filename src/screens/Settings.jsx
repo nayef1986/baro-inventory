@@ -60,18 +60,35 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
         });
         const data = await response.json();
 
-        if (data.barcode) {
-          // نتحقق من وجود المنتج
-          const product = products.find(p => p.barcode === data.barcode);
-          if (product) {
-            // نحفظ الصورة
-            if (onBulkSaveImage) {
-              await onBulkSaveImage(data.barcode, base64);
-            }
-            newResults.push({ file: file.name, barcode: data.barcode, product: product.name, status: "success" });
-          } else {
-            newResults.push({ file: file.name, barcode: data.barcode, product: null, status: "not_found" });
+        // نجمع كل المرشحين من OCR
+        const candidates = data.candidates?.length ? data.candidates : (data.barcode ? [data.barcode] : []);
+
+        // مطابقة ذكية: مطابقة تامة أولاً، ثم تطابق جزئي (احتواء)، ثم أقرب كود
+        let matched = null;
+        let matchedCode = data.barcode;
+
+        for (const cand of candidates) {
+          const exact = products.find(p => p.barcode.toUpperCase() === cand);
+          if (exact) { matched = exact; matchedCode = exact.barcode; break; }
+        }
+        if (!matched) {
+          for (const cand of candidates) {
+            // تطابق جزئي: الكود يحتوي باركود المنتج أو العكس (لتجاوز أخطاء OCR بسيطة)
+            const partial = products.find(p => {
+              const b = p.barcode.toUpperCase();
+              return b.includes(cand) || cand.includes(b);
+            });
+            if (partial) { matched = partial; matchedCode = partial.barcode; break; }
           }
+        }
+
+        if (matched) {
+          if (onBulkSaveImage) {
+            await onBulkSaveImage(matched.barcode, base64);
+          }
+          newResults.push({ file: file.name, barcode: matched.barcode, product: matched.name, status: "success" });
+        } else if (matchedCode) {
+          newResults.push({ file: file.name, barcode: matchedCode, product: null, status: "not_found" });
         } else {
           newResults.push({ file: file.name, barcode: null, product: null, status: "no_barcode", message: data.message });
         }

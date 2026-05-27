@@ -10,20 +10,25 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
 
   try {
+    // نستخرج mime_type الصحيح من الـ data URL بدل افتراض PNG
+    const mimeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
+    const mimeType  = mimeMatch?.[1] ?? "image/jpeg";
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const prompt = `Look at this image carefully. Find the product SKU or barcode number.
+    const prompt = `You are an OCR system reading a retail product label.
 
-The code format is usually: 8 digits + letter B + 3 digits
-Examples: 26068616B005, 25252201B001, 26049616B004
+Read EVERY number and code visible in this image. Look at:
+- Barcodes (the digits printed under the bars)
+- SKU stickers, price tags, carton labels
+- Any alphanumeric product code
 
-Steps:
-1. Look for any printed numbers/letters on labels, stickers, boxes, or tags
-2. Find the longest number sequence that looks like a product code
-3. Include the letter B if present (e.g. 26068616B005)
+Common code format here: digits + optional letter + digits (example 26068616B005).
+But codes may vary in length or format — read whatever is printed exactly.
 
-Return ONLY the code with no spaces or explanation.
-If you cannot find any code, return: NOT_FOUND`;
+Return your answer as JSON only, no other text:
+{"codes": ["all", "codes", "you", "see"]}
+
+If you see nothing readable, return: {"codes": []}`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
@@ -33,11 +38,11 @@ If you cannot find any code, return: NOT_FOUND`;
         body: JSON.stringify({
           contents: [{
             parts: [
-              { inline_data: { mime_type: "image/png", data: base64Data } },
+              { inline_data: { mime_type: mimeType, data: base64Data } },
               { text: prompt }
             ]
           }],
-          generationConfig: { maxOutputTokens: 30, temperature: 0 },
+          generationConfig: { maxOutputTokens: 200, temperature: 0 },
         }),
       }
     );
@@ -45,20 +50,32 @@ If you cannot find any code, return: NOT_FOUND`;
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
 
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "NOT_FOUND";
+    let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 
-    if (raw === "NOT_FOUND" || raw.length < 4) {
-      return res.status(200).json({ barcode: null, message: "لم يُعثر على باركود" });
+    // نستخرج JSON من الرد (قد يكون محاطاً بـ ```json)
+    raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    let codes = [];
+    try {
+      const parsed = JSON.parse(raw);
+      codes = Array.isArray(parsed.codes) ? parsed.codes : [];
+    } catch {
+      // لو فشل JSON، نستخرج أي كود يشبه الباركود من النص الخام
+      codes = raw.match(/[A-Za-z0-9]{6,}/g) ?? [];
     }
 
-    // تنظيف: نبقي أحرف وأرقام فقط
-    const cleaned = raw.replace(/\s+/g, "").replace(/了/g, "B").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    // ننظف كل كود ونبقي المرشحين الصالحين
+    const cleaned = codes
+      .map(c => String(c).replace(/\s+/g, "").replace(/了/g, "B").toUpperCase().replace(/[^A-Z0-9]/g, ""))
+      .filter(c => c.length >= 6);
 
-    if (cleaned.length < 4) {
-      return res.status(200).json({ barcode: null, message: "الكود قصير جداً" });
+    if (cleaned.length === 0) {
+      return res.status(200).json({ barcode: null, candidates: [], message: "لم يُعثر على باركود" });
     }
 
-    return res.status(200).json({ barcode: cleaned });
+    // نرجّع الأطول كأفضل مرشح + باقي المرشحين للمطابقة الذكية
+    cleaned.sort((a, b) => b.length - a.length);
+    return res.status(200).json({ barcode: cleaned[0], candidates: cleaned });
 
   } catch (err) {
     return res.status(500).json({ error: err.message });

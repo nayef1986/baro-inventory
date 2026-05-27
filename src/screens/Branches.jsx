@@ -88,7 +88,7 @@ function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, c
     <Card className="!p-0 overflow-hidden">
       {/* هيدر المنتج */}
       <div className="flex items-center gap-3 p-3 border-b border-slate-700">
-        <ProductImage barcode={item.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="lg" name={item.name} />
+        <ProductImage barcode={item.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="sm" name={item.name} />
         <div className="flex-1 min-w-0">
           <div className="font-black text-slate-100 text-sm leading-tight">{item.name}</div>
 
@@ -105,7 +105,7 @@ function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, c
       <div className="bg-blue-900/10 px-3 py-2 border-b border-slate-700">
         <div className="text-xs text-blue-400 font-bold mb-1.5">📦 المستودع الكلي</div>
         <div className="grid grid-cols-2 gap-2">
-          <StatPill label="إجمالي المشتريات" value={fmtN(bought)}      color="text-blue-400" />
+          <StatPill label="إجمالي المشتريات" value={fmtN(item.bought)}      color="text-blue-400" />
           <StatPill label="المتبقي الكلي"     value={fmtN(closingAll)}  color={closingAll < 20 ? "text-red-400" : "text-slate-300"} />
         </div>
       </div>
@@ -124,8 +124,8 @@ function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, c
       <div className="bg-emerald-900/10 px-3 py-2 border-b border-slate-700">
         <div className="text-xs text-emerald-400 font-bold mb-1.5">📊 المبيعات الكلية</div>
         <div className="grid grid-cols-2 gap-2">
-          <StatPill label="مباع ككل"   value={fmtN(totalSoldAll)}                                    color="text-emerald-400" />
-          <StatPill label="نسبة البيع" value={fmtPct(bought > 0 ? (totalSoldAll/bought)*100 : 0)} color="text-amber-400" />
+          <StatPill label="مباع ككل"   value={fmtN(item.totalSoldAll)}                                    color="text-emerald-400" />
+          <StatPill label="نسبة البيع" value={fmtPct(item.bought > 0 ? (item.totalSoldAll/item.bought)*100 : 0)} color="text-amber-400" />
         </div>
       </div>
 
@@ -346,16 +346,18 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
   const [ready,       setReady]       = useState(false);
   const { show, ToastContainer } = useToast();
 
-  // نؤجل الحساب لثانية واحدة بعد الفتح
-  useEffect(() => {
-    const t = setTimeout(() => setReady(true), 100);
-    return () => clearTimeout(t);
-  }, []);
-
   const period = periods.find(p => p.id === periodId) ?? null;
 
   const [barcodeSearch, setBarcodeSearch] = useState("");
-  const [visibleCount,  setVisibleCount]  = useState(20);
+  const [visibleCount,  setVisibleCount]  = useState(10);
+
+  // نعرض الواجهة أولاً ثم نحسب في tick منفصل — يمنع تجميد الضغطة
+  useEffect(() => {
+    setReady(false);
+    setVisibleCount(10);
+    const t = setTimeout(() => setReady(true), 0);
+    return () => clearTimeout(t);
+  }, [branch, periodId]);
 
   const allNeedItems = useMemo(() => {
     if (!period) return [];
@@ -385,7 +387,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const closingAll = Math.max(0, bought - allSold);
         return {
           ...p, sold, given, remaining, needQty,
-          closingAll,
+          closingAll, bought, totalSoldAll: allSold,
           buyPrice:   num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0),
           sellPrice:  num(p.sellPrice),
         };
@@ -477,7 +479,10 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
 
       {/* المنتجات */}
       <div className="space-y-3">
-        {filtered.slice(0, visibleCount).map(item => (
+        {!ready && period && (
+          <div className="py-10 text-center text-slate-400 text-sm animate-pulse">⏳ تحميل المنتجات…</div>
+        )}
+        {ready && filtered.slice(0, visibleCount).map(item => (
           <NeedProductCard
             key={item.barcode}
             item={item}
@@ -526,12 +531,20 @@ const TopBottomSection = memo(({ branch, products, periods, images, onSaveImage,
       });
   }, [products, period, branch]);
 
-  const filterItems = (list) => {
-    if (!filterVal) return list;
-    const [type, val] = filterVal.split(":");
-    if (type === "container") return list.filter(p => p.container === val);
-    if (type === "factory")   return list.filter(p => getFactoryCode(p.barcode) === val);
-    return list;
+  const [barcodeSearch2, setBarcodeSearch2] = useState("");
+
+  const filterItems2 = (list) => {
+    let result = list;
+    if (filterVal) {
+      const [type, val] = filterVal.split(":");
+      if (type === "container") result = result.filter(p => p.container === val);
+      if (type === "factory")   result = result.filter(p => getFactoryCode(p.barcode) === val);
+    }
+    if (barcodeSearch2) {
+      const s = barcodeSearch2.toLowerCase();
+      result = result.filter(p => p.barcode.toLowerCase().includes(s) || p.name.toLowerCase().includes(s));
+    }
+    return result;
   };
 
   const sorted = [...filterItems2(items)].sort((a,b) =>
@@ -549,17 +562,6 @@ const TopBottomSection = memo(({ branch, products, periods, images, onSaveImage,
   const exportBottom = () => {
     const data = bottom.map((p,i) => ({ "الترتيب": i+1, "الباركود": p.barcode, "الاسم": p.name, "الكونتينر": p.container, "مباع": fmtN(p.sold), "إيرادات": fmtM(p.rev), "نسبة%": fmtPct(p.soldPct) }));
     exportGeneric(data, `أضعف منتجات: ${branch}`, `أضعف_${branch}`);
-  };
-
-  const [barcodeSearch2, setBarcodeSearch2] = useState("");
-
-  const filterItems2 = (list) => {
-    let result = filterItems(list);
-    if (barcodeSearch2) {
-      const s = barcodeSearch2.toLowerCase();
-      result = result.filter(p => p.barcode.toLowerCase().includes(s) || p.name.toLowerCase().includes(s));
-    }
-    return result;
   };
 
   const ProductRow = ({ p, rank, mode }) => (
