@@ -274,23 +274,17 @@ export const NavBar = memo(({ active, onChange }) => (
           onTouchStart={e => e.currentTarget.style.transform="scale(0.88)"}
           onTouchEnd={e => e.currentTarget.style.transform="scale(1)"}
         >
-          {/* أيقونة مع خلفية دائرية للنشط */}
+          {/* أيقونة فقط - تكبر عند الضغط */}
           <span style={{
-            fontSize:"22px",
+            fontSize: active===key ? "26px" : "22px",
             lineHeight:1,
-            padding:"6px 16px",
+            padding:"6px 14px",
             borderRadius:"100px",
-            background: active===key ? "rgba(59,130,246,0.15)" : "transparent",
-            transition:"background 0.2s ease",
+            background: active===key ? "rgba(96,165,250,0.15)" : "transparent",
+            transition:"all 0.2s ease",
             display:"block",
+            filter: active===key ? "none" : "opacity(0.5)",
           }}>{icon}</span>
-          <span style={{
-            fontSize:"10px",
-            fontWeight:"700",
-            lineHeight:1,
-            color: active===key ? "#60a5fa" : "rgba(148,163,184,0.7)",
-            transition:"color 0.2s ease",
-          }}>{label}</span>
         </button>
       ))}
     </div>

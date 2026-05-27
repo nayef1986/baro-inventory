@@ -118,9 +118,9 @@ export default function AIChat({ products, periods, settings, onClose, model = "
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-900">
       <div className="bg-gradient-to-r from-blue-900 to-purple-900 px-4 pt-12 pb-4 flex items-center gap-3 shrink-0">
-        <span className="text-2xl">🤖</span>
+        <span className="text-2xl">{model === "gemini" ? "✨" : "🤖"}</span>
         <div className="flex-1">
-          <div className="font-black text-white">المساعد الذكي</div>
+          <div className="font-black text-white">{model === "gemini" ? "Gemini" : "آمرني"}</div>
           <div className="text-xs text-blue-300">{products.length} منتج · {periods.length} فترة · {allBranches(periods).length} فرع</div>
         </div>
         <button onClick={onClose} className="text-white/70 hover:text-white text-xl w-8 h-8 flex items-center justify-center">✕</button>

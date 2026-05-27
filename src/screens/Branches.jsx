@@ -2,7 +2,7 @@
 // Branches.jsx — شاشة الفروع
 // ============================================================
 
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import {
   Card, Btn, StatPill, EmptyState, ExportBar,
   FilterChips, SearchBar, SectionHeader, BackBtn,
@@ -343,11 +343,18 @@ function SmartSearch({ products, periods, settings, images, onSaveImage, onRemov
 // ─── شاشة الاحتياج ───────────────────────────────────────────
 
 const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings }) => {
-  const allPeriods = periods; // لاستخدامها في getSalesNames
+  const allPeriods = periods;
   const [periodId,    setPeriodId]    = useState(periods[periods.length-1]?.id ?? "");
   const [filterVal,   setFilterVal]   = useState("");
   const [minStock,    setMinStock]    = useState(settings?.minStock ?? 12);
+  const [ready,       setReady]       = useState(false);
   const { show, ToastContainer } = useToast();
+
+  // نؤجل الحساب لثانية واحدة بعد الفتح
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 100);
+    return () => clearTimeout(t);
+  }, []);
 
   const period = periods.find(p => p.id === periodId) ?? null;
 
@@ -691,16 +698,23 @@ const BranchSelector = memo(({ branches, periods, products, settings, onSelect }
   const [showCamera,  setShowCamera]   = useState(false);
 
   const branchStats = useMemo(() => {
+    // نبني index مسبقاً لتجنب products.find في كل loop
+    const productMap = {};
+    products.forEach(p => {
+      productMap[p.barcode] = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    });
+
     return branches.map(branch => {
-      let qty = 0, rev = 0;
-      const cost = periods.reduce((s, per) => {
+      let qty = 0, rev = 0, cost = 0;
+      periods.forEach(per => {
         const data = per.sales?.[branch] ?? {};
-        Object.values(data).forEach(v => { qty += num(v.qty); rev += num(v.totalPrice); });
-        return s + Object.entries(data).reduce((ss, [barcode, v]) => {
-          const prod = products.find(p => p.barcode === barcode);
-          return ss + num(v.qty) * num(prod?.purchases?.slice(-1)[0]?.buyPrice ?? 0);
-        }, 0);
-      }, 0);
+        Object.entries(data).forEach(([barcode, v]) => {
+          const q = num(v.qty);
+          qty  += q;
+          rev  += num(v.totalPrice);
+          cost += q * (productMap[barcode] ?? 0);
+        });
+      });
       const profit = rev - cost;
       const perfLevel = rev > 0
         ? (profit / rev > 0.3 ? "green" : profit / rev > 0.1 ? "amber" : "red")

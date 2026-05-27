@@ -8,11 +8,58 @@ import {
 
 // ─── بناء القرارات ────────────────────────────────────────────
 
+// ─── حساب Product Health Score ──────────────────────────────
+
+function calcHealthScore(product, periods) {
+  const sorted = [...periods].sort((a,b) =>
+    (a.uploadDate??a.label) > (b.uploadDate??b.label) ? 1 : -1
+  );
+
+  const bought   = totalPurchases(product);
+  const allSold  = sorted.reduce((s,per) =>
+    s + Object.values(per.sales??{}).reduce((ss,d)=>ss+num(d[product.barcode]?.qty??0),0), 0);
+  const soldPct  = bought > 0 ? (allSold/bought)*100 : 0;
+  const lastQ    = sorted.slice(-1).reduce((s,per) =>
+    s + Object.values(per.sales??{}).reduce((ss,d)=>ss+num(d[product.barcode]?.qty??0),0), 0);
+  const prevQ    = sorted.slice(-2,-1).reduce((s,per) =>
+    s + Object.values(per.sales??{}).reduce((ss,d)=>ss+num(d[product.barcode]?.qty??0),0), 0);
+  const growth   = prevQ > 0 ? ((lastQ-prevQ)/prevQ)*100 : 0;
+  const buyPrice = num(product.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+  const sellPrice= num(product.sellPrice ?? 0);
+  const margin   = buyPrice > 0 ? ((sellPrice-buyPrice)/buyPrice)*100 : 0;
+  const closing  = Math.max(0, bought - allSold);
+  const avgMonth = sorted.length > 0 ? allSold/sorted.length : 0;
+  const daysLeft = avgMonth > 0 ? Math.round((closing/avgMonth)*30) : 999;
+
+  // حساب الـ Score من 100
+  let score = 0;
+  score += Math.min(30, soldPct * 0.3);           // نسبة المبيعات (30 نقطة)
+  score += Math.min(20, Math.max(0, growth) * 0.2); // النمو (20 نقطة)
+  score += Math.min(20, margin * 0.2);              // الهامش (20 نقطة)
+  score += daysLeft > 60 ? 15 : daysLeft > 30 ? 10 : 5; // المخزون (15 نقطة)
+  score += sorted.filter(per =>
+    Object.values(per.sales??{}).some(d=>num(d[product.barcode]?.qty??0)>0)
+  ).length / Math.max(sorted.length, 1) * 15;       // الاستمرارية (15 نقطة)
+
+  const rounded = Math.round(score);
+  const grade = rounded >= 75 ? "strong" : rounded >= 50 ? "average" : rounded >= 25 ? "weak" : "critical";
+  const color = { strong:"#8aab8e", average:"#d4a853", weak:"#f59e0b", critical:"#e8855a" }[grade];
+  const label = { strong:"🟢 قوي", average:"🟡 متوسط", weak:"🟠 ضعيف", critical:"🔴 حرج" }[grade];
+
+  return { score:rounded, grade, color, label, soldPct, growth, margin, closing, daysLeft, avgMonth };
+}
+
+// ─── بناء القرارات ────────────────────────────────────────────
+
 function buildDecisions(products, periods, images) {
   const sorted = [...periods].sort((a,b) =>
     (a.uploadDate??a.label) > (b.uploadDate??b.label) ? 1 : -1
   );
   const lastPer = sorted[sorted.length-1];
+
+  // نبني productMap مسبقاً
+  const productMap = {};
+  products.forEach(p => { productMap[p.barcode] = p; });
 
   const decisions = [];
 
@@ -116,7 +163,7 @@ function buildDecisions(products, periods, images) {
 
 // ─── بطاقة القرار ────────────────────────────────────────────
 
-function DecisionCard({ d, images, settings, onAction }) {
+function DecisionCard({ d, images, settings, onAction, periods }) {
   const [open, setOpen] = useState(false);
   const p = d.product;
   const COLORS = {
@@ -129,6 +176,9 @@ function DecisionCard({ d, images, settings, onAction }) {
 
   // رسم بياني مصغر
   const max = Math.max(...p.monthly.map(m=>m.qty), 1);
+
+  // نحسب Health Score
+  const health = calcHealthScore(d.product, periods ?? []);
 
   return (
     <div style={{borderRadius:"18px",overflow:"hidden",border:`1px solid ${C.border}`,marginBottom:"12px",background:C.bg}}>
@@ -144,7 +194,14 @@ function DecisionCard({ d, images, settings, onAction }) {
           <div style={{fontSize:"13px",fontWeight:"700",color:C.text,marginBottom:"3px"}}>{d.headline}</div>
           <div style={{fontSize:"12px",color:"rgba(255,255,255,0.45)"}}>{d.reason}</div>
         </div>
-        <div style={{fontSize:"13px",color:C.text,flexShrink:0}}>{open?"▲":"▼"}</div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px",flexShrink:0}}>
+          {/* Health Score */}
+          <div style={{background:`${health.color}15`,border:`1px solid ${health.color}30`,borderRadius:"8px",padding:"3px 8px",textAlign:"center"}}>
+            <div style={{fontSize:"14px",fontWeight:"900",color:health.color,lineHeight:1}}>{health.score}</div>
+            <div style={{fontSize:"9px",color:"rgba(255,255,255,0.3)",marginTop:"1px"}}>score</div>
+          </div>
+          <div style={{fontSize:"11px",color:C.text}}>{open?"▲":"▼"}</div>
+        </div>
       </div>
 
       {/* التفاصيل الكاملة */}
@@ -363,9 +420,27 @@ export function OperationsRoom({ products, periods, images, settings, onBuildCar
       <div style={{marginBottom:"16px"}}>
         <div style={{fontSize:"13px",color:"rgba(212,168,83,0.6)",marginBottom:"3px"}}>{today}</div>
         <div style={{fontSize:"22px",fontWeight:"900",color:"#ffffff",marginBottom:"3px"}}>غرفة العمليات</div>
-        <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)"}}>
-          {products.length} منتج · {periods.length} فترة · {decisions.length} قرار
+        <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"10px"}}>
+          {products.length} منتج · {periods.length} فترة · {decisions.length} قرار يحتاج اهتمامك
         </div>
+        {/* Product Intelligence Summary */}
+        {products.length > 0 && periods.length > 0 && (() => {
+          const scores = products.slice(0,100).map(p => calcHealthScore(p, periods));
+          const strong   = scores.filter(s=>s.grade==="strong").length;
+          const average  = scores.filter(s=>s.grade==="average").length;
+          const weak     = scores.filter(s=>s.grade==="weak").length;
+          const critical = scores.filter(s=>s.grade==="critical").length;
+          return (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"6px",marginBottom:"4px"}}>
+              {[["🟢 قوي",strong,"#8aab8e"],["🟡 متوسط",average,"#d4a853"],["🟠 ضعيف",weak,"#f59e0b"],["🔴 حرج",critical,"#e8855a"]].map(([l,v,c])=>(
+                <div key={l} style={{background:`${c}10`,border:`1px solid ${c}20`,borderRadius:"11px",padding:"8px",textAlign:"center"}}>
+                  <div style={{fontSize:"18px",fontWeight:"900",color:c}}>{v}</div>
+                  <div style={{fontSize:"9px",color:"rgba(255,255,255,0.35)",marginTop:"1px"}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* الملخص المالي */}
@@ -395,7 +470,7 @@ export function OperationsRoom({ products, periods, images, settings, onBuildCar
       )}
 
       {filtered.map((d,i) => (
-        <DecisionCard key={i} d={d} images={images} settings={settings} onAction={handleAction} />
+        <DecisionCard key={i} d={d} images={images} settings={settings} onAction={handleAction} periods={periods} />
       ))}
 
       {/* نبض الفروع */}

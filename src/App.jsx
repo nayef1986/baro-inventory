@@ -187,46 +187,47 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
       {/* هيدر */}
-      <header className="fixed top-0 right-0 left-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 z-20 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setShowSettings(true)}
-            className="w-10 h-10 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-xl
-              flex items-center justify-center text-xl transition-colors"
-          >⚙️</button>
+      <header style={{
+          position:"fixed",top:0,right:0,left:0,
+          background:"rgba(15,23,42,0.92)",
+          backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",
+          borderBottom:"1px solid rgba(255,255,255,0.06)",
+          zIndex:20,padding:"10px 16px",
+        }}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",maxWidth:"440px",margin:"0 auto"}}>
 
-          <div className="text-center">
-            <div className="font-black text-slate-100 text-base leading-tight">
-              {state.settings.brandName}
-            </div>
-            <div className="text-xs text-slate-500">
+          {/* يسار: إعدادات */}
+          <button onClick={() => setShowSettings(true)} style={{
+            width:"38px",height:"38px",borderRadius:"12px",border:"1px solid rgba(255,255,255,0.1)",
+            background:"rgba(255,255,255,0.06)",display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:"18px",cursor:"pointer",flexShrink:0,
+          }}>⚙️</button>
+
+          {/* وسط: الاسم */}
+          <div style={{textAlign:"center",flex:1,padding:"0 12px"}}>
+            <div style={{fontWeight:"900",color:"#ffffff",fontSize:"16px",lineHeight:1}}>{state.settings.brandName}</div>
+            <div style={{fontSize:"11px",color:"rgba(148,163,184,0.6)",marginTop:"2px"}}>
               {state.products.length} منتج · {state.periods.length} فترة
             </div>
           </div>
 
-          <a
-            href="https://baro-ideas-gamma.vercel.app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-gradient-to-r from-amber-600 to-yellow-500 text-white px-3 py-2 rounded-xl
-              text-sm font-bold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
-          >
-            💡 <span>أفكار</span>
-          </a>
-          <button
-            onClick={() => { setAiModel("gemini"); setShowAI(true); }}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-2 rounded-xl
-              text-sm font-bold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
-          >
-            ✨ <span>Gemini</span>
-          </button>
-          <button
-            onClick={() => { setAiModel("claude"); setShowAI(true); }}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-2 rounded-xl
-              text-sm font-bold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
-          >
-            🤖 <span>آمرني</span>
-          </button>
+          {/* يمين: أزرار أيقونات فقط */}
+          <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+            <a href="https://baro-ideas-gamma.vercel.app" target="_blank" rel="noopener noreferrer"
+              style={{width:"38px",height:"38px",borderRadius:"12px",background:"rgba(217,119,6,0.2)",border:"1px solid rgba(217,119,6,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",textDecoration:"none"}}>
+              💡
+            </a>
+            <button onClick={() => { setAiModel("gemini"); setShowAI(true); }} style={{
+              width:"38px",height:"38px",borderRadius:"12px",background:"rgba(168,85,247,0.2)",
+              border:"1px solid rgba(168,85,247,0.3)",display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:"18px",cursor:"pointer",
+            }}>✨</button>
+            <button onClick={() => { setAiModel("claude"); setShowAI(true); }} style={{
+              width:"38px",height:"38px",borderRadius:"12px",background:"rgba(37,99,235,0.2)",
+              border:"1px solid rgba(37,99,235,0.3)",display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:"18px",cursor:"pointer",
+            }}>🤖</button>
+          </div>
         </div>
       </header>
 

@@ -1,4 +1,4 @@
-// api/scan-barcode.js — قراءة الباركود والأرقام من الصورة عبر Gemini
+// api/scan-barcode.js — قراءة الباركود والأرقام من الصورة
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -12,21 +12,18 @@ export default async function handler(req, res) {
   try {
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const prompt = `You are an expert at reading product barcodes and SKU codes from images.
+    const prompt = `Look at this image carefully. Find the product SKU or barcode number.
 
-TASK: Find the product code/barcode in this image.
+The code format is usually: 8 digits + letter B + 3 digits
+Examples: 26068616B005, 25252201B001, 26049616B004
 
-LOOK FOR:
-1. Any number+letter combination like: 26068616B005, 25252201B001
-2. Barcodes printed as lines (EAN13, CODE128)
-3. QR codes
-4. Any SKU printed on labels, stickers, cartons
+Steps:
+1. Look for any printed numbers/letters on labels, stickers, boxes, or tags
+2. Find the longest number sequence that looks like a product code
+3. Include the letter B if present (e.g. 26068616B005)
 
-IMPORTANT: Arabic/Chinese product codes often have format: NUMBERS + LETTER + NUMBERS
-Example: 26068616B005 (8 digits + B + 3 digits)
-
-Return ONLY the code. No spaces. No explanation.
-If not found, return: NOT_FOUND`;
+Return ONLY the code with no spaces or explanation.
+If you cannot find any code, return: NOT_FOUND`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -36,11 +33,11 @@ If not found, return: NOT_FOUND`;
         body: JSON.stringify({
           contents: [{
             parts: [
-              { inline_data: { mime_type: "image/jpeg", data: base64Data } },
+              { inline_data: { mime_type: "image/png", data: base64Data } },
               { text: prompt }
             ]
           }],
-          generationConfig: { maxOutputTokens: 50, temperature: 0 },
+          generationConfig: { maxOutputTokens: 30, temperature: 0 },
         }),
       }
     );
@@ -50,18 +47,15 @@ If not found, return: NOT_FOUND`;
 
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "NOT_FOUND";
 
-    if (raw === "NOT_FOUND" || raw.length < 3) {
+    if (raw === "NOT_FOUND" || raw.length < 4) {
       return res.status(200).json({ barcode: null, message: "لم يُعثر على باركود" });
     }
 
-    // تنظيف
-    let cleaned = raw.replace(/\s+/g, "").replace(/了/g, "B").toUpperCase();
-    // نزيل أي رموز غير ضرورية
-    cleaned = cleaned.replace(/[^A-Z0-9]/g, "");
+    // تنظيف: نبقي أحرف وأرقام فقط
+    const cleaned = raw.replace(/\s+/g, "").replace(/了/g, "B").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-    // التحقق: أي كود بطول 6+ حروف/أرقام
-    if (cleaned.length < 6) {
-      return res.status(200).json({ barcode: null, message: "الكود المقروء قصير جداً: " + cleaned });
+    if (cleaned.length < 4) {
+      return res.status(200).json({ barcode: null, message: "الكود قصير جداً" });
     }
 
     return res.status(200).json({ barcode: cleaned });
