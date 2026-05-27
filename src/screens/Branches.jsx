@@ -698,23 +698,31 @@ const BranchSelector = memo(({ branches, periods, products, settings, onSelect }
   const [showCamera,  setShowCamera]   = useState(false);
 
   const branchStats = useMemo(() => {
-    // نبني index مسبقاً لتجنب products.find في كل loop
+    // نبني index واحد لكل شيء مسبقاً
     const productMap = {};
     products.forEach(p => {
       productMap[p.barcode] = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
     });
 
-    return branches.map(branch => {
-      let qty = 0, rev = 0, cost = 0;
-      periods.forEach(per => {
+    // نبني branchTotals من كل الفترات مرة واحدة
+    const totals = {};
+    branches.forEach(b => { totals[b] = { qty:0, rev:0, cost:0 }; });
+
+    periods.forEach(per => {
+      branches.forEach(branch => {
         const data = per.sales?.[branch] ?? {};
         Object.entries(data).forEach(([barcode, v]) => {
           const q = num(v.qty);
-          qty  += q;
-          rev  += num(v.totalPrice);
-          cost += q * (productMap[barcode] ?? 0);
+          if (!totals[branch]) return;
+          totals[branch].qty  += q;
+          totals[branch].rev  += num(v.totalPrice);
+          totals[branch].cost += q * (productMap[barcode] ?? 0);
         });
       });
+    });
+
+    return branches.map(branch => {
+      const { qty, rev, cost } = totals[branch] ?? { qty:0, rev:0, cost:0 };
       const profit = rev - cost;
       const perfLevel = rev > 0
         ? (profit / rev > 0.3 ? "green" : profit / rev > 0.1 ? "amber" : "red")
