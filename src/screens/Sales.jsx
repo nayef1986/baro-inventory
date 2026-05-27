@@ -224,6 +224,45 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
   };
 
   // لو في معاينة — نعرض شاشة المراجعة
+  if (preview?.type === "monthly") {
+    return (
+      <div className="space-y-4">
+        <div className="bg-purple-900/30 border border-purple-700/40 rounded-xl p-4">
+          <div className="font-black text-slate-100 text-lg mb-1">📅 ملف شهري</div>
+          <div className="text-sm text-purple-300">{preview.periods.length} فترة جاهزة للحفظ</div>
+        </div>
+        <div className="space-y-2">
+          {preview.periods.map((p, i) => {
+            const totalQty = Object.values(p.sales ?? {}).reduce((s,b) =>
+              s + Object.values(b).reduce((ss,v) => ss + (v.qty ?? 0), 0), 0);
+            const branchCount = Object.keys(p.sales ?? {}).length;
+            return (
+              <div key={p.id} className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-slate-100">{p.label}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{branchCount} فرع · {Number(totalQty).toLocaleString()} وحدة</div>
+                  </div>
+                  <div className="text-purple-400 font-black">#{i+1}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={handleConfirmMonthly} disabled={loading}
+            className="py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50">
+            ✅ حفظ {preview.periods.length} فترة
+          </button>
+          <button onClick={() => { setPreview(null); setLog([]); }}
+            className="py-3 rounded-xl bg-slate-700 text-slate-200 font-bold text-sm">
+            ✕ إلغاء
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (preview) {
     return (
       <PreviewScreen
