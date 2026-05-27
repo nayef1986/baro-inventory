@@ -63,16 +63,7 @@ const PurchasePreview = memo(({ items, container, products, onConfirm, onCancel 
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
-                <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"3px"}}>
-                  <span className="font-mono text-blue-400 text-xs">{p.barcode}</span>
-                  {(() => {
-                    const sold = periods.reduce((s,per)=>s+Object.values(per.sales??{}).reduce((ss,d)=>ss+num(d[p.barcode]?.qty??0),0),0);
-                    const bought = p.qty ?? 0;
-                    const pct = bought > 0 ? Math.round((sold/bought)*100) : 0;
-                    const c = pct >= 60 ? "#8aab8e" : pct >= 30 ? "#d4a853" : "#e8855a";
-                    return <span style={{fontSize:"10px",fontWeight:"700",color:c,background:`${c}15`,padding:"1px 6px",borderRadius:"100px"}}>{pct}%</span>;
-                  })()}
-                </div>
+                <div className="font-mono text-blue-400 text-xs mt-0.5">{p.barcode}</div>
                 <div className="text-xs text-slate-400 mt-0.5">📦 {p.container}</div>
               </div>
               <div className="text-right shrink-0 mr-3">

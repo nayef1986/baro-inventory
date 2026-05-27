@@ -1,175 +1,264 @@
-// ============================================================
-// AIChat.jsx — مساعد ذكاء اصطناعي عبر Vercel proxy
-// ============================================================
-
-import { useState, useRef, useEffect, memo } from "react";
-import { allBranches, totalPurchases, soldAllPeriods, num } from "../lib/calc.js";
+// AIChat.jsx — واجهة محادثة احترافية
+import { useState, useRef, useEffect, useCallback, memo } from "react";
 
 function buildContext(products, periods, settings) {
-  const branches = allBranches(periods);
+  const totalProducts = products?.length ?? 0;
+  const totalPeriods  = periods?.length ?? 0;
+  const lastPer = periods?.[periods.length - 1];
+  const totalSold = lastPer
+    ? Object.values(lastPer.sales ?? {}).reduce((s, b) =>
+        s + Object.values(b).reduce((ss, v) => ss + (v.qty || 0), 0), 0)
+    : 0;
 
-  const productSummaries = products.slice(0, 150).map(p => {
-    const bought  = totalPurchases(p);
-    const sold    = soldAllPeriods(p.barcode, periods);
-    const closing = Math.max(0, bought - sold);
-    const soldPct = bought > 0 ? Math.round((sold / bought) * 100) : 0;
-    return `${p.name} (${p.barcode}) | ${p.container} | شراء:${p.buyPrice} | بيع:${p.sellPrice} | مشتريات:${bought} | مباع:${sold} | متبقي:${closing} | ${soldPct}%`;
-  }).join("\n");
+  const topProducts = products?.slice(0, 10).map(p => p.name).join("، ") ?? "";
 
-  const branchSummaries = branches.map(branch => {
-    const totals = periods.reduce((s, per) => {
-      const data = per.sales?.[branch] ?? {};
-      Object.values(data).forEach(v => { s.qty += (v.qty || 0); s.rev += (v.totalPrice || 0); });
-      return s;
-    }, { qty: 0, rev: 0 });
-    return `${branch}: ${totals.qty} وحدة | ${totals.rev.toFixed(0)} ريال`;
-  }).join("\n");
+  return `أنت مساعد ذكي متخصص في نظام إدارة مخزون "البارو".
 
-  return `أنت مساعد ذكي لنظام مخزون اسمه "${settings?.brandName || "البارو"}". أجب بالعربي فقط وبشكل مختصر.
+بيانات النظام:
+- عدد المنتجات: ${totalProducts}
+- عدد الفترات: ${totalPeriods}
+- إجمالي مباع في آخر فترة: ${totalSold.toLocaleString()} وحدة
+- أمثلة منتجات: ${topProducts}
+- اسم البراند: ${settings?.brandName ?? "البارو"}
 
-الإحصاءات:
-- المنتجات: ${products.length}
-- الفروع: ${branches.length}
-- الفترات: ${periods.length}
-- الحد الأدنى للمخزون: ${settings?.minStock ?? 12}
-
-الفروع:
-${branchSummaries}
-
-الفترات:
-${periods.map(p => `${p.label} (${p.uploadDate})`).join(", ")}
-
-المنتجات (${Math.min(150, products.length)} من ${products.length}):
-${productSummaries}
-
-المصانع:
-${Object.entries(settings?.factories ?? {}).map(([k, v]) => `${k}: ${v}`).join("\n") || "لا يوجد"}`;
+أجب بالعربية دائماً. كن مختصراً وعملياً. ساعد في قرارات المخزون والمبيعات.`;
 }
 
-const Message = memo(({ msg }) => (
-  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-3`}>
-    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm
-      ${msg.role === "user"
-        ? "bg-blue-600 text-white rounded-br-sm"
-        : "bg-slate-700 text-slate-100 rounded-bl-sm"}`}>
-      {msg.role === "assistant" && (
-        <div className="text-xs text-blue-400 mb-1 font-bold">🤖 المساعد</div>
-      )}
-      <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+// ─── رسالة واحدة ─────────────────────────────────────────────
+
+const Message = memo(({ msg }) => {
+  const isUser = msg.role === "user";
+  return (
+    <div style={{
+      display:"flex",
+      justifyContent: isUser ? "flex-start" : "flex-end",
+      marginBottom:"10px",
+      padding:"0 4px",
+    }}>
+      <div style={{
+        maxWidth:"82%",
+        padding:"10px 14px",
+        borderRadius: isUser ? "18px 18px 18px 4px" : "18px 18px 4px 18px",
+        background: isUser
+          ? "rgba(255,255,255,0.08)"
+          : "linear-gradient(135deg,rgba(99,102,241,0.3),rgba(168,85,247,0.3))",
+        border: isUser
+          ? "1px solid rgba(255,255,255,0.08)"
+          : "1px solid rgba(99,102,241,0.3)",
+        fontSize:"14px",
+        lineHeight:"1.6",
+        color:"#f1f5f9",
+        wordBreak:"break-word",
+        whiteSpace:"pre-wrap",
+      }}>
+        {msg.content}
+      </div>
+    </div>
+  );
+});
+
+// ─── Typing Animation ─────────────────────────────────────────
+
+const TypingDots = () => (
+  <div style={{display:"flex",justifyContent:"flex-end",marginBottom:"10px",padding:"0 4px"}}>
+    <div style={{
+      padding:"12px 16px",borderRadius:"18px 18px 4px 18px",
+      background:"linear-gradient(135deg,rgba(99,102,241,0.2),rgba(168,85,247,0.2))",
+      border:"1px solid rgba(99,102,241,0.2)",
+      display:"flex",gap:"5px",alignItems:"center",
+    }}>
+      {[0,1,2].map(i => (
+        <div key={i} style={{
+          width:"7px",height:"7px",borderRadius:"50%",
+          background:"rgba(148,163,184,0.6)",
+          animation:`bounce 1.2s ${i*0.2}s infinite`,
+        }} />
+      ))}
+      <style>{`@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}`}</style>
     </div>
   </div>
-));
+);
+
+// ─── المحادثة الرئيسية ────────────────────────────────────────
 
 export default function AIChat({ products, periods, settings, onClose, model = "gemini" }) {
-  const [messages, setMessages] = useState([]);
-  const [input,    setInput]    = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const bottomRef = useRef();
+  const [messages, setMessages] = useState([{
+    role:"assistant",
+    content: model === "gemini"
+      ? "مرحباً! أنا Gemini — اسألني عن منتجاتك أو فروعك أو المبيعات 🚀"
+      : "مرحباً! أنا آمرني — اسألني أي شيء عن نظامك 🤖",
+  }]);
+  const [input,   setInput]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
 
+  const messagesEndRef = useRef(null);
+  const textareaRef    = useRef(null);
+  const abortRef       = useRef(null);
+
+  // Scroll للأسفل عند رسالة جديدة
   useEffect(() => {
-    setMessages([{
-      role: "assistant",
-      content: `مرحباً! أنا مساعدك الذكي لنظام ${settings?.brandName || "البارو"}.\n\nأقدر أساعدك في:\n• تحليل المبيعات والمخزون\n• مقارنة الفروع والمنتجات\n• توصيات التكرار والشراء\n\nاسألني أي شيء! 🎯`,
-    }]);
+    messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [messages, loading]);
+
+  // نضبط ارتفاع textarea تلقائياً
+  const adjustHeight = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
   }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const send = async () => {
+  const send = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
 
-    const userMsg    = { role: "user", content: text };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
     setInput("");
+    setError("");
+    if (textareaRef.current) textareaRef.current.style.height = "44px";
+
+    const newMessages = [...messages, { role:"user", content:text }];
+    setMessages(newMessages);
     setLoading(true);
 
     try {
       const endpoint = model === "gemini" ? "/api/gemini-chat" : "/api/chat";
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch(endpoint, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           system: buildContext(products, periods, settings),
-          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: newMessages.filter(m => m.role !== "system"),
         }),
       });
 
-      const data  = await response.json();
-      const reply = data.content ?? data.error ?? "عذراً، لم أتمكن من الرد.";
-      setMessages(prev => [...prev, { role: "assistant", content: reply }]);
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "❌ حدث خطأ في الاتصال." }]);
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      const reply = data.content?.[0]?.text ?? data.text ?? "حدث خطأ";
+      setMessages(p => [...p, { role:"assistant", content:reply }]);
+
+    } catch (err) {
+      setError(err.message);
+      setMessages(p => [...p, {
+        role:"assistant",
+        content:`❌ ${err.message.includes("not found") ? "الموديل غير متاح حالياً، جرب لاحقاً" : err.message}`,
+      }]);
     }
 
     setLoading(false);
+  }, [input, loading, messages, model, products, periods, settings]);
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
   };
 
-  const quickQ = [
-    "أي منتج الأكثر مبيعاً؟",
-    "أي فرع الأقوى؟",
-    "منتجات نفد مخزونها؟",
-    "اقترح منتجات للتكرار",
-  ];
+  const isGemini = model === "gemini";
+  const gradBg   = isGemini
+    ? "linear-gradient(135deg,#4f46e5,#7c3aed)"
+    : "linear-gradient(135deg,#1d4ed8,#4f46e5)";
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900">
-      <div className="bg-gradient-to-r from-blue-900 to-purple-900 px-4 pt-12 pb-4 flex items-center gap-3 shrink-0">
-        <span className="text-2xl">{model === "gemini" ? "✨" : "🤖"}</span>
-        <div className="flex-1">
-          <div className="font-black text-white">{model === "gemini" ? "Gemini" : "آمرني"}</div>
-          <div className="text-xs text-blue-300">{products.length} منتج · {periods.length} فترة · {allBranches(periods).length} فرع</div>
-        </div>
-        <button onClick={onClose} className="text-white/70 hover:text-white text-xl w-8 h-8 flex items-center justify-center">✕</button>
-      </div>
+    <div style={{
+      position:"fixed", inset:0, zIndex:60,
+      background:"#0a0f1e",
+      display:"flex", flexDirection:"column",
+      fontFamily:"Cairo,sans-serif", direction:"rtl",
+    }}>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.map((msg, i) => <Message key={i} msg={msg} />)}
-        {loading && (
-          <div className="flex justify-start mb-3">
-            <div className="bg-slate-700 rounded-2xl rounded-bl-sm px-4 py-3">
-              <div className="flex gap-1">
-                {[0, 150, 300].map(d => (
-                  <span key={d} className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                ))}
-              </div>
-            </div>
+      {/* ─── هيدر ─────────────────────────────────── */}
+      <div style={{
+        background: gradBg,
+        padding:"14px 16px",
+        paddingTop:"calc(14px + env(safe-area-inset-top, 0px))",
+        display:"flex", alignItems:"center", gap:"12px",
+        flexShrink:0,
+        boxShadow:"0 2px 20px rgba(0,0,0,0.3)",
+      }}>
+        <span style={{fontSize:"24px"}}>{isGemini?"✨":"🤖"}</span>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:"900",color:"#fff",fontSize:"16px"}}>
+            {isGemini ? "Gemini" : "آمرني"}
           </div>
-        )}
-        <div ref={bottomRef} />
+          <div style={{fontSize:"11px",color:"rgba(255,255,255,0.6)",marginTop:"1px"}}>
+            {products?.length} منتج · {periods?.length} فترة
+          </div>
+        </div>
+        <button onClick={onClose} style={{
+          width:"36px",height:"36px",borderRadius:"50%",
+          background:"rgba(255,255,255,0.15)",border:"none",
+          color:"#fff",fontSize:"18px",cursor:"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",
+        }}>✕</button>
       </div>
 
-      {messages.length <= 1 && (
-        <div className="px-4 pb-2 flex gap-2 flex-wrap shrink-0">
-          {quickQ.map(q => (
-            <button key={q} onClick={() => setInput(q)}
-              className="bg-slate-700 text-blue-300 text-xs px-3 py-1.5 rounded-xl border border-slate-600">
-              {q}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* ─── الرسائل ───────────────────────────────── */}
+      <div style={{
+        flex:1, overflowY:"auto", padding:"16px 8px",
+        paddingBottom:"160px", // مساحة للـ input
+        WebkitOverflowScrolling:"touch",
+      }}>
+        {messages.map((msg, i) => <Message key={i} msg={msg} />)}
+        {loading && <TypingDots />}
+        <div ref={messagesEndRef} />
+      </div>
 
-      <div className="px-4 pb-6 pt-2 bg-slate-800 border-t border-slate-700 shrink-0">
-        <div className="flex gap-2">
+      {/* ─── Input Bar ─────────────────────────────── */}
+      <div style={{
+        position:"fixed",
+        bottom:"calc(0px + env(safe-area-inset-bottom, 0px))",
+        right:0, left:0,
+        background:"rgba(10,15,30,0.98)",
+        backdropFilter:"blur(20px)",
+        borderTop:"1px solid rgba(255,255,255,0.08)",
+        padding:"10px 12px",
+        zIndex:61,
+      }}>
+        <div style={{
+          display:"flex",alignItems:"flex-end",gap:"8px",
+          maxWidth:"440px",margin:"0 auto",
+        }}>
           <textarea
+            ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="اسألني عن منتجاتك أو فروعك…"
+            onChange={e => { setInput(e.target.value); adjustHeight(); }}
+            onKeyDown={handleKey}
+            placeholder={isGemini ? "اسأل Gemini…" : "اسألني…"}
             rows={1}
-            className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5
-              text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500 resize-none"
-            style={{ maxHeight: 100 }}
+            style={{
+              flex:1,
+              background:"rgba(255,255,255,0.06)",
+              border:"1px solid rgba(255,255,255,0.12)",
+              borderRadius:"14px",
+              padding:"11px 14px",
+              color:"#f1f5f9",
+              fontSize:"14px",
+              fontFamily:"Cairo,sans-serif",
+              outline:"none",
+              resize:"none",
+              lineHeight:"1.5",
+              minHeight:"44px",
+              maxHeight:"120px",
+              direction:"rtl",
+            }}
+            autoFocus
           />
-          <button onClick={send} disabled={!input.trim() || loading}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white w-10 h-10
-              rounded-xl flex items-center justify-center shrink-0 self-end">
-            ➤
-          </button>
+          <button
+            onClick={send}
+            disabled={loading || !input.trim()}
+            style={{
+              width:"44px",height:"44px",borderRadius:"14px",border:"none",
+              background: input.trim() && !loading ? gradBg : "rgba(255,255,255,0.06)",
+              color:"#fff",fontSize:"18px",cursor: input.trim()?"pointer":"default",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              flexShrink:0,transition:"background 0.2s",
+              opacity: loading || !input.trim() ? 0.4 : 1,
+            }}
+          >{loading ? "⏳" : "↑"}</button>
         </div>
       </div>
     </div>

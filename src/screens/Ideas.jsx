@@ -713,18 +713,23 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
   const [bT,   setBT]   = useState(null);
   const [bP,   setBP]   = useState(null);
 
-  // حساب البيانات من props
-  const PRODUCTS = useMemo(() => products.map(p => {
-    const bought  = totalPurchases(p);
-    const sold    = soldAllPeriods(p.barcode, periods);
-    const closing = Math.max(0, bought - sold);
-    const soldPct = bought > 0 ? (sold/bought)*100 : 0;
-    const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
-    return { ...p, qty: bought, soldPct, buyPrice, closing };
-  }), [products, periods]);
+  // حساب البيانات — مع حد أقصى لعدد المنتجات لمنع التعليق
+  const PRODUCTS = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    return products.slice(0, 200).map(p => {
+      const bought  = totalPurchases(p);
+      const sold    = periods.slice(-4).reduce((s, per) =>
+        s + Object.values(per.sales ?? {}).reduce((ss, d) => ss + num(d[p.barcode]?.qty ?? 0), 0), 0);
+      const closing = Math.max(0, bought - sold);
+      const soldPct = bought > 0 ? (sold/bought)*100 : 0;
+      const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+      return { ...p, qty: bought, soldPct, buyPrice, closing };
+    });
+  }, [products, periods]);
 
   const FACTORIES = useMemo(() => {
-    const codes = [...new Set(products.map(p => getFactoryCode(p.barcode)).filter(Boolean))];
+    if (PRODUCTS.length === 0) return [];
+    const codes = [...new Set(PRODUCTS.map(p => getFactoryCode(p.barcode)).filter(Boolean))].slice(0, 20);
     return codes.map(code => {
       const prods   = PRODUCTS.filter(p => getFactoryCode(p.barcode) === code);
       const bought  = prods.reduce((s,p) => s+p.qty, 0);
@@ -732,19 +737,16 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
       const soldPct = bought > 0 ? (sold/bought)*100 : 0;
       const lostVal = prods.reduce((s,p) => s + p.closing * p.buyPrice, 0);
       return { code, name: settings?.factories?.[code] ?? "", products: prods.length, soldPct, lostVal };
-    }).filter(f => f.soldPct < 40 && f.lostVal > 0).sort((a,b) => a.soldPct-b.soldPct).slice(0,3);
-  }, [PRODUCTS, products, settings]);
+    }).filter(f => f.soldPct < 40 && f.lostVal > 0).sort((a,b) => a.soldPct-b.soldPct).slice(0, 3);
+  }, [PRODUCTS, settings]);
 
   const BRANCHES = useMemo(() => {
-    const branches = allBranches(periods);
+    if (periods.length === 0) return [];
+    const branches = allBranches(periods).slice(0, 10);
+    const lastPeriod = periods[periods.length - 1];
     return branches.map(b => {
-      const rev = periods.reduce((s,per) =>
-        s + Object.values(per.sales?.[b]??{}).reduce((ss,v)=>ss+num(v.totalPrice),0), 0);
-      const sold = products.map(p => ({
-        name: p.name,
-        sold: periods.reduce((s,per)=>s+num(per.sales?.[b]?.[p.barcode]?.qty??0),0)
-      }));
-      const weak = sold.filter(p=>p.sold===0).map(p=>p.name).slice(0,3);
+      const rev = Object.values(lastPeriod?.sales?.[b] ?? {}).reduce((s,v)=>s+num(v.totalPrice),0);
+      const weak = products.filter(p => !lastPeriod?.sales?.[b]?.[p.barcode]).map(p=>p.name).slice(0,3);
       return { name:b, rev, rank:0, weak };
     }).sort((a,b)=>b.rev-a.rev).map((b,i)=>({...b,rank:i+1})).filter(b=>b.rank>=3).slice(0,3);
   }, [products, periods]);
