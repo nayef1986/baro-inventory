@@ -325,9 +325,11 @@ export function parseMonthlyFile(buffer) {
       }
 
       if (!name) continue;
-      const alreadyExists = Object.values(branches).some(b => b === name);
-      if (alreadyExists) continue;
-      branches[col] = name;
+      // نضيف رقم العمود لضمان الفريد
+      const uniqueName = Object.values(branches).some(b => b === name)
+        ? `${name}_${col}`
+        : name;
+      branches[col] = uniqueName;
     }
 
     return { name: m.name, start, end, branches };

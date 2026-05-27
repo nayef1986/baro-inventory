@@ -303,7 +303,21 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
     <div className="space-y-4">
       <ToastContainer />
 
-      {deleteTarget && (
+      {deleteTarget === "all" && (
+        <ConfirmModal
+          title="حذف كل الفترات"
+          message={`هل تريد حذف جميع الفترات (${periods.length})؟ لا يمكن التراجع.`}
+          onConfirm={async () => {
+            setLoading(true);
+            for (const p of periods) { await onDeletePeriod(p.id); }
+            setDeleteTarget(null);
+            setLoading(false);
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {deleteTarget && deleteTarget !== "all" && (
         <ConfirmModal
           title="حذف فترة المبيعات"
           message={`هل تريد حذف "${deleteTarget.label}"؟`}
@@ -374,7 +388,15 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
       </Card>
 
       {/* الفترات */}
-      <SectionHeader icon="📅" title={`الفترات (${periods.length})`} />
+      <div className="flex items-center justify-between">
+        <SectionHeader icon="📅" title={`الفترات (${periods.length})`} />
+        {periods.length > 0 && (
+          <button onClick={() => setDeleteTarget("all")}
+            className="px-3 py-1.5 rounded-xl border border-red-700/50 bg-red-900/20 text-red-400 text-xs font-bold">
+            🗑️ حذف الكل
+          </button>
+        )}
+      </div>
 
       {periods.length === 0 ? (
         <EmptyState icon="📅" title="لا توجد فترات" subtitle="ارفع ملف مبيعات للبداية" />

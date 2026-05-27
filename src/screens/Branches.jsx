@@ -12,7 +12,7 @@ import { ProductImage, CameraScanner } from "../components/ProductImage.jsx";
 import {
   allBranches, getFactoryCode, arabicIncludes,
   allContainers, allFactoryCodes, totalPurchases,
-  soldAllPeriods, num,
+  soldAllPeriods, num, getSalesNames,
 } from "../lib/calc.js";
 import {
   exportBranchNeedReport, printBranchNeedReport,
@@ -82,12 +82,7 @@ function GroupedFilter({ products, settings, value, onChange }) {
 
 // ─── كرت المنتج المفصل في الاحتياج ──────────────────────────
 
-function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, allPeriods }) {
-  const totalSoldAll = allPeriods.reduce((s, per) =>
-    s + Object.values(per.sales ?? {}).reduce((ss, d) => ss + num(d[item.barcode]?.qty ?? 0), 0), 0);
-
-  const bought = totalPurchases(item);
-  const closingAll = Math.max(0, bought - totalSoldAll);
+function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, closingAll }) {
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -357,22 +352,34 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
   const period = periods.find(p => p.id === periodId) ?? null;
 
   const [barcodeSearch, setBarcodeSearch] = useState("");
+  const [visibleCount,  setVisibleCount]  = useState(20);
 
   const allNeedItems = useMemo(() => {
     if (!period) return [];
     const branchData = period.sales?.[branch] ?? {};
+
+    // نبني index لإجمالي المبيعات من كل الفترات مرة واحدة
+    const soldAllIndex = {};
+    periods.forEach(per => {
+      Object.values(per.sales ?? {}).forEach(d => {
+        Object.keys(d).forEach(bc => {
+          soldAllIndex[bc] = (soldAllIndex[bc] ?? 0) + num(d[bc]?.qty ?? 0);
+        });
+      });
+    });
+
     return products
       .filter(p => (branchData[p.barcode]?.qty ?? 0) > 0)
       .map(p => {
         const sold      = num(branchData[p.barcode]?.qty ?? 0);
-        // عدد الدزينات = سقف(مباع / الحد الأدنى)
         const dozens    = Math.ceil(sold / minStock);
         const given     = dozens * minStock;
         const remaining = Math.max(0, given - sold);
         const needQty   = Math.max(0, minStock - remaining);
         const bought    = totalPurchases(p);
-        const closingAll = Math.max(0, bought - soldAllPeriods(p.barcode, periods));
-        const salesNames = allPeriods ? getSalesNames(p.barcode, allPeriods) : [];
+        const allSold   = soldAllIndex[p.barcode] ?? 0;
+        const closingAll = Math.max(0, bought - allSold);
+        const salesNames = getSalesNames(p.barcode, periods);
         return {
           ...p, sold, given, remaining, needQty,
           closingAll,
@@ -380,9 +387,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
           sellPrice:  num(p.sellPrice),
           salesNames,
         };
-      })
-      .filter(i => i.needQty > 0)
-      .sort((a,b) => b.needQty - a.needQty);
+      });
   }, [products, period, branch, minStock, periods]);
 
   const filtered = useMemo(() => {
@@ -470,7 +475,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
 
       {/* المنتجات */}
       <div className="space-y-3">
-        {filtered.map(item => (
+        {filtered.slice(0, visibleCount).map(item => (
           <NeedProductCard
             key={item.barcode}
             item={item}
@@ -478,9 +483,15 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
             onSaveImage={onSaveImage}
             onRemoveImage={onRemoveImage}
             settings={settings}
-            allPeriods={periods}
+            closingAll={item.closingAll ?? 0}
           />
         ))}
+        {filtered.length > visibleCount && (
+          <button onClick={() => setVisibleCount(p => p + 20)}
+            className="w-full py-3 rounded-xl border border-slate-600 bg-slate-800 text-slate-300 text-sm font-bold">
+            عرض المزيد ({filtered.length - visibleCount} منتج)
+          </button>
+        )}
         {filtered.length === 0 && period && <EmptyState icon="✅" title="لا يوجد احتياج" />}
         {!period && <EmptyState icon="📅" title="اختر فترة" />}
       </div>

@@ -12,21 +12,21 @@ export default async function handler(req, res) {
   try {
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const prompt = `You are a barcode and product code reader.
+    const prompt = `You are an expert at reading product barcodes and SKU codes from images.
 
-Look at this image and find any barcode or product number.
+TASK: Find the product code/barcode in this image.
 
-Step 1: Try to read any barcode (EAN13, CODE128, QR code, DataMatrix).
-Step 2: If no barcode found, read any numbers printed on the product, label, carton, or sticker using OCR.
+LOOK FOR:
+1. Any number+letter combination like: 26068616B005, 25252201B001
+2. Barcodes printed as lines (EAN13, CODE128)
+3. QR codes
+4. Any SKU printed on labels, stickers, cartons
 
-Rules for a valid code:
-- Length exactly 8, 12, 13, or 14 digits
-- OR starts with: 24, 62, 69
-- Digits only (no letters unless format like XXX123XXX)
+IMPORTANT: Arabic/Chinese product codes often have format: NUMBERS + LETTER + NUMBERS
+Example: 26068616B005 (8 digits + B + 3 digits)
 
-Return ONLY the code number. Nothing else.
-If multiple codes found, return the most prominent one.
-If nothing found, return: NOT_FOUND`;
+Return ONLY the code. No spaces. No explanation.
+If not found, return: NOT_FOUND`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -59,16 +59,9 @@ If nothing found, return: NOT_FOUND`;
     // نزيل أي رموز غير ضرورية
     cleaned = cleaned.replace(/[^A-Z0-9]/g, "");
 
-    // التحقق من صحة الكود
-    const isValid =
-      [8, 12, 13, 14].includes(cleaned.length) ||
-      cleaned.startsWith("24") ||
-      cleaned.startsWith("62") ||
-      cleaned.startsWith("69") ||
-      cleaned.length >= 6;
-
-    if (!isValid) {
-      return res.status(200).json({ barcode: null, message: "الكود المقروء غير صالح: " + cleaned });
+    // التحقق: أي كود بطول 6+ حروف/أرقام
+    if (cleaned.length < 6) {
+      return res.status(200).json({ barcode: null, message: "الكود المقروء قصير جداً: " + cleaned });
     }
 
     return res.status(200).json({ barcode: cleaned });

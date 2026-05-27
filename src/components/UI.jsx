@@ -245,25 +245,52 @@ const NAV_ITEMS = [
 export const NavBar = memo(({ active, onChange }) => (
   <nav style={{
     position:"fixed", bottom:0, right:0, left:0,
-    background:"#0f172a",
-    borderTop:"1px solid #1e293b",
     zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom, 0px)",
     WebkitBackfaceVisibility:"hidden",
     transform:"translateZ(0)",
     willChange:"transform",
+    // iOS 26 glass effect
+    background:"rgba(15,23,42,0.85)",
+    backdropFilter:"blur(24px) saturate(1.8)",
+    WebkitBackdropFilter:"blur(24px) saturate(1.8)",
+    borderTop:"1px solid rgba(255,255,255,0.06)",
+    boxShadow:"0 -1px 0 rgba(255,255,255,0.04), 0 -8px 32px rgba(0,0,0,0.3)",
   }}>
-    <div className="flex">
+    <div style={{display:"flex",maxWidth:"440px",margin:"0 auto"}}>
       {NAV_ITEMS.map(({ key, icon, label }) => (
         <button
           key={key}
           onClick={() => onChange(key)}
-          style={{ WebkitTapHighlightColor:"transparent" }}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-bold transition-colors
-            ${active === key ? "text-blue-400" : "text-slate-500"}`}
+          style={{
+            flex:1, display:"flex", flexDirection:"column",
+            alignItems:"center", gap:"3px", padding:"10px 4px 8px",
+            border:"none", background:"transparent",
+            cursor:"pointer", fontFamily:"inherit",
+            WebkitTapHighlightColor:"transparent",
+            transition:"transform 0.15s ease",
+            transform:"scale(1)",
+          }}
+          onTouchStart={e => e.currentTarget.style.transform="scale(0.88)"}
+          onTouchEnd={e => e.currentTarget.style.transform="scale(1)"}
         >
-          <span className="text-xl leading-none">{icon}</span>
-          <span className="leading-none mt-0.5">{label}</span>
+          {/* أيقونة مع خلفية دائرية للنشط */}
+          <span style={{
+            fontSize:"22px",
+            lineHeight:1,
+            padding:"6px 16px",
+            borderRadius:"100px",
+            background: active===key ? "rgba(59,130,246,0.15)" : "transparent",
+            transition:"background 0.2s ease",
+            display:"block",
+          }}>{icon}</span>
+          <span style={{
+            fontSize:"10px",
+            fontWeight:"700",
+            lineHeight:1,
+            color: active===key ? "#60a5fa" : "rgba(148,163,184,0.7)",
+            transition:"color 0.2s ease",
+          }}>{label}</span>
         </button>
       ))}
     </div>

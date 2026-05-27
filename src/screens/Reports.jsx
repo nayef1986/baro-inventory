@@ -3,6 +3,8 @@
 // ============================================================
 
 import { useState, useMemo, memo } from "react";
+import { OperationsRoom } from "./OperationsRoom.jsx";
+import { MonthlyIntelligence } from "./MonthlyIntelligence.jsx";
 import {
   Card, Btn, StatPill, EmptyState, ExportBar,
   FilterChips, SearchBar, SectionHeader, BackBtn,
@@ -619,6 +621,29 @@ const TrendReportView = memo(({ products, periods, settings, onBack }) => {
 export default function ReportsScreen({ products, periods, settings, images, onSaveImage, onRemoveImage }) {
   const [view, setView] = useState(null);
 
+  if (view === "monthly") {
+    return <MonthlyIntelligence
+      products={products} periods={periods} images={images}
+      onBack={() => setView(null)}
+    />;
+  }
+
+  if (view === "ops") {
+    return (
+      <div>
+        <button onClick={() => setView(null)}
+          className="mb-4 px-4 py-2 rounded-xl border border-slate-600 bg-slate-800 text-slate-300 text-sm font-bold">
+          ← رجوع
+        </button>
+        <OperationsRoom
+          products={products} periods={periods}
+          images={images} settings={settings}
+          onBuildCard={() => {}}
+        />
+      </div>
+    );
+  }
+
   if (view === "reorder") {
     return <ReorderView products={products} periods={periods} onBack={() => setView(null)} />;
   }
@@ -656,6 +681,36 @@ export default function ReportsScreen({ products, periods, settings, images, onS
   return (
     <div className="space-y-3">
       <SectionHeader icon="📋" title="التقارير" />
+
+      <div onClick={() => setView("ops")} style={{
+        background:"linear-gradient(135deg,rgba(212,168,83,0.12),rgba(212,168,83,0.04))",
+        border:"1px solid rgba(212,168,83,0.3)",borderRadius:"18px",padding:"18px",
+        cursor:"pointer",marginBottom:"10px",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+          <span style={{fontSize:"28px"}}>⚡</span>
+          <div>
+            <div style={{fontSize:"16px",fontWeight:"900",color:"#ffffff"}}>غرفة العمليات</div>
+            <div style={{fontSize:"12px",color:"rgba(212,168,83,0.7)",marginTop:"3px"}}>القرارات + الصور + الأرقام + الترند</div>
+          </div>
+          <div style={{marginRight:"auto",fontSize:"18px",color:"rgba(212,168,83,0.5)"}}>←</div>
+        </div>
+      </div>
+
+      <div onClick={() => setView("monthly")} style={{
+        background:"linear-gradient(135deg,rgba(99,102,241,0.1),rgba(99,102,241,0.04))",
+        border:"1px solid rgba(99,102,241,0.3)",borderRadius:"18px",padding:"18px",
+        cursor:"pointer",marginBottom:"10px",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+          <span style={{fontSize:"28px"}}>📅</span>
+          <div>
+            <div style={{fontSize:"16px",fontWeight:"900",color:"#ffffff"}}>الذكاء الشهري</div>
+            <div style={{fontSize:"12px",color:"rgba(99,102,241,0.8)",marginTop:"3px"}}>أفضل المنتجات · كرّره · تجنّبه</div>
+          </div>
+          <div style={{marginRight:"auto",fontSize:"18px",color:"rgba(99,102,241,0.5)"}}>←</div>
+        </div>
+      </div>
 
       <ReportCard
         icon="📈"
