@@ -22,8 +22,10 @@ Read EVERY number and code visible in this image. Look at:
 - SKU stickers, price tags, carton labels
 - Any alphanumeric product code
 
-Common code format here: digits + optional letter + digits (example 26068616B005).
-But codes may vary in length or format — read whatever is printed exactly.
+Common code formats here:
+1. Internal code: 8 digits + letter B + 3 digits (example 26068616B005)
+2. Commercial barcode: 12-13 digits (example 6976082021063)
+Read BOTH if present. Read whatever is printed exactly, digit by digit.
 
 Return your answer as JSON only, no other text:
 {"codes": ["all", "codes", "you", "see"]}

@@ -1,27 +1,68 @@
 // AIChat.jsx — واجهة محادثة احترافية
 import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { num, getFactoryCode, totalPurchases } from "../lib/calc.js";
 
 function buildContext(products, periods, settings) {
   const totalProducts = products?.length ?? 0;
-  const totalPeriods  = periods?.length ?? 0;
-  const lastPer = periods?.[periods.length - 1];
-  const totalSold = lastPer
-    ? Object.values(lastPer.sales ?? {}).reduce((s, b) =>
-        s + Object.values(b).reduce((ss, v) => ss + (v.qty || 0), 0), 0)
-    : 0;
+  const sortedPeriods = [...(periods ?? [])].sort((a, b) =>
+    (a.uploadDate ?? a.label) > (b.uploadDate ?? b.label) ? 1 : -1
+  );
 
-  const topProducts = products?.slice(0, 10).map(p => p.name).join("، ") ?? "";
+  // نحسب لكل منتج: المبيعات الكلية، آخر شهرين، المخزون، النسبة، الهامش، المصنع
+  const analyzed = (products ?? []).map(p => {
+    const monthly = sortedPeriods.map(per =>
+      Object.values(per.sales ?? {}).reduce((s, b) => s + num(b[p.barcode]?.qty ?? 0), 0)
+    );
+    const totalSold = monthly.reduce((s, m) => s + m, 0);
+    const last      = monthly[monthly.length - 1] ?? 0;
+    const prev      = monthly[monthly.length - 2] ?? 0;
+    const growth    = prev > 0 ? Math.round(((last - prev) / prev) * 100) : (last > 0 ? 100 : 0);
+    const bought    = totalPurchases(p);
+    const remaining = Math.max(0, bought - totalSold);
+    const soldPct   = bought > 0 ? Math.round((totalSold / bought) * 100) : 0;
+    const buyPrice  = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    const sellPrice = num(p.sellPrice);
+    const margin    = buyPrice > 0 ? Math.round(((sellPrice - buyPrice) / buyPrice) * 100) : 0;
+    const profit    = (sellPrice - buyPrice) * totalSold;
+    const frozen    = remaining * buyPrice;
+    return {
+      name: p.name?.slice(0, 30), barcode: p.barcode, factory: getFactoryCode(p.barcode),
+      container: p.container ?? "", totalSold, last, growth, remaining, soldPct,
+      margin, profit: Math.round(profit), frozen: Math.round(frozen),
+    };
+  }).filter(p => p.totalSold > 0 || p.remaining > 0);
 
-  return `أنت مساعد ذكي متخصص في نظام إدارة مخزون "البارو".
+  const grandTotal = analyzed.reduce((s, p) => s + p.totalSold, 0);
+  const totalFrozen = analyzed.reduce((s, p) => s + p.frozen, 0);
 
-بيانات النظام:
-- عدد المنتجات: ${totalProducts}
-- عدد الفترات: ${totalPeriods}
-- إجمالي مباع في آخر فترة: ${totalSold.toLocaleString()} وحدة
-- أمثلة منتجات: ${topProducts}
-- اسم البراند: ${settings?.brandName ?? "البارو"}
+  const top      = [...analyzed].sort((a, b) => b.totalSold - a.totalSold).slice(0, 15);
+  const weak     = [...analyzed].filter(p => p.remaining > 0).sort((a, b) => a.soldPct - b.soldPct).slice(0, 15);
+  const rising   = [...analyzed].filter(p => p.growth >= 20 && p.last > 0).sort((a, b) => b.growth - a.growth).slice(0, 10);
+  const stagnant = [...analyzed].filter(p => p.soldPct < 30 && p.remaining > 0).sort((a, b) => b.frozen - a.frozen).slice(0, 12);
+  const topProfit= [...analyzed].sort((a, b) => b.profit - a.profit).slice(0, 10);
 
-أجب بالعربية دائماً. كن مختصراً وعملياً. ساعد في قرارات المخزون والمبيعات.`;
+  const line = p => `${p.name} [${p.barcode}] مصنع${p.factory}: مباع ${p.totalSold}, آخر شهر ${p.last}, نمو ${p.growth>0?'+':''}${p.growth}%, متبقي ${p.remaining}, نسبة ${p.soldPct}%, هامش ${p.margin}%, ربح ${p.profit}﷼`;
+
+  return `أنت محلل مبيعات ومخزون محترف لنظام "البارو" (${settings?.brandName ?? "البارو"}).
+لديك بيانات حقيقية لـ ${totalProducts} منتج عبر ${sortedPeriods.length} فترة (${sortedPeriods.map(p=>p.label).join("، ")}).
+إجمالي المبيعات: ${grandTotal.toLocaleString()} وحدة. القيمة المجمّدة في المخزون الراكد: ${totalFrozen.toLocaleString()} ﷼.
+
+أقوى 15 منتج مبيعاً:
+${top.map(line).join("\n")}
+
+أضعف 15 منتج (نسبة بيع منخفضة):
+${weak.map(line).join("\n")}
+
+منتجات صاعدة (نمو ≥20%):
+${rising.length ? rising.map(line).join("\n") : "لا يوجد"}
+
+منتجات راكدة تحتاج تصفية (الأعلى تجميداً للمال):
+${stagnant.map(line).join("\n")}
+
+الأعلى ربحاً فعلياً:
+${topProfit.map(line).join("\n")}
+
+أجب بالعربية، مختصر وعملي بأرقام حقيقية من البيانات أعلاه. عند سؤالك عن الشراء/التصفية/الأقوى/الأضعف، استند للأرقام. لا تخترع منتجات أو أرقام غير موجودة.`;
 }
 
 // ─── رسالة واحدة ─────────────────────────────────────────────

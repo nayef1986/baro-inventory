@@ -350,6 +350,8 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
 
   const [barcodeSearch, setBarcodeSearch] = useState("");
   const [visibleCount,  setVisibleCount]  = useState(10);
+  const [remMin,        setRemMin]        = useState(0);
+  const [remMax,        setRemMax]        = useState(6);
 
   // نعرض الواجهة أولاً ثم نحسب في tick منفصل — يمنع تجميد الضغطة
   useEffect(() => {
@@ -396,6 +398,8 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
 
   const filtered = useMemo(() => {
     let list = allNeedItems;
+    // فلتر المتبقي: نعرض فقط ما متبقيه ضمن المدى (مثلاً 0 إلى 6)
+    list = list.filter(i => i.remaining >= remMin && i.remaining <= remMax);
     if (filterVal) {
       const [type, val] = filterVal.split(":");
       if (type === "container") list = list.filter(i => i.container === val);
@@ -409,7 +413,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
       );
     }
     return list;
-  }, [allNeedItems, filterVal, barcodeSearch]);
+  }, [allNeedItems, filterVal, barcodeSearch, remMin, remMax]);
 
   const filterLabel = !filterVal ? "الكل" : filterVal.split(":")[1];
   const totalNeed = filtered.reduce((s,i) => s + i.needQty, 0);
@@ -434,7 +438,18 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         <span className="text-xs text-slate-400">قطعة</span>
       </div>
 
-      {/* بحث بالباركود */}
+      {/* فلتر المتبقي: يعرض فقط المنتجات التي قاربت تنفد */}
+      <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2.5">
+        <span className="text-xs text-amber-300 font-bold whitespace-nowrap">يظهر إذا المتبقي من</span>
+        <input type="number" value={remMin} min={0} max={999}
+          onChange={e => setRemMin(Math.max(0, Number(e.target.value) || 0))}
+          className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
+        <span className="text-xs text-amber-300 font-bold">إلى</span>
+        <input type="number" value={remMax} min={0} max={999}
+          onChange={e => setRemMax(Math.max(0, Number(e.target.value) || 0))}
+          className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
+        <span className="text-xs text-amber-300/70">قطعة</span>
+      </div>
       <div className="relative">
         <input
           value={barcodeSearch}

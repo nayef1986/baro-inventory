@@ -385,7 +385,8 @@ export function parseMonthlyFile(buffer) {
     });
 
     const fp = fingerprint(sales);
-    const id = `monthly_${month.name.replace(/\s+/g, "_")}_${fp.slice(0, 8)}`;
+    // المعرّف يعتمد على اسم الشهر فقط — إعادة الرفع تستبدل بدل التكرار
+    const id = `monthly_${month.name.replace(/\s+/g, "_")}`;
 
     periods.push({
       id,

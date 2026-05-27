@@ -187,10 +187,23 @@ function openPrint(html) {
 
 function printPage(title, meta, statsHtml, tableHtml) {
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escHtml(title)}</title>
-  <style>${PRINT_CSS}</style></head><body>
-  <div class="header"><h1>${escHtml(title)}</h1><div class="meta">📅 ${todayBoth()}${meta ? ` · ${escHtml(meta)}` : ""}</div></div>
-  ${statsHtml}${tableHtml}
-  <script>setTimeout(()=>window.print(),600);<\/script></body></html>`;
+  <style>${PRINT_CSS}
+  .toolbar { position:fixed; top:0; left:0; right:0; background:#0f172a; padding:10px 14px; display:flex; gap:10px; justify-content:center; z-index:9999; box-shadow:0 2px 10px rgba(0,0,0,0.3); }
+  .toolbar button { font-family:'Segoe UI','Arial',sans-serif; font-size:14px; font-weight:700; border:none; border-radius:10px; padding:10px 20px; cursor:pointer; }
+  .btn-back { background:#334155; color:#fff; }
+  .btn-print { background:#2563eb; color:#fff; }
+  .content { margin-top:60px; }
+  @media print { .toolbar { display:none !important; } .content { margin-top:0; } }
+  </style></head><body>
+  <div class="toolbar">
+    <button class="btn-back" onclick="window.close(); history.back();">← رجوع للنظام</button>
+    <button class="btn-print" onclick="window.print();">🖨️ طباعة</button>
+  </div>
+  <div class="content">
+    <div class="header"><h1>${escHtml(title)}</h1><div class="meta">📅 ${todayBoth()}${meta ? ` · ${escHtml(meta)}` : ""}</div></div>
+    ${statsHtml}${tableHtml}
+  </div>
+  </body></html>`;
 }
 
 function buildStats(stats) {

@@ -63,22 +63,29 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
         // نجمع كل المرشحين من OCR
         const candidates = data.candidates?.length ? data.candidates : (data.barcode ? [data.barcode] : []);
 
-        // مطابقة ذكية: مطابقة تامة أولاً، ثم تطابق جزئي (احتواء)، ثم أقرب كود
+        // مطابقة ذكية: تامة أولاً (تغطي الباركود الداخلي والتجاري الطويل)
         let matched = null;
-        let matchedCode = data.barcode;
 
+        // 1) مطابقة تامة — أي رقم مقروء يطابق باركود منتج بالضبط
         for (const cand of candidates) {
-          const exact = products.find(p => p.barcode.toUpperCase() === cand);
-          if (exact) { matched = exact; matchedCode = exact.barcode; break; }
+          const exact = products.find(p => p.barcode.toUpperCase() === cand.toUpperCase());
+          if (exact) { matched = exact; break; }
         }
+
+        // 2) مطابقة جزئية آمنة لتجاوز خطأ OCR بسيط (خانة أو خانتين)
         if (!matched) {
           for (const cand of candidates) {
-            // تطابق جزئي: الكود يحتوي باركود المنتج أو العكس (لتجاوز أخطاء OCR بسيطة)
+            if (cand.length < 8) continue; // أكواد قصيرة خطرة
             const partial = products.find(p => {
               const b = p.barcode.toUpperCase();
-              return b.includes(cand) || cand.includes(b);
+              const c = cand.toUpperCase();
+              if (b.length < 8) return false;
+              // الأطول يبدأ بالأقصر، والفرق خانتين كحد أقصى
+              const longer  = b.length >= c.length ? b : c;
+              const shorter = b.length >= c.length ? c : b;
+              return longer.startsWith(shorter) && (longer.length - shorter.length) <= 2;
             });
-            if (partial) { matched = partial; matchedCode = partial.barcode; break; }
+            if (partial) { matched = partial; break; }
           }
         }
 
@@ -87,8 +94,9 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
             await onBulkSaveImage(matched.barcode, base64);
           }
           newResults.push({ file: file.name, barcode: matched.barcode, product: matched.name, status: "success" });
-        } else if (matchedCode) {
-          newResults.push({ file: file.name, barcode: matchedCode, product: null, status: "not_found" });
+        } else if (candidates.length > 0) {
+          // قرأ كوداً لكن ما طابق منتجاً — نعرضه ليطابقه المستخدم يدوياً
+          newResults.push({ file: file.name, barcode: candidates[0], product: null, status: "not_found" });
         } else {
           newResults.push({ file: file.name, barcode: null, product: null, status: "no_barcode", message: data.message });
         }

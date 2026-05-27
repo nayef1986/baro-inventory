@@ -131,7 +131,9 @@ export default function App() {
   const handleAddPeriod = useCallback(async (period) => {
     const result = await addPeriod(period);
     if (result.ok) {
-      const newPeriods = [...state.periods, period].slice(-52);
+      // لو فترة بنفس المعرّف موجودة، نستبدلها بدل ما نضيف نسخة مكررة
+      const withoutDup = state.periods.filter(p => p.id !== period.id);
+      const newPeriods = [...withoutDup, period].slice(-52);
       dispatch({ type: "SET_PERIODS", payload: newPeriods });
     }
     return result;
@@ -255,6 +257,11 @@ export default function App() {
 
           {/* يمين: أزرار أيقونات فقط */}
           <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+            <button onClick={() => window.location.reload()}
+              style={{width:"38px",height:"38px",borderRadius:"12px",background:"rgba(34,197,94,0.2)",border:"1px solid rgba(34,197,94,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",cursor:"pointer"}}
+              title="تحديث">
+              🔄
+            </button>
             <a href="https://baro-ideas-gamma.vercel.app" target="_blank" rel="noopener noreferrer"
               style={{width:"38px",height:"38px",borderRadius:"12px",background:"rgba(217,119,6,0.2)",border:"1px solid rgba(217,119,6,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",textDecoration:"none"}}>
               💡

@@ -123,12 +123,15 @@ export async function savePeriods(periods) {
 export async function addPeriod(period) {
   const periods = await loadPeriods();
 
-  // منع التكرار بالـ ID
-  if (periods.find(p => p.id === period.id)) {
-    return { ok: false, reason: "مكرر" };
+  // نفس المعرّف = استبدال (تحديث الشهر بدل تكراره)
+  const sameId = periods.findIndex(p => p.id === period.id);
+  if (sameId !== -1) {
+    periods[sameId] = period;
+    const ok = await savePeriods(periods);
+    return { ok, reason: "تم التحديث" };
   }
 
-  // منع التكرار بالبصمة
+  // منع رفع نفس الأرقام بمعرّف مختلف (ملف مكرر فعلاً)
   if (period.fingerprint && periods.find(p => p.fingerprint === period.fingerprint)) {
     return { ok: false, reason: "هذا الملف مرفوع مسبقاً — نفس الأرقام موجودة" };
   }
@@ -136,6 +139,10 @@ export async function addPeriod(period) {
   periods.push(period);
   const ok = await savePeriods(periods);
   return { ok };
+}
+
+export async function deleteAllPeriods() {
+  return { ok: await savePeriods([]) };
 }
 
 export async function deletePeriod(periodId) {
