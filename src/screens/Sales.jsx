@@ -120,6 +120,7 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
   const [log,          setLog]          = useState([]);
   const [preview,      setPreview]      = useState(null); // الفاتورة في انتظار المراجعة
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [uploadType,   setUploadType]   = useState("single"); // single | monthly
   const { show, ToastContainer } = useToast();
 
   const today = new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -184,6 +185,30 @@ export default function SalesScreen({ periods, products = [], onAddPeriod, onDel
     ]);
     setPreview(null);
     setLoading(false);
+  };
+
+  const handleMonthlyFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    setLog([]);
+    try {
+      const buffer = await file.arrayBuffer();
+      const { periods: newPeriods, errors, warnings } = parseMonthlyFile(buffer);
+      if (errors.length > 0) {
+        errors.forEach(err => setLog(p => [...p, { type:"error", text:err }]));
+        setLoading(false); e.target.value = ""; return;
+      }
+      warnings.forEach(w => setLog(p => [...p, { type:"warning", text:w }]));
+      if (newPeriods.length === 0) {
+        setLog(p => [...p, { type:"error", text:"لم يُعثر على شهور في الملف" }]);
+        setLoading(false); e.target.value = ""; return;
+      }
+      setPreview({ type:"monthly", periods: newPeriods });
+    } catch (err) {
+      setLog(p => [...p, { type:"error", text:`خطأ: ${err.message}` }]);
+    }
+    setLoading(false); e.target.value = "";
   };
 
   const handleConfirm = async () => {
