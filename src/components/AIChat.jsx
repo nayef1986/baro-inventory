@@ -60,7 +60,7 @@ const Message = memo(({ msg }) => (
   </div>
 ));
 
-export default function AIChat({ products, periods, settings, onClose }) {
+export default function AIChat({ products, periods, settings, onClose, model = "gemini" }) {
   const [messages, setMessages] = useState([]);
   const [input,    setInput]    = useState("");
   const [loading,  setLoading]  = useState(false);
@@ -88,7 +88,8 @@ export default function AIChat({ products, periods, settings, onClose }) {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const endpoint = model === "gemini" ? "/api/gemini-chat" : "/api/chat";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

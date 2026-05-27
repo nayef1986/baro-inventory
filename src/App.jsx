@@ -56,6 +56,7 @@ export default function App() {
   const [state,    dispatch] = useReducer(reducer, INIT_STATE);
   const [screen,   setScreen]   = useState("containers");
   const [showAI,   setShowAI]   = useState(false);
+  const [aiModel,  setAiModel]  = useState("gemini");
   const [showSettings, setShowSettings] = useState(false);
 
   // تحميل البيانات
@@ -213,7 +214,14 @@ export default function App() {
             💡 <span>أفكار</span>
           </a>
           <button
-            onClick={() => setShowAI(true)}
+            onClick={() => { setAiModel("gemini"); setShowAI(true); }}
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-2 rounded-xl
+              text-sm font-bold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+          >
+            ✨ <span>Gemini</span>
+          </button>
+          <button
+            onClick={() => { setAiModel("claude"); setShowAI(true); }}
             className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-2 rounded-xl
               text-sm font-bold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
           >
@@ -256,6 +264,7 @@ export default function App() {
           products={state.products}
           periods={state.periods}
           settings={state.settings}
+          model={aiModel}
           onClose={() => setShowAI(false)}
         />
       )}
