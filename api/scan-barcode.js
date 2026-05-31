@@ -15,42 +15,51 @@ export default async function handler(req, res) {
     const mimeType  = mimeMatch?.[1] ?? "image/jpeg";
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const prompt = `You are an OCR system reading a retail product label.
+    const prompt = `Read the product codes printed on this retail label image.
 
-Read EVERY number and code visible in this image. Look at:
-- Barcodes (the digits printed under the bars)
-- SKU stickers, price tags, carton labels
-- Any alphanumeric product code
+The most important code is usually the LARGE number printed in big bold text (often near the price).
 
-Common code formats here:
-1. Internal code: 8 digits + letter B + 3 digits (example 26068616B005)
-2. Commercial barcode: 12-13 digits (example 6976082021063)
-Read BOTH if present. Read whatever is printed exactly, digit by digit.
+Code formats to expect:
+1. Internal code: 8 digits + letter B + 3 digits (example: 26058622B002)
+2. Commercial barcode: 12-13 digits (example: 6976082021063)
 
-Return your answer as JSON only, no other text:
-{"codes": ["all", "codes", "you", "see"]}
+Read EVERY code you can see, digit by digit, exactly as printed. Include the large bold code.
 
-If you see nothing readable, return: {"codes": []}`;
+Return JSON only, nothing else:
+{"codes": ["26058622B002"]}
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { inline_data: { mime_type: mimeType, data: base64Data } },
-              { text: prompt }
-            ]
-          }],
-          generationConfig: { maxOutputTokens: 200, temperature: 0 },
-        }),
-      }
-    );
+If truly nothing readable, return: {"codes": []}`;
 
-    const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    // نجرّب عدة موديلات — لو فشل واحد ننتقل للتالي (يمنع الخطأ الأحمر)
+    const MODELS = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-latest"];
+    let data = null, lastErr = "";
+
+    for (const model of MODELS) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { inline_data: { mime_type: mimeType, data: base64Data } },
+                  { text: prompt }
+                ]
+              }],
+              generationConfig: { maxOutputTokens: 500, temperature: 0 },
+            }),
+          }
+        );
+        const json = await response.json();
+        if (json.error) { lastErr = json.error.message; continue; }
+        data = json;
+        break;
+      } catch (e) { lastErr = e.message; continue; }
+    }
+
+    if (!data) return res.status(500).json({ error: lastErr || "كل الموديلات فشلت" });
 
     let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 
