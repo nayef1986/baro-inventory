@@ -10,12 +10,44 @@ import {
 } from "../components/UI.jsx";
 import { ProductImage } from "../components/ProductImage.jsx";
 import { parseSalesFile } from "../lib/parsers.js";
-import {
-  soldInPeriod, totalRevenue,
-  arabicIncludes, getFactoryCode,
-  totalPurchases, avgBuyPrice, num,
-} from "../lib/calc.js";
 import { exportToExcel, printBranchReport } from "../lib/exporters.js";
+
+// ─── دوال محلية (مستقلة تماماً) ──────────────────────────────
+
+// تحويل آمن لرقم
+function num(v) {
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
+
+// مجموع مبيعات باركود في فترة واحدة
+function soldInPeriod(barcode, period) {
+  return Object.values(period.sales ?? {}).reduce(
+    (s, branch) => s + num(branch[barcode]?.qty ?? 0), 0
+  );
+}
+
+// رقم المصنع = أول 5 أرقام من الباركود
+function getFactoryCode(barcode) {
+  const m = String(barcode ?? "").match(/^(\d{5})/);
+  return m ? m[1] : "";
+}
+
+// إجمالي المشتريات لمنتج
+function totalPurchases(p) {
+  return (p.purchases ?? []).reduce((s, x) => s + num(x.qty), 0);
+}
+
+// متوسط سعر الشراء
+function avgBuyPrice(p) {
+  const last = p.purchases?.slice(-1)[0];
+  return num(last?.buyPrice ?? 0);
+}
+
+// بحث عربي بسيط
+function arabicIncludes(text, search) {
+  return String(text ?? "").toLowerCase().includes(String(search ?? "").toLowerCase());
+}
 
 // ─── UploadZone ──────────────────────────────────────────────
 
