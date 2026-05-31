@@ -142,7 +142,10 @@ export async function addPeriod(period) {
 }
 
 export async function deleteAllPeriods() {
-  return { ok: await savePeriods([]) };
+  // حذف سريع مباشر من Supabase + مسح الكاش (نفس طريقة الزر السريع)
+  try { localStorage.removeItem(KEYS.PERIODS); } catch {}
+  await sbDelete(KEYS.PERIODS);
+  return { ok: true };
 }
 
 export async function deletePeriod(periodId) {
