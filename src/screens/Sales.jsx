@@ -17,6 +17,8 @@ import {
 } from "../lib/calc.js";
 import { exportToExcel, printBranchReport } from "../lib/exporters.js";
 
+// ─── UploadZone ──────────────────────────────────────────────
+
 const UploadZone = memo(({ onFile, loading }) => {
   const [dragging, setDragging] = useState(false);
   return (
@@ -44,6 +46,8 @@ const UploadZone = memo(({ onFile, loading }) => {
     </div>
   );
 });
+
+// ─── بطاقة فترة ─────────────────────────────────────────────
 
 const PeriodCard = memo(({ period, products, onClick, onDelete }) => {
   const branches    = Object.keys(period.sales ?? {});
@@ -90,16 +94,19 @@ const PeriodCard = memo(({ period, products, onClick, onDelete }) => {
   );
 });
 
+// ─── تفاصيل فترة ────────────────────────────────────────────
+
 const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onRemoveImage, onBack, settings }) => {
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [search,         setSearch]         = useState("");
   const [sortBy,         setSortBy]         = useState("sold");
-  const [filterType,     setFilterType]     = useState("all");
+  const [filterType,     setFilterType]     = useState("all");  // all | container | factory
   const [filterValue,    setFilterValue]    = useState("");
   const { show, ToastContainer }            = useToast();
 
   const branches = useMemo(() => Object.keys(period.sales ?? {}), [period]);
 
+  // ملخص الفروع
   const branchSummaries = useMemo(() =>
     branches.map((branch) => {
       const data     = period.sales[branch] ?? {};
@@ -110,6 +117,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
     }).sort((a, b) => b.totalRev - a.totalRev),
   [branches, period]);
 
+  // منتجات الفرع المحدد
   const branchProducts = useMemo(() => {
     if (!selectedBranch) return [];
     const data = period.sales[selectedBranch] ?? {};
@@ -135,6 +143,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
       };
     }).filter((p) => p.sold > 0 || filterType !== "all");
 
+    // فلترة
     if (filterType === "container" && filterValue) {
       list = list.filter((p) => p.container === filterValue);
     } else if (filterType === "factory" && filterValue) {
@@ -147,6 +156,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
       );
     }
 
+    // ترتيب
     if (sortBy === "sold")     list = [...list].sort((a, b) => b.sold - a.sold);
     if (sortBy === "revenue")  list = [...list].sort((a, b) => b.revenue - a.revenue);
     if (sortBy === "closing")  list = [...list].sort((a, b) => b.closing - a.closing);
@@ -155,6 +165,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
     return list;
   }, [selectedBranch, period, products, periods, search, sortBy, filterType, filterValue, settings]);
 
+  // قوائم الفلترة
   const containers = useMemo(() =>
     [...new Set(products.map((p) => p.container).filter(Boolean))].sort(),
   [products]);
@@ -163,6 +174,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
     [...new Set(products.map((p) => getFactoryCode(p.barcode)).filter(Boolean))].sort(),
   [products]);
 
+  // تصدير
   const handleExportBranch = () => {
     const rows = branchProducts.map((p) => ({
       "الباركود":           p.barcode,
@@ -181,6 +193,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
     if (!r.ok) show(r.error, "error"); else show("تم التصدير ✓");
   };
 
+  // شاشة تفاصيل الفرع
   if (selectedBranch) {
     const summary = branchSummaries.find((b) => b.branch === selectedBranch);
     const sortOptions = [
@@ -195,6 +208,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
         <ToastContainer />
         <BackBtn onClick={() => setSelectedBranch(null)} label="رجوع للفترة" />
 
+        {/* هيدر الفرع */}
         <Card>
           <SectionHeader
             icon="🏪"
@@ -216,9 +230,11 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
           </div>
         </Card>
 
+        {/* فلاتر */}
         <div className="space-y-2">
           <SearchBar value={search} onChange={(e) => setSearch(e.target.value)} />
 
+          {/* فلتر الكونتينر / المصنع */}
           <div className="flex gap-2">
             <select
               value={filterType}
@@ -261,6 +277,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
           <div className="text-xs text-slate-500">{branchProducts.length} منتج</div>
         </div>
 
+        {/* قائمة المنتجات */}
         <div className="space-y-2">
           {branchProducts.map((p) => (
             <Card key={p.barcode} className="!p-3">
@@ -303,11 +320,13 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
     );
   }
 
+  // شاشة الفروع في الفترة
   return (
     <div className="space-y-4">
       <ToastContainer />
       <BackBtn onClick={onBack} label="رجوع للفترات" />
 
+      {/* ملخص الفترة */}
       <Card>
         <SectionHeader icon="📅" title={period.label} subtitle={`رُفع: ${period.uploadDate}`} />
         <div className="grid grid-cols-2 gap-2 mb-3">
@@ -325,6 +344,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
             color="text-purple-400" />
         </div>
 
+        {/* تصدير الفترة كاملة */}
         <ExportBar
           onExcel={() => {
             const rows = [];
@@ -350,6 +370,7 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
         />
       </Card>
 
+      {/* قائمة الفروع */}
       <SectionHeader icon="🏪" title="الفروع" subtitle="اضغط فرع للتفاصيل" />
       <div className="space-y-2">
         {branchSummaries.map((b, i) => {
@@ -382,6 +403,8 @@ const PeriodDetail = memo(({ period, products, periods, images, onSaveImage, onR
   );
 });
 
+// ─── الشاشة الرئيسية ────────────────────────────────────────
+
 export default function SalesScreen({ products, periods, settings, images, onSaveImage, onRemoveImage, onAddPeriod, onDeletePeriod, onDeleteAllPeriods }) {
   const [uploading,     setUploading]     = useState(false);
   const [label,         setLabel]         = useState("");
@@ -391,6 +414,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const { show, ToastContainer }          = useToast();
 
+  // ─ رفع الملف
   const handleFile = useCallback(async (file) => {
     if (!file) return;
     setUploading(true);
@@ -429,6 +453,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
     setUploading(false);
   }, [label, onAddPeriod, show]);
 
+  // ─ الفترة المحددة
   const selectedPeriodData = useMemo(
     () => periods.find((p) => p.id === selectedPeriod) ?? null,
     [periods, selectedPeriod]
@@ -453,6 +478,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
     <div className="space-y-4">
       <ToastContainer />
 
+      {/* تأكيد حذف الكل */}
       {showDeleteAll && (
         <ConfirmModal
           title="حذف كل فواتير المبيعات"
@@ -468,6 +494,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
         />
       )}
 
+      {/* تأكيد الحذف */}
       {deleteTarget && (
         <ConfirmModal
           title="حذف الفترة"
@@ -483,6 +510,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
         />
       )}
 
+      {/* رفع ملف */}
       <Card>
         <SectionHeader icon="📤" title="رفع ملف مبيعات" />
 
@@ -517,6 +545,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
         )}
       </Card>
 
+      {/* قائمة الفترات */}
       {periods.length > 0 ? (
         <>
           <SectionHeader
