@@ -10,7 +10,11 @@ import {
 } from "../components/UI.jsx";
 import { ProductImage } from "../components/ProductImage.jsx";
 import { parseSalesFile } from "../lib/parsers.js";
-import { exportToExcel, printBranchReport } from "../lib/exporters.js";
+import { exportGeneric, printBranchNeedReport } from "../lib/exporters.js";
+
+// مرادفات بالأسماء المستخدمة داخل الملف
+const exportToExcel = (rows, filename) => exportGeneric(rows, filename, filename);
+const printBranchReport = (branch, items, brandName) => printBranchNeedReport(branch, items, brandName);
 
 // ─── دوال محلية (مستقلة تماماً) ──────────────────────────────
 
