@@ -4,9 +4,9 @@
 
 import { useState, useMemo, memo, useCallback } from "react";
 import {
-  Card, Btn, Badge, StatPill, Modal, ConfirmModal,
+  Card, Badge, StatPill, ConfirmModal,
   SearchBar, FilterChips, EmptyState, ExportBar,
-  SectionHeader, BackBtn, fmtN, fmtM, fmtPct, useToast, Inp,
+  SectionHeader, BackBtn, fmtN, fmtM, fmtPct, useToast,
 } from "../components/UI.jsx";
 import { ProductImage } from "../components/ProductImage.jsx";
 import { parseSalesFile } from "../lib/parsers.js";
@@ -556,13 +556,15 @@ export default function SalesScreen({ products, periods, settings, images, onSav
           <div>الأعمدة: طلبات | كمية | إجمالي | cost</div>
         </div>
 
-        <Inp
-          label="تسمية الفترة (اختياري)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder={`أسبوع ${new Date().toISOString().slice(0, 10)}`}
-          className="mb-3"
-        />
+        <div className="mb-3">
+          <label className="block text-xs text-slate-400 mb-1">تسمية الفترة (اختياري)</label>
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder={`أسبوع ${new Date().toISOString().slice(0, 10)}`}
+            className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+          />
+        </div>
 
         <UploadZone onFile={handleFile} loading={uploading} />
 
