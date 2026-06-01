@@ -23,21 +23,20 @@ function uuid() {
 }
 
 function fingerprint(sales) {
-  // نعتمد على إجمالي الكميات + أول 20 باركود مرتبة
-  // بدون أسماء الفروع لأنها قد تختلف بين رفعتين لنفس الملف
-  const total    = Object.values(sales).reduce((s, b) =>
+  // بصمة دقيقة: إجمالي الكمية + كل الباركودات وكمياتها مرتبة
+  // الاعتماد على الكل (مو أول 20) يمنع رفض فواتير صحيحة لها نفس المنتجات
+  const total = Object.values(sales).reduce((s, b) =>
     s + Object.values(b).reduce((ss, v) => ss + num(v.qty), 0), 0);
-  const barcodes = [...new Set(
+  const allBarcodes = [...new Set(
     Object.values(sales).flatMap(b => Object.keys(b))
-  )].sort().slice(0, 20).join(",");
-  // نضيف مجموع كل باركود كـ checksum إضافي
-  const perBarcode = [...new Set(
-    Object.values(sales).flatMap(b => Object.keys(b))
-  )].sort().slice(0, 10).map(bc => {
+  )].sort();
+  const perBarcode = allBarcodes.map(bc => {
     const qty = Object.values(sales).reduce((s, b) => s + num(b[bc]?.qty ?? 0), 0);
     return `${bc}:${qty}`;
   }).join("|");
-  return `${total}_${barcodes}_${perBarcode}`;
+  // عدد الفروع أيضاً يميّز الفواتير
+  const branchCount = Object.keys(sales).length;
+  return `${total}_${allBarcodes.length}_${branchCount}_${perBarcode}`;
 }
 
 // ─── فاتورة المشتريات ────────────────────────────────────────
@@ -107,19 +106,22 @@ export function parsePurchaseFile(buffer) {
 // ─── ملف المبيعات ────────────────────────────────────────────
 
 export function parseSalesFile(buffer, label = "") {
-  const errors   = [];
-  const warnings = [];
-
-  let wb, ws, rows;
+  let rows;
   try {
-    wb   = XLSX.read(buffer, { type: "array" });
-    ws   = wb.Sheets[wb.SheetNames[0]];
+    const wb = XLSX.read(buffer, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
     rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
   } catch (e) {
     return { period: null, errors: [`فشل فتح الملف: ${e.message}`], warnings: [] };
   }
+  return parseSalesFileFromRows(rows, label);
+}
 
-  if (rows.length < 5) {
+export function parseSalesFileFromRows(rows, label = "") {
+  const errors   = [];
+  const warnings = [];
+
+  if (!rows || rows.length < 5) {
     return { period: null, errors: ["الملف أقل من 5 صفوف"], warnings: [] };
   }
 
@@ -287,6 +289,20 @@ export function parseMonthlyFile(buffer) {
 
   const monthRow  = rows[1] ?? [];
   const branchRow = rows[2] ?? [];
+
+  // ─── كشف ذكي: هل صف 2 فيه شهور حقيقية أم فروع؟ ──────────
+  // الشهور تحوي سنة (2025/2026) أو اسم شهر. الفروع تحوي "البارو".
+  const monthKeywords = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
+  const row1HasMonths = monthRow.some(v => typeof v === "string" && monthKeywords.test(v) && v.trim() !== "الإجمالي");
+
+  // لو ما فيه شهور في صف 2 → الملف فترة واحدة، نعالجه عبر parseSalesFile
+  if (!row1HasMonths) {
+    const single = parseSalesFileFromRows(rows, "");
+    if (single.period) {
+      return { periods: [single.period], errors: single.errors, warnings: single.warnings };
+    }
+    return { periods: [], errors: single.errors.length ? single.errors : ["لم يُعثر على شهور أو فروع صالحة"] };
+  }
 
   // ─── نجمع مواضع الشهور ───────────────────────────────────
   const monthCols = [];
