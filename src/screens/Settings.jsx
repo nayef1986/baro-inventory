@@ -45,18 +45,34 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = "high";
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/png")); // PNG أوضح للأرقام
+          // PNG واضح للقراءة + نسخة JPEG مضغوطة للحفظ
+          const pngForOcr = canvas.toDataURL("image/png");
+          // نسخة صغيرة للتخزين (أقصى عرض 600 وجودة 0.6 لتكون تحت 500KB)
+          const SAVE_MAX = 600;
+          let sw = width, sh = height;
+          if (sw > SAVE_MAX || sh > SAVE_MAX) {
+            if (sw > sh) { sh = Math.round(sh * SAVE_MAX / sw); sw = SAVE_MAX; }
+            else { sw = Math.round(sw * SAVE_MAX / sh); sh = SAVE_MAX; }
+          }
+          const c2 = document.createElement("canvas");
+          c2.width = sw; c2.height = sh;
+          const ctx2 = c2.getContext("2d");
+          ctx2.imageSmoothingEnabled = true;
+          ctx2.imageSmoothingQuality = "high";
+          ctx2.drawImage(img, 0, 0, sw, sh);
+          const jpegForSave = c2.toDataURL("image/jpeg", 0.6);
+          resolve({ ocr: pngForOcr, save: jpegForSave });
         };
         img.onerror = reject;
         img.src = url;
       });
 
       try {
-        // نرسل لـ Gemini للقراءة
+        // نرسل النسخة الواضحة (PNG) لـ Gemini للقراءة
         const response = await fetch("/api/scan-barcode", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64 }),
+          body: JSON.stringify({ imageBase64: base64.ocr }),
         });
         const data = await response.json();
 
@@ -91,7 +107,7 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
 
         if (matched) {
           if (onBulkSaveImage) {
-            await onBulkSaveImage(matched.barcode, base64);
+            await onBulkSaveImage(matched.barcode, base64.save);
           }
           newResults.push({ file: file.name, barcode: matched.barcode, product: matched.name, status: "success" });
         } else if (candidates.length > 0) {
