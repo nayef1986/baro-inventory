@@ -114,7 +114,7 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
           // قرأ كوداً لكن ما طابق منتجاً — نعرضه ليطابقه المستخدم يدوياً
           newResults.push({ file: file.name, barcode: candidates[0], product: null, status: "not_found" });
         } else {
-          newResults.push({ file: file.name, barcode: null, product: null, status: "no_barcode", message: data.message });
+          newResults.push({ file: file.name, barcode: null, product: null, status: "no_barcode", message: data.message, debug: data.debug });
         }
       } catch (e) {
         newResults.push({ file: file.name, barcode: null, product: null, status: "error", message: e.message });
@@ -153,6 +153,7 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
               {r.product  && <div className="text-emerald-400 mt-0.5">✅ {r.product}</div>}
               {r.status === "not_found" && <div className="text-amber-400 mt-0.5">⚠️ الباركود غير موجود في النظام</div>}
               {r.status === "no_barcode" && <div className="text-red-400 mt-0.5">❌ لم يُعثر على باركود</div>}
+              {r.debug && <div className="text-slate-500 mt-0.5 text-[10px] break-all">خطأ: {r.debug.lastErr} · رد: {r.debug.geminiText}</div>}
               {r.status === "error" && <div className="text-red-400 mt-0.5">❌ خطأ: {r.message}</div>}
             </div>
           ))}
