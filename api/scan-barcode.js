@@ -34,6 +34,7 @@ If truly nothing readable, return: {"codes": []}`;
     const MODELS = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-latest"];
     let data = null, lastErr = "";
 
+    let codes = [];
     for (const model of MODELS) {
       try {
         const response = await fetch(
@@ -54,26 +55,25 @@ If truly nothing readable, return: {"codes": []}`;
         );
         const json = await response.json();
         if (json.error) { lastErr = json.error.message; continue; }
+
+        // نستخرج الأكواد من رد هذا الموديل
+        let raw = json.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+        raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+        let modelCodes = [];
+        try {
+          const parsed = JSON.parse(raw);
+          modelCodes = Array.isArray(parsed.codes) ? parsed.codes : [];
+        } catch {
+          modelCodes = raw.match(/[A-Za-z0-9]{6,}/g) ?? [];
+        }
+
         data = json;
-        break;
+        if (modelCodes.length > 0) { codes = modelCodes; break; } // نجح بقراءة فعلية
+        // رد فاضي → نجرّب الموديل التالي
       } catch (e) { lastErr = e.message; continue; }
     }
 
     if (!data) return res.status(500).json({ error: lastErr || "كل الموديلات فشلت" });
-
-    let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-
-    // نستخرج JSON من الرد (قد يكون محاطاً بـ ```json)
-    raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-
-    let codes = [];
-    try {
-      const parsed = JSON.parse(raw);
-      codes = Array.isArray(parsed.codes) ? parsed.codes : [];
-    } catch {
-      // لو فشل JSON، نستخرج أي كود يشبه الباركود من النص الخام
-      codes = raw.match(/[A-Za-z0-9]{6,}/g) ?? [];
-    }
 
     // ننظف كل كود ونبقي المرشحين الصالحين
     const cleaned = codes
