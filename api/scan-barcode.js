@@ -15,23 +15,27 @@ export default async function handler(req, res) {
     const mimeType  = mimeMatch?.[1] ?? "image/jpeg";
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const prompt = `Read the product codes printed on this retail label image.
+    const prompt = `You are reading a product label or sticker. Find ALL numbers and codes in the image.
 
-The most important code is usually the LARGE number printed in big bold text (often near the price).
+Look carefully EVERYWHERE in the image:
+- Large bold numbers (often the price or product code)
+- Small printed codes on stickers or labels
+- Numbers under barcodes
+- Handwritten numbers
 
-Code formats to expect:
-1. Internal code: 8 digits + letter B + 3 digits (example: 26058622B002)
-2. Commercial barcode: 12-13 digits (example: 6976082021063)
+Code formats here:
+1. Internal: 8 digits + letter B + 3 digits (example: 26058622B002)
+2. Commercial: 12-13 digits (example: 6976082021063)
 
-Read EVERY code you can see, digit by digit, exactly as printed. Include the large bold code.
+Read ANY sequence of digits you can see, even if blurry. Report your best reading.
 
-Return JSON only, nothing else:
-{"codes": ["26058622B002"]}
+Return JSON only:
+{"codes": ["all numbers you see"]}
 
-If truly nothing readable, return: {"codes": []}`;
+Only if the image has NO numbers at all: {"codes": []}`;
 
     // نجرّب عدة موديلات — لو فشل واحد ننتقل للتالي (يمنع الخطأ الأحمر)
-    const MODELS = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-latest"];
+    const MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-001", "gemini-2.5-flash", "gemini-flash-latest"];
     let data = null, lastErr = "";
 
     let codes = [];
