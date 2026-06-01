@@ -31,8 +31,8 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
         const url = URL.createObjectURL(file);
         img.onload = () => {
           URL.revokeObjectURL(url);
-          // نحافظ على دقة عالية لقراءة الأرقام
-          const MAX = 1600;
+          // نحافظ على دقة كافية لقراءة الأرقام (JPEG أصغر بكثير من PNG)
+          const MAX = 1200;
           let { width, height } = img;
           if (width > MAX || height > MAX) {
             if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
@@ -45,8 +45,8 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = "high";
           ctx.drawImage(img, 0, 0, width, height);
-          // PNG واضح للقراءة + نسخة JPEG مضغوطة للحفظ
-          const pngForOcr = canvas.toDataURL("image/png");
+          // JPEG واضح للقراءة (أصغر من PNG، ما يرفضه الـ API) + نسخة مضغوطة للحفظ
+          const pngForOcr = canvas.toDataURL("image/jpeg", 0.85);
           // نسخة صغيرة للتخزين (أقصى عرض 600 وجودة 0.6 لتكون تحت 500KB)
           const SAVE_MAX = 600;
           let sw = width, sh = height;
