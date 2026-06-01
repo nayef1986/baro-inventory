@@ -459,27 +459,37 @@ export default function SalesScreen({ products, periods, settings, images, onSav
     try {
       const buffer   = await file.arrayBuffer();
       const periodLabel = label.trim() || new Date().toISOString().slice(0, 10);
-      const { period, branchNames, errors, warnings } = parseSalesFile(buffer, periodLabel);
+      const { periods: parsedPeriods, errors, warnings } = parseSalesFile(buffer, periodLabel);
 
-      if (errors.length > 0) {
+      if (errors && errors.length > 0) {
         setLog(errors.map((e) => ({ type: "error", text: e })));
         setUploading(false);
         return;
       }
 
+      if (!parsedPeriods || parsedPeriods.length === 0) {
+        setLog([{ type: "error", text: "تعذّر قراءة الملف — تأكد من بنيته" }]);
+        setUploading(false);
+        return;
+      }
+
       const logs = [
-        { type: "success", text: `✅ ${branchNames.length} فرع · ${Object.keys(period.sales).length} فرع نشط` },
-        { type: "info",    text: `📅 الفترة: ${periodLabel}` },
-        ...branchNames.slice(0, 8).map((b) => ({ type: "info", text: `🏪 ${b}` })),
-        ...warnings.slice(0, 3).map((w) => ({ type: "warning", text: w })),
+        { type: "success", text: `✅ ${parsedPeriods.length} فترة` },
+        ...(warnings ?? []).slice(0, 3).map((w) => ({ type: "warning", text: w })),
       ];
+
+      let saved = 0;
+      for (const per of parsedPeriods) {
+        const branchNames = Object.keys(per.sales ?? {});
+        logs.push({ type: "info", text: `📅 ${per.label} · ${branchNames.length} فرع` });
+        const result = await onAddPeriod(per);
+        if (result.ok) saved++;
+        else logs.push({ type: "error", text: `${per.label}: ${result.reason ?? "فشل"}` });
+      }
       setLog(logs);
 
-      const result = await onAddPeriod(period);
-      if (!result.ok) {
-        setLog((prev) => [...prev, { type: "error", text: `فشل الحفظ: ${result.reason}` }]);
-      } else {
-        show(`تم حفظ الفترة "${periodLabel}" ✓`, "success");
+      if (saved > 0) {
+        show(`تم حفظ ${saved} فترة ✓`, "success");
         setLabel("");
       }
     } catch (e) {
