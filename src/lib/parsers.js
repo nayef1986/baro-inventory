@@ -112,9 +112,23 @@ export function parseSalesFile(buffer, label = "") {
     const ws = wb.Sheets[wb.SheetNames[0]];
     rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
   } catch (e) {
-    return { period: null, errors: [`فشل فتح الملف: ${e.message}`], warnings: [] };
+    return { period: null, periods: [], errors: [`فشل فتح الملف: ${e.message}`], warnings: [] };
   }
-  return parseSalesFileFromRows(rows, label);
+
+  // كشف ذكي: هل الملف فيه شهور؟ (صف 2 يحوي سنة أو اسم شهر)
+  const monthRow = rows[1] ?? [];
+  const monthKeywords = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
+  const hasMonths = monthRow.some(v => typeof v === "string" && monthKeywords.test(v) && v.trim() !== "الإجمالي");
+
+  if (hasMonths) {
+    // ملف أشهر → نفصله لفترات منفصلة
+    const r = parseMonthlyFile(buffer);
+    return { period: r.periods?.[0] ?? null, periods: r.periods ?? [], errors: r.errors ?? [], warnings: r.warnings ?? [] };
+  }
+
+  // فترة واحدة
+  const single = parseSalesFileFromRows(rows, label);
+  return { period: single.period, periods: single.period ? [single.period] : [], errors: single.errors, warnings: single.warnings };
 }
 
 export function parseSalesFileFromRows(rows, label = "") {
