@@ -81,7 +81,14 @@ If truly nothing readable, return: {"codes": []}`;
       .filter(c => c.length >= 6);
 
     if (cleaned.length === 0) {
-      return res.status(200).json({ barcode: null, candidates: [], message: "لم يُعثر على باركود" });
+      // نرفق تشخيص: آخر خطأ + أول 80 حرف مما رجّعه Gemini
+      let rawText = "";
+      try { rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.slice(0, 80) ?? ""; } catch {}
+      return res.status(200).json({
+        barcode: null, candidates: [],
+        message: "لم يُعثر على باركود",
+        debug: { lastErr: lastErr || "لا يوجد", geminiText: rawText || "فاضي" },
+      });
     }
 
     // نرجّع الأطول كأفضل مرشح + باقي المرشحين للمطابقة الذكية
