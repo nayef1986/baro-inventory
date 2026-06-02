@@ -100,7 +100,12 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
     const bought  = totalPurchases(product);
     const sold    = soldAllPeriods(product.barcode, periods);
     const closing = Math.max(0, bought - sold);
-    return { branches, bought, sold, closing };
+    // تفصيل الكونتينرات (كل عملية شراء: كمية + كونتينر)
+    const conts = (product.purchases ?? []).map(pu => ({
+      container: pu.container ?? product.container ?? "—",
+      qty: num(pu.qty),
+    })).filter(c => c.qty > 0);
+    return { branches, bought, sold, closing, conts };
   }, [product, periods]);
 
   const img = images?.[product.barcode];
@@ -113,7 +118,9 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   );
 
   const print = () => {
-    const rows = sortedBranches.map(b => `
+    const closed = settings?.closedBranches ?? [];
+    const printBranches = sortedBranches.filter(b => !closed.includes(b.branch));
+    const rows = printBranches.map(b => `
       <tr><td>${b.branch}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
     const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
     const now = new Date();
@@ -189,6 +196,21 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
           <div className="bg-blue-900/20 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-blue-400">{fmtN(data.bought)}</div><div className="text-xs text-slate-500">جاء</div></div>
           <div className="bg-amber-900/20 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-amber-400">{fmtN(data.sold)}</div><div className="text-xs text-slate-500">باع</div></div>
           <div className="bg-slate-700/50 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-slate-300">{fmtN(data.closing)}</div><div className="text-xs text-slate-500">باقي</div></div>
+        </div>
+
+        {/* تفصيل الكونتينرات */}
+        <div className="mt-3 bg-slate-900/50 rounded-xl p-3">
+          <div className="text-xs text-slate-400 font-bold mb-2">
+            {data.conts.length > 1 ? `📦📦 جاء في ${data.conts.length} كونتينرات:` : "📦 جاء في كونتينر واحد:"}
+          </div>
+          <div className="space-y-1">
+            {data.conts.map((c, i) => (
+              <div key={i} className="flex justify-between text-xs">
+                <span className="text-slate-300 font-mono">{c.container}</span>
+                <span className="text-blue-400 font-bold">{fmtN(c.qty)} قطعة</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -277,6 +299,61 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
   );
 });
 
+// ─── عرض مصانع الكونتينر مع بحث ──────────────────────────────
+const FactoriesView = memo(({ container, factories, redMax, greenMin, setRedMax, setGreenMin, onSelectFactory, onBack }) => {
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(() => {
+    if (!search) return factories;
+    const s = search.toLowerCase();
+    return factories.filter(f => f.code.includes(s) || (f.name ?? "").toLowerCase().includes(s) || arabicIncludes(f.name, search));
+  }, [factories, search]);
+
+  return (
+    <div className="space-y-3">
+      <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع للكونتينرات</button>
+      <div className="font-black text-slate-100 text-lg">📦 {container}</div>
+      <div className="text-xs text-slate-500">{factories.length} مصنع · الأضعف أولاً</div>
+
+      {/* بحث بالمصنع */}
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث برقم المصنع أو اسمه…"
+        className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+
+      {/* حدود التلوين */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-400 font-bold">تلوين:</span>
+        <span className="text-xs text-red-400">🔴 أقل</span>
+        <input type="number" value={redMax} onChange={e=>setRedMax(Math.max(0,Math.min(100,Number(e.target.value)||0)))} className="w-12 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-1 py-1 text-sm font-black text-center" />
+        <span className="text-xs text-emerald-400">🟢 فوق</span>
+        <input type="number" value={greenMin} onChange={e=>setGreenMin(Math.max(0,Math.min(100,Number(e.target.value)||0)))} className="w-12 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-1 py-1 text-sm font-black text-center" />
+        <span className="text-xs text-slate-400">%</span>
+      </div>
+
+      <div className="space-y-2">
+        {filtered.map(f => {
+          const c = f.soldPct < redMax ? "#ef4444" : f.soldPct < greenMin ? "#f59e0b" : "#22c55e";
+          return (
+            <div key={f.code} onClick={()=>onSelectFactory(f.code)} style={{background:`${c}10`,border:`1.5px solid ${c}40`,borderRadius:"14px",padding:"13px",cursor:"pointer"}}>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="font-black text-slate-100 font-mono text-sm">{f.code}{f.name && <span className="text-slate-400 font-sans"> · {f.name}</span>}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{f.items.length} منتج</div>
+                </div>
+                <div style={{fontSize:"20px",fontWeight:"900",color:c}}>{fmtPct(f.soldPct)}</div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {f.stagnant > 0 && <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/30 text-red-300">🔴 {f.stagnant} راكد</span>}
+                {f.frozen > 0 && <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">💰 {fmtM(f.frozen)} مجمّد</span>}
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باع {fmtN(f.sold)}</span>
+              </div>
+            </div>
+          );
+        })}
+        {filtered.length === 0 && <div className="text-center text-slate-500 py-8">لا مصانع بهذا البحث</div>}
+      </div>
+    </div>
+  );
+});
+
 // ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
 export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {} }) {
   const [container, setContainer] = useState(null);
@@ -339,46 +416,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
 
   // عرض: مصانع الكونتينر
   if (container) {
-    return (
-      <div className="space-y-3">
-        <button onClick={()=>setContainer(null)} className="text-blue-400 font-bold text-sm">← رجوع للكونتينرات</button>
-        <div className="font-black text-slate-100 text-lg">📦 {container}</div>
-        <div className="text-xs text-slate-500">{factories.length} مصنع · الأضعف أولاً</div>
-
-        {/* حدود التلوين */}
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-slate-400 font-bold">تلوين:</span>
-          <span className="text-xs text-red-400">🔴 أقل</span>
-          <input type="number" value={redMax} onChange={e=>setRedMax(Math.max(0,Math.min(100,Number(e.target.value)||0)))} className="w-12 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-1 py-1 text-sm font-black text-center" />
-          <span className="text-xs text-emerald-400">🟢 فوق</span>
-          <input type="number" value={greenMin} onChange={e=>setGreenMin(Math.max(0,Math.min(100,Number(e.target.value)||0)))} className="w-12 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-1 py-1 text-sm font-black text-center" />
-          <span className="text-xs text-slate-400">%</span>
-        </div>
-
-        <div className="space-y-2">
-          {factories.map(f => {
-            const c = f.soldPct < redMax ? "#ef4444" : f.soldPct < greenMin ? "#f59e0b" : "#22c55e";
-            return (
-              <div key={f.code} onClick={()=>setFactory(f.code)} style={{background:`${c}10`,border:`1.5px solid ${c}40`,borderRadius:"14px",padding:"13px",cursor:"pointer"}}>
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="font-black text-slate-100 font-mono text-sm">{f.code}{f.name && <span className="text-slate-400 font-sans"> · {f.name}</span>}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{f.items.length} منتج</div>
-                  </div>
-                  <div style={{fontSize:"20px",fontWeight:"900",color:c}}>{fmtPct(f.soldPct)}</div>
-                </div>
-                {/* تنبيهات المصنع */}
-                <div className="flex gap-2 flex-wrap">
-                  {f.stagnant > 0 && <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/30 text-red-300">🔴 {f.stagnant} راكد</span>}
-                  {f.frozen > 0 && <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">💰 {fmtM(f.frozen)} مجمّد</span>}
-                  <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باع {fmtN(f.sold)}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    return <FactoriesView container={container} factories={factories} redMax={redMax} greenMin={greenMin}
+      setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
   }
 
   // عرض: الكونتينرات
