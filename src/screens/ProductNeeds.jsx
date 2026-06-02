@@ -32,6 +32,7 @@ const CopyBarcode = memo(({ barcode }) => {
 
 // ─── تفاصيل المنتج عبر الفروع (يُحسب عند الضغط فقط) ──────────
 const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
+  const [sortMode, setSortMode] = useState("need"); // need | sold
   const data = useMemo(() => {
     // مبيعات كل فرع (كل الفترات)
     const branchSales = {};
@@ -57,9 +58,21 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const facName = settings?.factories?.[factory] ?? "";
 
   const print = () => {
-    const rows = data.branches.map(b => `
-      <tr><td>${b.branch}</td><td>${b.sold}</td><td>${b.given}</td><td>${b.remaining}</td></tr>`).join("");
+    // ترتيب الفروع حسب الخيار
+    const sortedBranches = [...data.branches].sort((a,b) =>
+      sortMode === "sold" ? b.sold - a.sold : a.remaining - b.remaining
+    );
+    const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
+    const rows = sortedBranches.map(b => `
+      <tr><td>${b.branch}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
+
+    // التاريخ ميلادي + هجري
+    const now = new Date();
+    const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
+    const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+
     const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${product.name}</title>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         *{font-family:'Cairo',sans-serif;box-sizing:border-box}
@@ -68,35 +81,51 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
         .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
         .w{max-width:700px;margin:0 auto;padding:70px 20px 40px}
+        .nm{font-size:26px;font-weight:900;color:#0f172a;text-align:center;margin-bottom:6px}
+        .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
         .hd{display:flex;gap:16px;align-items:center;border-bottom:2px solid #e2e8f0;padding-bottom:16px;margin-bottom:16px}
-        .hd img{width:90px;height:90px;border-radius:12px;object-fit:cover;border:1px solid #e2e8f0}
-        .nm{font-size:20px;font-weight:900;color:#0f172a}
-        .meta{font-size:13px;color:#666;font-family:monospace;margin-top:4px}
+        .hd img{width:110px;height:110px;border-radius:12px;object-fit:cover;border:1px solid #e2e8f0}
+        .bc{text-align:center;flex:1}
+        .bc svg{max-width:100%}
+        .bcnum{font-size:22px;font-weight:900;color:#0f172a;font-family:monospace;letter-spacing:2px;margin-top:4px}
+        .meta{font-size:14px;color:#555;margin-top:6px}
         .tot{display:flex;gap:10px;margin:16px 0}
-        .tot div{flex:1;background:#f1f5f9;border-radius:12px;padding:12px;text-align:center}
-        .tot .v{font-size:22px;font-weight:900;color:#0f172a}
-        .tot .l{font-size:12px;color:#888;margin-top:3px}
-        table{width:100%;border-collapse:collapse;margin-top:10px}
-        th{background:#0f172a;color:#fff;padding:10px;font-size:13px}
-        td{border:1px solid #e2e8f0;padding:9px;text-align:center;font-size:13px}
+        .tot div{flex:1;background:#f1f5f9;border-radius:12px;padding:16px}
+        .tot .v{font-size:32px;font-weight:900;color:#0f172a;text-align:center}
+        .tot .l{font-size:14px;color:#888;margin-top:4px;text-align:center}
+        .sortlbl{text-align:center;font-size:13px;color:#2563eb;font-weight:700;margin:10px 0}
+        table{width:100%;border-collapse:collapse;margin-top:8px}
+        th{background:#0f172a;color:#fff;padding:12px;font-size:16px}
+        td{border:1px solid #e2e8f0;padding:12px;text-align:center;font-size:17px}
+        td.big{font-size:20px;font-weight:900}
+        td.rem{color:#dc2626}
         tr:nth-child(even){background:#f8fafc}
         @media print{.tb{display:none}.w{padding:20px}}
       </style></head><body>
       <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
       <div class="w">
+        <div class="nm">${product.name}</div>
+        <div class="date">📅 ${greg} — ${hijri} هـ · ${settings?.brandName ?? "ALBAROO"}</div>
         <div class="hd">
-          ${img ? `<img src="${img}"/>` : `<div style="width:90px;height:90px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:34px">📦</div>`}
-          <div><div class="nm">${product.name}</div>
-          <div class="meta">${product.barcode}</div>
-          <div class="meta">🏭 ${factory}${facName?` · ${facName}`:""} · 📦 ${product.container ?? ""}</div></div>
+          ${img ? `<img src="${img}"/>` : `<div style="width:110px;height:110px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:40px">📦</div>`}
+          <div class="bc">
+            <svg id="bcsvg"></svg>
+            <div class="bcnum">${product.barcode}</div>
+            <div class="meta">🏭 ${factory}${facName?` · ${facName}`:""} · 📦 ${product.container ?? ""}</div>
+          </div>
         </div>
         <div class="tot">
           <div><div class="v">${fmtN(data.bought)}</div><div class="l">جاء</div></div>
           <div><div class="v">${fmtN(data.sold)}</div><div class="l">باع</div></div>
           <div><div class="v">${fmtN(data.closing)}</div><div class="l">باقي</div></div>
         </div>
+        <div class="sortlbl">🔀 الفروع مرتّبة: ${sortLabel}</div>
         <table><thead><tr><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th></tr></thead><tbody>${rows}</tbody></table>
-      </div></body></html>`;
+      </div>
+      <script>
+        try { JsBarcode("#bcsvg", "${product.barcode}", {format:"CODE128",width:2,height:60,displayValue:false,margin:4}); } catch(e){}
+      <\/script>
+      </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
   };
@@ -122,6 +151,16 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
           <div className="bg-amber-900/20 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-amber-400">{fmtN(data.sold)}</div><div className="text-xs text-slate-500">باع</div></div>
           <div className="bg-slate-700/50 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-slate-300">{fmtN(data.closing)}</div><div className="text-xs text-slate-500">باقي</div></div>
         </div>
+      </div>
+
+      {/* اختيار ترتيب الفروع للتقرير */}
+      <div className="flex gap-2 bg-slate-800 border border-slate-700 rounded-xl p-1">
+        {[["need","الأكثر احتياجاً"],["sold","الأكثر مبيعاً"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setSortMode(k)}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${sortMode===k?"bg-blue-600 text-white":"text-slate-400"}`}>
+            {l}
+          </button>
+        ))}
       </div>
 
       <button onClick={print} className="w-full bg-slate-700 border border-slate-600 text-slate-200 py-3 rounded-xl font-bold text-sm">🖨️ طباعة التقرير بالصورة</button>
