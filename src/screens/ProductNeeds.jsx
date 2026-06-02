@@ -1,40 +1,91 @@
-// ProductNeeds.jsx — احتياج المنتجات عبر الفروع (خفيف: الحساب عند الضغط فقط)
-import { useState, useMemo, memo } from "react";
+// ProductNeeds.jsx — احتياج المنتجات: كونتينر → مصنع → منتجات → فروع
+import { useState, useMemo, useRef, useEffect, memo } from "react";
 import {
   totalPurchases, soldAllPeriods, getFactoryCode,
-  arabicIncludes, num, allBranches, fmtN, fmtM, fmtPct,
+  arabicIncludes, num, allContainers, fmtN, fmtM, fmtPct,
 } from "../lib/calc.js";
 
 const MIN = 12;
 const toDozen = n => Math.ceil(n / MIN) * MIN;
 
-// زر نسخ الباركود
+// ─── زر نسخ الباركود ─────────────────────────────────────────
 const CopyBarcode = memo(({ barcode }) => {
   const [copied, setCopied] = useState(false);
   const copy = (e) => {
     e.stopPropagation();
     navigator.clipboard?.writeText(barcode).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      setCopied(true); setTimeout(() => setCopied(false), 1200);
     }).catch(()=>{});
   };
   return (
     <span style={{display:"inline-flex",alignItems:"center",gap:"5px"}}>
       <span style={{fontFamily:"monospace",fontSize:"12px",color:"#94a3b8"}}>{barcode}</span>
-      <button onClick={copy} style={{
-        fontSize:"11px",padding:"2px 7px",borderRadius:"6px",cursor:"pointer",
-        border:"1px solid rgba(148,163,184,0.3)",background:copied?"rgba(34,197,94,0.2)":"rgba(148,163,184,0.1)",
-        color:copied?"#22c55e":"#94a3b8",fontFamily:"Cairo,sans-serif",
-      }}>{copied ? "✓" : "📋"}</button>
+      <button onClick={copy} style={{fontSize:"11px",padding:"2px 7px",borderRadius:"6px",cursor:"pointer",border:"1px solid rgba(148,163,184,0.3)",background:copied?"rgba(34,197,94,0.2)":"rgba(148,163,184,0.1)",color:copied?"#22c55e":"#94a3b8",fontFamily:"Cairo,sans-serif"}}>{copied ? "✓" : "📋"}</button>
     </span>
   );
 });
 
-// ─── تفاصيل المنتج عبر الفروع (يُحسب عند الضغط فقط) ──────────
+// ─── ماسح الباركود بالكاميرا ─────────────────────────────────
+const BarcodeScanner = memo(({ onDetect, onClose }) => {
+  const videoRef = useRef();
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let stream, raf, detector, cancelled = false;
+    (async () => {
+      if (!("BarcodeDetector" in window)) {
+        setErr("جهازك لا يدعم المسح — اكتب الباركود يدوياً");
+        return;
+      }
+      try {
+        detector = new window.BarcodeDetector();
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (cancelled) { stream.getTracks().forEach(t=>t.stop()); return; }
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+        const scan = async () => {
+          if (cancelled || !videoRef.current) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes.length > 0) {
+              navigator.vibrate?.(200);
+              onDetect(codes[0].rawValue);
+              return;
+            }
+          } catch {}
+          raf = requestAnimationFrame(scan);
+        };
+        raf = requestAnimationFrame(scan);
+      } catch {
+        setErr("تعذّر فتح الكاميرا — تأكد من الإذن");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach(t=>t.stop());
+    };
+  }, [onDetect]);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:100,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div style={{color:"#fff",fontWeight:"900",fontSize:"16px",marginBottom:"14px"}}>📷 وجّه الكاميرا للباركود</div>
+      {err ? (
+        <div style={{color:"#e8855a",textAlign:"center",fontSize:"14px",marginBottom:"16px"}}>{err}</div>
+      ) : (
+        <div style={{position:"relative",width:"100%",maxWidth:"340px",aspectRatio:"4/3",borderRadius:"16px",overflow:"hidden",border:"2px solid #d4a853"}}>
+          <video ref={videoRef} playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}} />
+          <div style={{position:"absolute",top:"50%",left:"10%",right:"10%",height:"2px",background:"#22c55e",boxShadow:"0 0 12px #22c55e"}} />
+        </div>
+      )}
+      <button onClick={onClose} style={{marginTop:"18px",padding:"12px 28px",borderRadius:"100px",border:"none",background:"#334155",color:"#fff",fontSize:"14px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>إغلاق</button>
+    </div>
+  );
+});
+
+// ─── تفاصيل المنتج عبر الفروع ────────────────────────────────
 const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
-  const [sortMode, setSortMode] = useState("need"); // need | sold
+  const [sortMode, setSortMode] = useState("need");
   const data = useMemo(() => {
-    // مبيعات كل فرع (كل الفترات)
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
@@ -45,8 +96,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
     const branches = Object.entries(branchSales).map(([branch, sold]) => {
       const given = toDozen(sold);
       return { branch, sold, given, remaining: given - sold };
-    }).sort((a,b)=>b.sold-a.sold);
-
+    });
     const bought  = totalPurchases(product);
     const sold    = soldAllPeriods(product.barcode, periods);
     const closing = Math.max(0, bought - sold);
@@ -57,20 +107,18 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const factory = getFactoryCode(product.barcode);
   const facName = settings?.factories?.[factory] ?? "";
 
+  const sortedBranches = useMemo(() =>
+    [...data.branches].sort((a,b) => sortMode === "sold" ? b.sold - a.sold : a.remaining - b.remaining),
+    [data.branches, sortMode]
+  );
+
   const print = () => {
-    // ترتيب الفروع حسب الخيار
-    const sortedBranches = [...data.branches].sort((a,b) =>
-      sortMode === "sold" ? b.sold - a.sold : a.remaining - b.remaining
-    );
-    const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
     const rows = sortedBranches.map(b => `
       <tr><td>${b.branch}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
-
-    // التاريخ ميلادي + هجري
+    const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
     const now = new Date();
     const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
     const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
-
     const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${product.name}</title>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
       <style>
@@ -85,8 +133,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
         .hd{display:flex;gap:16px;align-items:center;border-bottom:2px solid #e2e8f0;padding-bottom:16px;margin-bottom:16px}
         .hd img{width:110px;height:110px;border-radius:12px;object-fit:cover;border:1px solid #e2e8f0}
-        .bc{text-align:center;flex:1}
-        .bc svg{max-width:100%}
+        .bc{text-align:center;flex:1}.bc svg{max-width:100%}
         .bcnum{font-size:22px;font-weight:900;color:#0f172a;font-family:monospace;letter-spacing:2px;margin-top:4px}
         .meta{font-size:14px;color:#555;margin-top:6px}
         .tot{display:flex;gap:10px;margin:16px 0}
@@ -97,8 +144,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         table{width:100%;border-collapse:collapse;margin-top:8px}
         th{background:#0f172a;color:#fff;padding:12px;font-size:16px}
         td{border:1px solid #e2e8f0;padding:12px;text-align:center;font-size:17px}
-        td.big{font-size:20px;font-weight:900}
-        td.rem{color:#dc2626}
+        td.big{font-size:20px;font-weight:900}td.rem{color:#dc2626}
         tr:nth-child(even){background:#f8fafc}
         @media print{.tb{display:none}.w{padding:20px}}
       </style></head><body>
@@ -108,11 +154,8 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         <div class="date">📅 ${greg} — ${hijri} هـ · ${settings?.brandName ?? "ALBAROO"}</div>
         <div class="hd">
           ${img ? `<img src="${img}"/>` : `<div style="width:110px;height:110px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:40px">📦</div>`}
-          <div class="bc">
-            <svg id="bcsvg"></svg>
-            <div class="bcnum">${product.barcode}</div>
-            <div class="meta">🏭 ${factory}${facName?` · ${facName}`:""} · 📦 ${product.container ?? ""}</div>
-          </div>
+          <div class="bc"><svg id="bcsvg"></svg><div class="bcnum">${product.barcode}</div>
+          <div class="meta">🏭 ${factory}${facName?` · ${facName}`:""} · 📦 ${product.container ?? ""}</div></div>
         </div>
         <div class="tot">
           <div><div class="v">${fmtN(data.bought)}</div><div class="l">جاء</div></div>
@@ -122,9 +165,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         <div class="sortlbl">🔀 الفروع مرتّبة: ${sortLabel}</div>
         <table><thead><tr><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th></tr></thead><tbody>${rows}</tbody></table>
       </div>
-      <script>
-        try { JsBarcode("#bcsvg", "${product.barcode}", {format:"CODE128",width:2,height:60,displayValue:false,margin:4}); } catch(e){}
-      <\/script>
+      <script>try{JsBarcode("#bcsvg","${product.barcode}",{format:"CODE128",width:2,height:60,displayValue:false,margin:4});}catch(e){}<\/script>
       </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
@@ -132,9 +173,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع للقائمة</button>
-
-      {/* رأس المنتج */}
+      <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع</button>
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4">
         <div className="flex gap-3 items-start">
           {img ? <img src={img} alt="" className="w-20 h-20 rounded-xl object-cover shrink-0" />
@@ -153,22 +192,16 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         </div>
       </div>
 
-      {/* اختيار ترتيب الفروع للتقرير */}
       <div className="flex gap-2 bg-slate-800 border border-slate-700 rounded-xl p-1">
         {[["need","الأكثر احتياجاً"],["sold","الأكثر مبيعاً"]].map(([k,l])=>(
-          <button key={k} onClick={()=>setSortMode(k)}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${sortMode===k?"bg-blue-600 text-white":"text-slate-400"}`}>
-            {l}
-          </button>
+          <button key={k} onClick={()=>setSortMode(k)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${sortMode===k?"bg-blue-600 text-white":"text-slate-400"}`}>{l}</button>
         ))}
       </div>
-
       <button onClick={print} className="w-full bg-slate-700 border border-slate-600 text-slate-200 py-3 rounded-xl font-bold text-sm">🖨️ طباعة التقرير بالصورة</button>
 
-      {/* تفاصيل الفروع */}
       <div className="space-y-2">
-        <div className="text-sm font-bold text-slate-300">الفروع ({data.branches.length})</div>
-        {data.branches.map(b => (
+        <div className="text-sm font-bold text-slate-300">الفروع ({sortedBranches.length})</div>
+        {sortedBranches.map(b => (
           <div key={b.branch} className="bg-slate-800 border border-slate-700 rounded-xl p-3">
             <div className="font-bold text-slate-100 text-sm mb-2">🏪 {b.branch}</div>
             <div className="grid grid-cols-3 gap-2">
@@ -178,83 +211,47 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
             </div>
           </div>
         ))}
-        {data.branches.length === 0 && <div className="text-center text-slate-500 py-6">لا مبيعات في أي فرع</div>}
       </div>
     </div>
   );
 });
 
-// ─── الشاشة الرئيسية ─────────────────────────────────────────
-export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {} }) {
-  const [search,   setSearch]   = useState("");
-  const [selected, setSelected] = useState(null);
-  const [redMax,   setRedMax]   = useState(30);   // باع أقل من 30% = أحمر
-  const [greenMin, setGreenMin] = useState(60);   // باع أكثر من 60% = أخضر
-  const [visible,  setVisible]  = useState(30);
-
-  // حساب خفيف للقائمة (نسبة فقط، بدون تفاصيل فروع)
-  const list = useMemo(() => {
-    const arr = products.map(p => {
-      const bought  = totalPurchases(p);
-      const sold    = soldAllPeriods(p.barcode, periods);
-      const closing = Math.max(0, bought - sold);
-      const soldPct = bought > 0 ? (sold/bought)*100 : 0;
-      return { p, bought, sold, closing, soldPct };
-    }).filter(x => x.bought > 0);
-    // ترتيب بالمتبقي الكلي (الأكثر ركوداً أول)
-    return arr.sort((a,b)=>b.closing-a.closing);
-  }, [products, periods]);
+// ─── منتجات المصنع ───────────────────────────────────────────
+const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, title }) => {
+  const [search, setSearch] = useState("");
+  const [scan, setScan] = useState(false);
+  const [visible, setVisible] = useState(30);
 
   const filtered = useMemo(() => {
-    if (!search) return list;
-    return list.filter(x => arabicIncludes(x.p.name, search) || x.p.barcode.includes(search));
-  }, [list, search]);
+    if (!search) return items;
+    return items.filter(x => arabicIncludes(x.p.name, search) || x.p.barcode.includes(search));
+  }, [items, search]);
 
   const colorOf = (soldPct) => {
-    if (soldPct < redMax)   return { border:"#ef4444", txt:"#ef4444", bg:"rgba(239,68,68,0.08)" };  // أحمر
-    if (soldPct < greenMin) return { border:"#f59e0b", txt:"#f59e0b", bg:"rgba(245,158,11,0.08)" };  // برتقالي
-    return { border:"#22c55e", txt:"#22c55e", bg:"rgba(34,197,94,0.08)" };                            // أخضر
+    if (soldPct < redMax)   return { border:"#ef4444", txt:"#ef4444", bg:"rgba(239,68,68,0.08)" };
+    if (soldPct < greenMin) return { border:"#f59e0b", txt:"#f59e0b", bg:"rgba(245,158,11,0.08)" };
+    return { border:"#22c55e", txt:"#22c55e", bg:"rgba(34,197,94,0.08)" };
   };
 
-  if (selected) {
-    return <ProductDetail product={selected} periods={periods} images={images} settings={settings} onBack={()=>setSelected(null)} />;
-  }
-
   return (
-    <div className="space-y-4">
-      <div>
-        <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
-        <div className="text-xs text-slate-500">مرتّبة بالمتبقي · اضغط منتج لتفاصيل الفروع</div>
+    <div className="space-y-3">
+      {scan && <BarcodeScanner onDetect={(code)=>{ setSearch(code); setScan(false); }} onClose={()=>setScan(false)} />}
+      <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع</button>
+      <div className="font-black text-slate-100">{title}</div>
+
+      {/* بحث + كاميرا */}
+      <div className="flex gap-2">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث بالاسم أو الباركود…"
+          className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+        <button onClick={()=>setScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
       </div>
-
-      {/* تحكم بالألوان */}
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-3">
-        <div className="text-xs text-slate-400 font-bold mb-2">حدود التلوين (نسبة البيع)</div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-red-400">🔴 أقل من</span>
-          <input type="number" value={redMax} onChange={e=>setRedMax(Math.max(0,Math.min(100,Number(e.target.value)||0)))}
-            className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-2 py-1 text-sm font-black text-center" />
-          <span className="text-xs text-amber-400">🟠 وسط</span>
-          <span className="text-xs text-emerald-400">🟢 فوق</span>
-          <input type="number" value={greenMin} onChange={e=>setGreenMin(Math.max(0,Math.min(100,Number(e.target.value)||0)))}
-            className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-2 py-1 text-sm font-black text-center" />
-          <span className="text-xs text-slate-400">%</span>
-        </div>
-      </div>
-
-      {/* بحث */}
-      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث بالاسم أو الباركود…"
-        className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
-
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
-      {/* القائمة */}
       <div className="space-y-2">
         {filtered.slice(0, visible).map(x => {
           const c = colorOf(x.soldPct);
           return (
-            <div key={x.p.barcode} onClick={()=>setSelected(x.p)}
-              style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:"14px",padding:"12px",cursor:"pointer"}}>
+            <div key={x.p.barcode} onClick={()=>onSelect(x.p)} style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:"14px",padding:"12px",cursor:"pointer"}}>
               <div className="flex items-start gap-3">
                 {images?.[x.p.barcode]
                   ? <img src={images[x.p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
@@ -262,7 +259,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
-                  <div className="text-xs text-slate-400 mt-0.5">📦 {x.p.container}</div>
                 </div>
                 <div className="text-right shrink-0">
                   <div style={{fontSize:"18px",fontWeight:"900",color:c.txt}}>{fmtN(x.closing)}</div>
@@ -274,12 +270,136 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           );
         })}
       </div>
-
       {visible < filtered.length && (
-        <button onClick={()=>setVisible(v=>v+30)} className="w-full bg-slate-700 text-slate-300 py-3 rounded-xl text-sm font-bold">
-          عرض المزيد ({filtered.length - visible})
-        </button>
+        <button onClick={()=>setVisible(v=>v+30)} className="w-full bg-slate-700 text-slate-300 py-3 rounded-xl text-sm font-bold">عرض المزيد ({filtered.length - visible})</button>
       )}
+    </div>
+  );
+});
+
+// ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
+export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {} }) {
+  const [container, setContainer] = useState(null);
+  const [factory,   setFactory]   = useState(null);
+  const [selected,  setSelected]  = useState(null);
+  const [redMax,    setRedMax]    = useState(30);
+  const [greenMin,  setGreenMin]  = useState(60);
+
+  // حساب منتج (نسبة + متبقي)
+  const calcItem = (p) => {
+    const bought  = totalPurchases(p);
+    const sold    = soldAllPeriods(p.barcode, periods);
+    const closing = Math.max(0, bought - sold);
+    const soldPct = bought > 0 ? (sold/bought)*100 : 0;
+    return { p, bought, sold, closing, soldPct };
+  };
+
+  // الكونتينرات
+  const containers = useMemo(() => allContainers(products), [products]);
+
+  // مصانع الكونتينر المختار + تنبيهاتها
+  const factories = useMemo(() => {
+    if (!container) return [];
+    const prods = products.filter(p => p.container === container);
+    const map = {};
+    prods.forEach(p => {
+      const f = getFactoryCode(p.barcode);
+      if (!map[f]) map[f] = { code:f, name: settings?.factories?.[f] ?? "", items:[] };
+      map[f].items.push(calcItem(p));
+    });
+    return Object.values(map).map(f => {
+      const bought = f.items.reduce((s,x)=>s+x.bought,0);
+      const sold   = f.items.reduce((s,x)=>s+x.sold,0);
+      const soldPct = bought>0 ? (sold/bought)*100 : 0;
+      const stagnant = f.items.filter(x=>x.soldPct < redMax).length;
+      const frozen = f.items.reduce((s,x)=>s+x.closing*num(x.p.purchases?.slice(-1)[0]?.buyPrice??0),0);
+      return { ...f, bought, sold, soldPct, stagnant, frozen };
+    }).sort((a,b)=>a.soldPct-b.soldPct);
+  }, [container, products, periods, settings, redMax]);
+
+  // منتجات المصنع المختار (مرتّبة بالمتبقي)
+  const factoryItems = useMemo(() => {
+    if (!factory) return [];
+    const f = factories.find(x=>x.code===factory);
+    return f ? [...f.items].sort((a,b)=>b.closing-a.closing) : [];
+  }, [factory, factories]);
+
+  // عرض: تفاصيل منتج
+  if (selected) {
+    return <ProductDetail product={selected} periods={periods} images={images} settings={settings} onBack={()=>setSelected(null)} />;
+  }
+
+  // عرض: منتجات المصنع
+  if (factory) {
+    const f = factories.find(x=>x.code===factory);
+    return <ProductList items={factoryItems} images={images} redMax={redMax} greenMin={greenMin}
+      onSelect={setSelected} onBack={()=>setFactory(null)}
+      title={`🏭 ${f?.code}${f?.name?` · ${f.name}`:""}`} />;
+  }
+
+  // عرض: مصانع الكونتينر
+  if (container) {
+    return (
+      <div className="space-y-3">
+        <button onClick={()=>setContainer(null)} className="text-blue-400 font-bold text-sm">← رجوع للكونتينرات</button>
+        <div className="font-black text-slate-100 text-lg">📦 {container}</div>
+        <div className="text-xs text-slate-500">{factories.length} مصنع · الأضعف أولاً</div>
+
+        {/* حدود التلوين */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-400 font-bold">تلوين:</span>
+          <span className="text-xs text-red-400">🔴 أقل</span>
+          <input type="number" value={redMax} onChange={e=>setRedMax(Math.max(0,Math.min(100,Number(e.target.value)||0)))} className="w-12 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-1 py-1 text-sm font-black text-center" />
+          <span className="text-xs text-emerald-400">🟢 فوق</span>
+          <input type="number" value={greenMin} onChange={e=>setGreenMin(Math.max(0,Math.min(100,Number(e.target.value)||0)))} className="w-12 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-1 py-1 text-sm font-black text-center" />
+          <span className="text-xs text-slate-400">%</span>
+        </div>
+
+        <div className="space-y-2">
+          {factories.map(f => {
+            const c = f.soldPct < redMax ? "#ef4444" : f.soldPct < greenMin ? "#f59e0b" : "#22c55e";
+            return (
+              <div key={f.code} onClick={()=>setFactory(f.code)} style={{background:`${c}10`,border:`1.5px solid ${c}40`,borderRadius:"14px",padding:"13px",cursor:"pointer"}}>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="font-black text-slate-100 font-mono text-sm">{f.code}{f.name && <span className="text-slate-400 font-sans"> · {f.name}</span>}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{f.items.length} منتج</div>
+                  </div>
+                  <div style={{fontSize:"20px",fontWeight:"900",color:c}}>{fmtPct(f.soldPct)}</div>
+                </div>
+                {/* تنبيهات المصنع */}
+                <div className="flex gap-2 flex-wrap">
+                  {f.stagnant > 0 && <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/30 text-red-300">🔴 {f.stagnant} راكد</span>}
+                  {f.frozen > 0 && <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">💰 {fmtM(f.frozen)} مجمّد</span>}
+                  <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باع {fmtN(f.sold)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // عرض: الكونتينرات
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
+        <div className="text-xs text-slate-500">اختر كونتينر → مصنع → منتج</div>
+      </div>
+      <div className="space-y-2">
+        {containers.map(c => {
+          const count = products.filter(p=>p.container===c).length;
+          return (
+            <div key={c} onClick={()=>setContainer(c)} className="bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer flex items-center justify-between">
+              <div className="font-black text-slate-100">📦 {c}</div>
+              <div className="text-xs text-slate-500">{count} منتج ←</div>
+            </div>
+          );
+        })}
+        {containers.length === 0 && <div className="text-center text-slate-500 py-12">لا توجد كونتينرات</div>}
+      </div>
     </div>
   );
 }
