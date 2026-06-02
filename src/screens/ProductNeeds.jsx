@@ -11,7 +11,7 @@ const toDozen = n => Math.ceil(n / MIN) * MIN;
 // الاحتياج = المباع (مقرّب للدزينة)، بحد أقصى المشتريات
 const reorderQty = (sold, bought) => Math.min(toDozen(sold), bought);
 
-// بناء صفوف التقرير من المنتجات
+// بناء صفوف التقرير المختصر (للطلب)
 function buildRows(items) {
   return items.map(x => {
     const cost = num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
@@ -19,6 +19,7 @@ function buildRows(items) {
       barcode: x.p.barcode,
       name: x.p.name ?? "",
       qtyIn: Math.round(x.bought),
+      sold: Math.round(x.sold),
       balance: Math.round(x.closing),
       reorder: Math.round(reorderQty(x.sold, x.bought)),
       cost: cost,
@@ -27,13 +28,47 @@ function buildRows(items) {
   });
 }
 
-// تصدير Excel (CSV متوافق)
+// بناء صفوف التقرير الكامل (تفاصيل دقيقة)
+function buildFullRows(items) {
+  return items.map(x => {
+    const cost = num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    const price = num(x.p.sellPrice);
+    const frozenQty = Math.round(x.closing);
+    const frozenVal = Math.round(frozenQty * cost);
+    const revenue = Math.round(x.sold * price);
+    const profit = Math.round(x.sold * (price - cost));
+    return {
+      barcode: x.p.barcode, name: x.p.name ?? "",
+      qtyIn: Math.round(x.bought), sold: Math.round(x.sold), balance: Math.round(x.closing),
+      reorder: Math.round(reorderQty(x.sold, x.bought)),
+      cost, price,
+      soldPct: x.bought>0 ? Math.round((x.sold/x.bought)*100) : 0,
+      frozenQty, frozenVal, revenue, profit,
+    };
+  });
+}
+
+// تصدير Excel — مختصر
 function exportExcel(items, title) {
   const rows = buildRows(items);
-  const header = ["Barcode / الباركود","Description / الصنف","Qty In / الوارد","Balance / المتبقي","Reorder / الاحتياج","Cost / التكلفة","Price / السعر"];
+  const header = ["Barcode / الباركود","Description / الصنف","Qty In / جاء","Sold / اتباع","Balance / باقي","Reorder / الاحتياج","Cost / التكلفة","Price ﷼ / السعر"];
   const csv = [header.join(",")].concat(
-    rows.map(r => [r.barcode, `"${String(r.name).replace(/"/g,'""')}"`, r.qtyIn, r.balance, r.reorder, r.cost, r.price].join(","))
+    rows.map(r => [r.barcode, `"${String(r.name).replace(/"/g,'""')}"`, r.qtyIn, r.sold, r.balance, r.reorder, r.cost, r.price].join(","))
   ).join("\n");
+  downloadCsv(csv, title);
+}
+
+// تصدير Excel — كامل
+function exportExcelFull(items, title) {
+  const rows = buildFullRows(items);
+  const header = ["Barcode / الباركود","Description / الصنف","Qty In / جاء","Sold / اتباع","Balance / باقي","Reorder / الاحتياج","Cost / التكلفة","Price ﷼ / السعر","Sold% / نسبة البيع","Frozen Qty / المجمّد","Frozen ﷼ / قيمة المجمّد","Revenue ﷼ / الإيراد","Profit ﷼ / الربح"];
+  const csv = [header.join(",")].concat(
+    rows.map(r => [r.barcode, `"${String(r.name).replace(/"/g,'""')}"`, r.qtyIn, r.sold, r.balance, r.reorder, r.cost, r.price, r.soldPct, r.frozenQty, r.frozenVal, r.revenue, r.profit].join(","))
+  ).join("\n");
+  downloadCsv(csv, title+"_full");
+}
+
+function downloadCsv(csv, title) {
   const blob = new Blob(["\uFEFF"+csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -51,8 +86,8 @@ function printReport(items, title, brandName) {
   const totCost = rows.reduce((s,r)=>s+r.reorder*r.cost,0);
   const body = rows.map((r,i)=>`
     <tr><td class="num">${i+1}</td><td>${r.barcode}</td><td class="desc">${r.name}</td>
-    <td>${fmtN(r.qtyIn)}</td><td>${fmtN(r.balance)}</td><td class="ro">${fmtN(r.reorder)}</td>
-    <td>${fmtN(r.cost)}</td><td>${fmtN(r.price)}</td></tr>`).join("");
+    <td>${fmtN(r.qtyIn)}</td><td>${fmtN(r.sold)}</td><td>${fmtN(r.balance)}</td><td class="ro">${fmtN(r.reorder)}</td>
+    <td>${fmtN(r.cost)}</td><td>${fmtN(r.price)} ﷼</td></tr>`).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -82,8 +117,8 @@ function printReport(items, title, brandName) {
       <div class="date">📅 ${greg} — ${hijri} هـ · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
       <table><thead><tr>
         <th>#</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
-        <th>Qty In<br>الوارد</th><th>Balance<br>المتبقي</th><th>Reorder<br>الاحتياج</th>
-        <th>Cost<br>التكلفة</th><th>Price<br>السعر</th>
+        <th>Qty In<br>جاء</th><th>Sold<br>اتباع</th><th>Balance<br>باقي</th><th>Reorder<br>الاحتياج</th>
+        <th>Cost<br>التكلفة</th><th>Price ﷼<br>السعر</th>
       </tr></thead><tbody>${body}</tbody></table>
       <div class="tot">
         <div><div class="v">${fmtN(totReorder)}</div><div class="l">إجمالي الاحتياج / Total Reorder</div></div>
@@ -358,9 +393,10 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
       </div>
 
       {/* تصدير وطباعة */}
-      <div className="flex gap-2">
-        <button onClick={()=>exportExcel(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold">📊 Excel</button>
-        <button onClick={()=>printReport(filtered, title, "ALBAROO")} className="flex-1 bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-bold">🖨️ تقرير</button>
+      <div className="grid grid-cols-3 gap-2">
+        <button onClick={()=>exportExcel(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
+        <button onClick={()=>exportExcelFull(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
+        <button onClick={()=>printReport(filtered, title, "ALBAROO")} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
@@ -414,9 +450,10 @@ const FactoriesView = memo(({ container, factories, allItems, redMax, greenMin, 
         className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
 
       {/* تصدير كل الكونتينر */}
-      <div className="flex gap-2">
-        <button onClick={()=>exportExcel(allItems, container)} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold">📊 Excel الكونتينر</button>
-        <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO")} className="flex-1 bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-bold">🖨️ تقرير الكونتينر</button>
+      <div className="grid grid-cols-3 gap-2">
+        <button onClick={()=>exportExcel(allItems, container)} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
+        <button onClick={()=>exportExcelFull(allItems, container)} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
+        <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO")} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
 
       {/* حدود التلوين */}
