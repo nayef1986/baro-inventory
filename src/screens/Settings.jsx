@@ -7,7 +7,7 @@ import {
   Card, Btn, StatPill, EmptyState, SectionHeader,
   ConfirmModal, useToast, fmtN,
 } from "../components/UI.jsx";
-import { allContainers, allFactoryCodes, getFactoryCode } from "../lib/calc.js";
+import { allContainers, allFactoryCodes, getFactoryCode, allBranches } from "../lib/calc.js";
 
 // ─── رفع ذكي مع قراءة باركود ──────────────────────────────────
 
@@ -68,13 +68,20 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
       });
 
       try {
-        // نرسل النسخة الواضحة (PNG) لـ Gemini للقراءة
-        const response = await fetch("/api/scan-barcode", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64.ocr }),
-        });
-        const data = await response.json();
+        // نرسل النسخة الواضحة لـ Gemini للقراءة — مع إعادة محاولة لو فشل
+        let data = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await fetch("/api/scan-barcode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageBase64: base64.ocr }),
+          });
+          data = await response.json();
+          // لو لقى أكواد، نوقف. لو فاضي، ننتظر ونعيد مرة وحدة
+          const found = data.candidates?.length || data.barcode;
+          if (found) break;
+          if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
+        }
 
         // نجمع كل المرشحين من OCR
         const candidates = data.candidates?.length ? data.candidates : (data.barcode ? [data.barcode] : []);
@@ -121,6 +128,9 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
       }
 
       setResults([...newResults]);
+
+      // تأخير بسيط بين الصور حتى ما نضغط على Gemini (يمنع رفض الباقي)
+      await new Promise(r => setTimeout(r, 1500));
     }
 
     setScanning(false);
@@ -167,6 +177,7 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const [brandName, setBrandName] = useState(settings?.brandName ?? "البارو");
   const [minStock,  setMinStock]  = useState(settings?.minStock ?? 12);
   const [localFac,  setLocalFac]  = useState({ ...settings?.factories ?? {} });
+  const [closedBranches, setClosedBranches] = useState(settings?.closedBranches ?? []);
   const [facSearch, setFacSearch] = useState("");
   const [showClear,  setShowClear]  = useState(false);
   const [bulkStatus, setBulkStatus] = useState({ loading: false, done: false, success: 0, failed: 0, total: 0, current: 0 });
@@ -183,8 +194,13 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   }, [products]);
 
   const handleSave = async () => {
-    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac });
+    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches });
     if (ok) show("تم الحفظ ✓"); else show("فشل الحفظ", "error");
+  };
+
+  const branches = useMemo(() => allBranches(periods), [periods]);
+  const toggleBranch = (b) => {
+    setClosedBranches(prev => prev.includes(b) ? prev.filter(x=>x!==b) : [...prev, b]);
   };
 
   const handleFacChange = (code, value) => {
@@ -252,6 +268,28 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
           <StatPill label="الكونتينرات" value={fmtN(allContainers(products).length)} color="text-emerald-400" />
         </div>
       </Card>
+
+      {/* الفروع — فتح/غلق (المغلق يختفي من الطباعة) */}
+      {branches.length > 0 && (
+        <Card>
+          <SectionHeader icon="🏪" title="الفروع" subtitle="الفرع المغلق لا يظهر في تقارير الطباعة" />
+          <div className="space-y-2">
+            {branches.map(b => {
+              const isClosed = closedBranches.includes(b);
+              return (
+                <div key={b} className="flex items-center justify-between bg-slate-700/40 rounded-xl px-3 py-2.5">
+                  <span className={`text-sm font-bold ${isClosed ? "text-slate-500 line-through" : "text-slate-100"}`}>{b}</span>
+                  <button onClick={()=>{ toggleBranch(b); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isClosed ? "bg-red-900/40 text-red-300" : "bg-emerald-900/40 text-emerald-300"}`}>
+                    {isClosed ? "🔴 مغلق" : "🟢 مفتوح"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <Btn color="green" onClick={handleSave} className="w-full mt-3">💾 حفظ حالة الفروع</Btn>
+        </Card>
+      )}
 
       {/* رفع صور مجمّع */}
       <Card>
