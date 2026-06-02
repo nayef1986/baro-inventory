@@ -7,18 +7,11 @@ import { fmtN, fmtM, fmtPct } from "../lib/calc.js";
 
 export { fmtN, fmtM, fmtPct };
 
-// ─── Card ────────────────────────────────────────────────────
-
 export const Card = memo(({ children, className = "", onClick }) => (
-  <div
-    onClick={onClick}
-    className={`bg-slate-800 border border-slate-700 rounded-2xl p-4 ${onClick ? "cursor-pointer active:scale-[0.98] transition-transform" : ""} ${className}`}
-  >
+  <div onClick={onClick} className={`bg-slate-800 border border-slate-700 rounded-2xl p-4 ${onClick ? "cursor-pointer active:scale-[0.98] transition-transform" : ""} ${className}`}>
     {children}
   </div>
 ));
-
-// ─── Btn ─────────────────────────────────────────────────────
 
 const COLORS = {
   blue:   "bg-blue-600 hover:bg-blue-500 text-white",
@@ -30,17 +23,11 @@ const COLORS = {
 };
 
 export const Btn = memo(({ children, onClick, color = "blue", className = "", disabled = false, sm = false }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    className={`${COLORS[color] || COLORS.blue} ${sm ? "px-3 py-1.5 text-xs" : "px-4 py-2.5 text-sm"} rounded-xl font-bold
-      transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
-  >
+  <button onClick={onClick} disabled={disabled}
+    className={`${COLORS[color] || COLORS.blue} ${sm ? "px-3 py-1.5 text-xs" : "px-4 py-2.5 text-sm"} rounded-xl font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${className}`}>
     {children}
   </button>
 ));
-
-// ─── Badge ───────────────────────────────────────────────────
 
 const BADGE_COLORS = {
   green:  "bg-emerald-900/60 text-emerald-300 border-emerald-800/40",
@@ -56,8 +43,6 @@ export const Badge = memo(({ children, color = "slate" }) => (
   </span>
 ));
 
-// ─── StatPill ────────────────────────────────────────────────
-
 export const StatPill = memo(({ label, value, color = "text-slate-100" }) => (
   <div className="bg-slate-700/50 rounded-xl p-2 text-center">
     <div className={`font-black tabular-nums text-base ${color}`}>{value}</div>
@@ -65,37 +50,22 @@ export const StatPill = memo(({ label, value, color = "text-slate-100" }) => (
   </div>
 ));
 
-// ─── SearchBar ───────────────────────────────────────────────
-
 export const SearchBar = memo(({ value, onChange, placeholder = "🔍 بحث…" }) => (
-  <input
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm
-      focus:outline-none focus:border-blue-500 placeholder-slate-500"
-  />
+  <input value={value} onChange={onChange} placeholder={placeholder}
+    className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500" />
 ));
-
-// ─── FilterChips ─────────────────────────────────────────────
 
 export const FilterChips = memo(({ options, active, onChange, label }) => (
   <div className="flex items-center gap-2 flex-wrap">
     {label && <span className="text-xs text-slate-500">{label}</span>}
     {options.map(({ key, label: lbl }) => (
-      <button
-        key={key}
-        onClick={() => onChange(key)}
-        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors
-          ${active === key ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400 hover:text-slate-200"}`}
-      >
+      <button key={key} onClick={() => onChange(key)}
+        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${active === key ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400 hover:text-slate-200"}`}>
         {lbl}
       </button>
     ))}
   </div>
 ));
-
-// ─── EmptyState ──────────────────────────────────────────────
 
 export const EmptyState = memo(({ icon = "📭", title, subtitle }) => (
   <div className="text-center py-12">
@@ -105,16 +75,12 @@ export const EmptyState = memo(({ icon = "📭", title, subtitle }) => (
   </div>
 ));
 
-// ─── ExportBar ───────────────────────────────────────────────
-
 export const ExportBar = memo(({ onExcel, onPrint }) => (
   <div className="flex gap-2">
     {onExcel && <Btn sm color="green" onClick={onExcel}>📊 Excel</Btn>}
     {onPrint && <Btn sm color="ghost" onClick={onPrint}>🖨️ طباعة</Btn>}
   </div>
 ));
-
-// ─── SectionHeader ───────────────────────────────────────────
 
 export const SectionHeader = memo(({ icon, title, subtitle }) => (
   <div className="mb-3">
@@ -126,18 +92,11 @@ export const SectionHeader = memo(({ icon, title, subtitle }) => (
   </div>
 ));
 
-// ─── BackBtn ─────────────────────────────────────────────────
-
 export const BackBtn = memo(({ onClick, label = "رجوع" }) => (
-  <button
-    onClick={onClick}
-    className="flex items-center gap-1.5 text-blue-400 text-sm font-bold mb-1 active:opacity-70"
-  >
+  <button onClick={onClick} className="flex items-center gap-1.5 text-blue-400 text-sm font-bold mb-1 active:opacity-70">
     ← {label}
   </button>
 ));
-
-// ─── ConfirmModal ────────────────────────────────────────────
 
 export const ConfirmModal = memo(({ title, message, onConfirm, onCancel, confirmLabel = "تأكيد", confirmColor = "red" }) => (
   <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
@@ -155,34 +114,24 @@ export const ConfirmModal = memo(({ title, message, onConfirm, onCancel, confirm
   </div>
 ));
 
-// ─── Toast ───────────────────────────────────────────────────
-
 export function useToast() {
   const [toasts, setToasts] = useState([]);
-
   const show = useCallback((msg, type = "success") => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, msg, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2800);
   }, []);
-
   const ToastContainer = () => (
     <div className="fixed top-4 right-0 left-0 z-50 flex flex-col items-center gap-2 pointer-events-none px-4">
       {toasts.map(t => (
-        <div key={t.id} className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-xl
-          ${t.type === "error" ? "bg-red-600 text-white" :
-            t.type === "warning" ? "bg-amber-500 text-black" :
-            "bg-emerald-600 text-white"}`}>
+        <div key={t.id} className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-xl ${t.type === "error" ? "bg-red-600 text-white" : t.type === "warning" ? "bg-amber-500 text-black" : "bg-emerald-600 text-white"}`}>
           {t.msg}
         </div>
       ))}
     </div>
   );
-
   return { show, ToastContainer };
 }
-
-// ─── LoadingSpinner ──────────────────────────────────────────
 
 export const LoadingSpinner = memo(({ label = "جاري التحميل…" }) => (
   <div className="flex flex-col items-center justify-center min-h-screen gap-4">
@@ -191,37 +140,18 @@ export const LoadingSpinner = memo(({ label = "جاري التحميل…" }) =>
   </div>
 ));
 
-// ─── Select ──────────────────────────────────────────────────
-
 export const Select = memo(({ value, onChange, options, placeholder, className = "" }) => (
-  <select
-    value={value}
-    onChange={onChange}
-    className={`bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm
-      focus:outline-none focus:border-blue-500 ${className}`}
-  >
+  <select value={value} onChange={onChange}
+    className={`bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 ${className}`}>
     {placeholder && <option value="">{placeholder}</option>}
-    {options.map(({ value: v, label: l }) => (
-      <option key={v} value={v}>{l}</option>
-    ))}
+    {options.map(({ value: v, label: l }) => <option key={v} value={v}>{l}</option>)}
   </select>
 ));
 
-// ─── NumberInput ─────────────────────────────────────────────
-
 export const NumberInput = memo(({ value, onChange, min, max, className = "" }) => (
-  <input
-    type="number"
-    value={value}
-    onChange={e => onChange(Number(e.target.value))}
-    min={min}
-    max={max}
-    className={`bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm
-      text-center font-black focus:outline-none focus:border-blue-500 ${className}`}
-  />
+  <input type="number" value={value} onChange={e => onChange(Number(e.target.value))} min={min} max={max}
+    className={`bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm text-center font-black focus:outline-none focus:border-blue-500 ${className}`} />
 ));
-
-// ─── ProgressBar ─────────────────────────────────────────────
 
 export const ProgressBar = memo(({ value, max, color = "bg-blue-500" }) => {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -238,53 +168,27 @@ const NAV_ITEMS = [
   { key: "containers", icon: "📦", label: "كونتينر" },
   { key: "sales",      icon: "📊", label: "مبيعات" },
   { key: "branches",   icon: "🏪", label: "الفروع" },
-  { key: "ideas",      icon: "💡", label: "أفكار" },
+  { key: "needs",      icon: "🔍", label: "احتياج" },
   { key: "reports",    icon: "📋", label: "تقارير" },
 ];
 
 export const NavBar = memo(({ active, onChange }) => (
   <nav style={{
-    position:"fixed", bottom:0, right:0, left:0,
-    zIndex:50,
+    position:"fixed", bottom:0, right:0, left:0, zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom, 0px)",
-    WebkitBackfaceVisibility:"hidden",
-    transform:"translateZ(0)",
-    willChange:"transform",
-    // iOS 26 glass effect
+    WebkitBackfaceVisibility:"hidden", transform:"translateZ(0)", willChange:"transform",
     background:"rgba(15,23,42,0.85)",
-    backdropFilter:"blur(24px) saturate(1.8)",
-    WebkitBackdropFilter:"blur(24px) saturate(1.8)",
+    backdropFilter:"blur(24px) saturate(1.8)", WebkitBackdropFilter:"blur(24px) saturate(1.8)",
     borderTop:"1px solid rgba(255,255,255,0.06)",
     boxShadow:"0 -1px 0 rgba(255,255,255,0.04), 0 -8px 32px rgba(0,0,0,0.3)",
   }}>
     <div style={{display:"flex",maxWidth:"440px",margin:"0 auto"}}>
       {NAV_ITEMS.map(({ key, icon, label }) => (
-        <button
-          key={key}
-          onClick={() => onChange(key)}
-          style={{
-            flex:1, display:"flex", flexDirection:"column",
-            alignItems:"center", gap:"3px", padding:"10px 4px 8px",
-            border:"none", background:"transparent",
-            cursor:"pointer", fontFamily:"inherit",
-            WebkitTapHighlightColor:"transparent",
-            transition:"transform 0.15s ease",
-            transform:"scale(1)",
-          }}
+        <button key={key} onClick={() => onChange(key)}
+          style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"3px",padding:"10px 4px 8px",border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent",transition:"transform 0.15s ease",transform:"scale(1)"}}
           onTouchStart={e => e.currentTarget.style.transform="scale(0.88)"}
-          onTouchEnd={e => e.currentTarget.style.transform="scale(1)"}
-        >
-          {/* أيقونة فقط - تكبر عند الضغط */}
-          <span style={{
-            fontSize: active===key ? "26px" : "22px",
-            lineHeight:1,
-            padding:"6px 14px",
-            borderRadius:"100px",
-            background: active===key ? "rgba(96,165,250,0.15)" : "transparent",
-            transition:"all 0.2s ease",
-            display:"block",
-            filter: active===key ? "none" : "opacity(0.5)",
-          }}>{icon}</span>
+          onTouchEnd={e => e.currentTarget.style.transform="scale(1)"}>
+          <span style={{fontSize: active===key ? "26px" : "22px",lineHeight:1,padding:"6px 14px",borderRadius:"100px",background: active===key ? "rgba(96,165,250,0.15)" : "transparent",transition:"all 0.2s ease",display:"block",filter: active===key ? "none" : "opacity(0.5)"}}>{icon}</span>
         </button>
       ))}
     </div>
