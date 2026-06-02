@@ -8,6 +8,92 @@ import {
 const MIN = 12;
 const toDozen = n => Math.ceil(n / MIN) * MIN;
 
+// الاحتياج = المباع (مقرّب للدزينة)، بحد أقصى المشتريات
+const reorderQty = (sold, bought) => Math.min(toDozen(sold), bought);
+
+// بناء صفوف التقرير من المنتجات
+function buildRows(items) {
+  return items.map(x => {
+    const cost = num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    return {
+      barcode: x.p.barcode,
+      name: x.p.name ?? "",
+      qtyIn: Math.round(x.bought),
+      balance: Math.round(x.closing),
+      reorder: Math.round(reorderQty(x.sold, x.bought)),
+      cost: cost,
+      price: num(x.p.sellPrice),
+    };
+  });
+}
+
+// تصدير Excel (CSV متوافق)
+function exportExcel(items, title) {
+  const rows = buildRows(items);
+  const header = ["Barcode / الباركود","Description / الصنف","Qty In / الوارد","Balance / المتبقي","Reorder / الاحتياج","Cost / التكلفة","Price / السعر"];
+  const csv = [header.join(",")].concat(
+    rows.map(r => [r.barcode, `"${String(r.name).replace(/"/g,'""')}"`, r.qtyIn, r.balance, r.reorder, r.cost, r.price].join(","))
+  ).join("\n");
+  const blob = new Blob(["\uFEFF"+csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `${title}.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+// طباعة تقرير
+function printReport(items, title, brandName) {
+  const rows = buildRows(items);
+  const now = new Date();
+  const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
+  const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+  const totReorder = rows.reduce((s,r)=>s+r.reorder,0);
+  const totCost = rows.reduce((s,r)=>s+r.reorder*r.cost,0);
+  const body = rows.map((r,i)=>`
+    <tr><td class="num">${i+1}</td><td>${r.barcode}</td><td class="desc">${r.name}</td>
+    <td>${fmtN(r.qtyIn)}</td><td>${fmtN(r.balance)}</td><td class="ro">${fmtN(r.reorder)}</td>
+    <td>${fmtN(r.cost)}</td><td>${fmtN(r.price)}</td></tr>`).join("");
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+      *{font-family:'Cairo',sans-serif;box-sizing:border-box}
+      body{margin:0;background:#fff;color:#1a1a1a}
+      .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+      .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+      .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+      .w{max-width:900px;margin:0 auto;padding:70px 16px 40px}
+      h1{text-align:center;color:#0f172a;margin-bottom:4px;font-size:22px}
+      .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th{background:#0f172a;color:#fff;padding:9px 6px;font-size:12px;line-height:1.4}
+      td{border:1px solid #e2e8f0;padding:8px 6px;text-align:center}
+      td.num{background:#f1f5f9;font-weight:900;color:#888}
+      td.desc{text-align:right;font-weight:700}
+      td.ro{color:#2563eb;font-weight:900;font-size:15px}
+      tr:nth-child(even){background:#f8fafc}
+      .tot{margin-top:14px;display:flex;gap:12px;justify-content:center}
+      .tot div{background:#f1f5f9;border-radius:10px;padding:12px 20px;text-align:center}
+      .tot .v{font-size:20px;font-weight:900;color:#0f172a}.tot .l{font-size:12px;color:#888}
+      @media print{.tb{display:none}.w{padding:16px}}
+    </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="w">
+      <h1>${title}</h1>
+      <div class="date">📅 ${greg} — ${hijri} هـ · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
+      <table><thead><tr>
+        <th>#</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
+        <th>Qty In<br>الوارد</th><th>Balance<br>المتبقي</th><th>Reorder<br>الاحتياج</th>
+        <th>Cost<br>التكلفة</th><th>Price<br>السعر</th>
+      </tr></thead><tbody>${body}</tbody></table>
+      <div class="tot">
+        <div><div class="v">${fmtN(totReorder)}</div><div class="l">إجمالي الاحتياج / Total Reorder</div></div>
+        <div><div class="v">${fmtM(totCost)}</div><div class="l">تكلفة الطلب / Order Cost</div></div>
+      </div>
+    </div></body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 // ─── زر نسخ الباركود ─────────────────────────────────────────
 const CopyBarcode = memo(({ barcode }) => {
   const [copied, setCopied] = useState(false);
@@ -120,8 +206,8 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const print = () => {
     const closed = settings?.closedBranches ?? [];
     const printBranches = sortedBranches.filter(b => !closed.includes(b.branch));
-    const rows = printBranches.map(b => `
-      <tr><td>${b.branch}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
+    const rows = printBranches.map((b, i) => `
+      <tr><td class="num">${i+1}</td><td>${b.branch} ${b.remaining < 7 ? '<span class="chk">✅</span>' : ''}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
     const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
     const now = new Date();
     const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
@@ -152,6 +238,8 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         th{background:#0f172a;color:#fff;padding:12px;font-size:16px}
         td{border:1px solid #e2e8f0;padding:12px;text-align:center;font-size:17px}
         td.big{font-size:20px;font-weight:900}td.rem{color:#dc2626}
+        td.num{font-weight:900;color:#888;background:#f1f5f9}
+        .chk{font-size:16px}
         tr:nth-child(even){background:#f8fafc}
         @media print{.tb{display:none}.w{padding:20px}}
       </style></head><body>
@@ -170,7 +258,8 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
           <div><div class="v">${fmtN(data.closing)}</div><div class="l">باقي</div></div>
         </div>
         <div class="sortlbl">🔀 الفروع مرتّبة: ${sortLabel}</div>
-        <table><thead><tr><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>#</th><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th></tr></thead><tbody>${rows}</tbody></table>
+        <div style="text-align:center;color:#666;font-size:14px;margin-top:10px">إجمالي الفروع: ${printBranches.length} · ✅ يحتاج تموين (باقي أقل من 7): ${printBranches.filter(b=>b.remaining<7).length}</div>
       </div>
       <script>try{JsBarcode("#bcsvg","${product.barcode}",{format:"CODE128",width:2,height:60,displayValue:false,margin:4});}catch(e){}<\/script>
       </body></html>`;
@@ -267,6 +356,12 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
           className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
         <button onClick={()=>setScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
       </div>
+
+      {/* تصدير وطباعة */}
+      <div className="flex gap-2">
+        <button onClick={()=>exportExcel(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold">📊 Excel</button>
+        <button onClick={()=>printReport(filtered, title, "ALBAROO")} className="flex-1 bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-bold">🖨️ تقرير</button>
+      </div>
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
       <div className="space-y-2">
@@ -300,7 +395,7 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
 });
 
 // ─── عرض مصانع الكونتينر مع بحث ──────────────────────────────
-const FactoriesView = memo(({ container, factories, redMax, greenMin, setRedMax, setGreenMin, onSelectFactory, onBack }) => {
+const FactoriesView = memo(({ container, factories, allItems, redMax, greenMin, setRedMax, setGreenMin, onSelectFactory, onBack }) => {
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => {
     if (!search) return factories;
@@ -317,6 +412,12 @@ const FactoriesView = memo(({ container, factories, redMax, greenMin, setRedMax,
       {/* بحث بالمصنع */}
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث برقم المصنع أو اسمه…"
         className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+
+      {/* تصدير كل الكونتينر */}
+      <div className="flex gap-2">
+        <button onClick={()=>exportExcel(allItems, container)} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold">📊 Excel الكونتينر</button>
+        <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO")} className="flex-1 bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-bold">🖨️ تقرير الكونتينر</button>
+      </div>
 
       {/* حدود التلوين */}
       <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
@@ -416,7 +517,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
 
   // عرض: مصانع الكونتينر
   if (container) {
-    return <FactoriesView container={container} factories={factories} redMax={redMax} greenMin={greenMin}
+    return <FactoriesView container={container} factories={factories} allItems={factories.flatMap(f=>f.items)} redMax={redMax} greenMin={greenMin}
       setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
   }
 
