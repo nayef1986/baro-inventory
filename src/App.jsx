@@ -312,6 +312,7 @@ export default function App() {
               onSaveSettings={handleSaveSettings}
               onClearAll={handleClearAll}
               onBulkSaveImage={handleBulkSaveImage}
+              onUpdateProducts={handleUpdateProducts}
             />
           </div>
         </div>
