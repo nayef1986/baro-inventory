@@ -182,6 +182,8 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const [delSearch, setDelSearch]   = useState("");
   const [delPin,    setDelPin]      = useState("");
   const [delTarget, setDelTarget]   = useState(null);
+  const [delSelected, setDelSelected] = useState([]);
+  const [showDelConfirm, setShowDelConfirm] = useState(false);
   const [newPin,    setNewPin]      = useState("");
   const SECRET = settings?.deletePin ?? "0000";
   const [facSearch, setFacSearch] = useState("");
@@ -220,12 +222,18 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   }, [delSearch, delPin, products, SECRET]);
 
   const confirmDelete = async () => {
-    if (!delTarget || !onUpdateProducts) return;
-    const updated = products.filter(p => p.barcode !== delTarget.barcode);
+    if (delSelected.length === 0 || !onUpdateProducts) return;
+    const sel = new Set(delSelected);
+    const updated = products.filter(p => !sel.has(p.barcode));
     await onUpdateProducts(updated);
-    setDelTarget(null);
+    show(`تم حذف ${delSelected.length} منتج`, "success");
+    setDelSelected([]);
+    setShowDelConfirm(false);
     setDelSearch("");
-    show(`تم حذف ${delTarget.name}`, "success");
+  };
+
+  const toggleSelect = (barcode) => {
+    setDelSelected(prev => prev.includes(barcode) ? prev.filter(b=>b!==barcode) : [...prev, barcode]);
   };
 
   const changePin = async () => {
@@ -489,17 +497,28 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
               <div className="space-y-2 mb-3">
                 {delResults.length === 0 ? (
                   <div className="text-center text-slate-500 text-sm py-3">لا نتائج</div>
-                ) : delResults.map(p => (
-                  <div key={p.barcode} className="flex items-center justify-between bg-slate-700/40 rounded-xl px-3 py-2.5">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-bold text-slate-100 truncate">{p.name}</div>
-                      <div className="text-xs text-slate-500 font-mono">{p.barcode}</div>
+                ) : delResults.map(p => {
+                  const sel = delSelected.includes(p.barcode);
+                  return (
+                    <div key={p.barcode} onClick={()=>toggleSelect(p.barcode)}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer ${sel ? "bg-red-900/30 border border-red-700/40" : "bg-slate-700/40 border border-transparent"}`}>
+                      <span className={`w-5 h-5 rounded flex items-center justify-center text-xs shrink-0 ${sel ? "bg-red-500 text-white" : "bg-slate-600 text-transparent"}`}>✓</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-slate-100 truncate">{p.name}</div>
+                        <div className="text-xs text-slate-500 font-mono">{p.barcode}</div>
+                      </div>
                     </div>
-                    <button onClick={()=>setDelTarget(p)}
-                      className="bg-red-900/40 text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0">🗑️ حذف</button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+            )}
+
+            {/* زر حذف المحدد */}
+            {delSelected.length > 0 && (
+              <button onClick={()=>setShowDelConfirm(true)}
+                className="w-full bg-red-600 text-white py-3 rounded-xl text-sm font-black mb-3">
+                🗑️ احذف المحدد ({delSelected.length})
+              </button>
             )}
 
             {/* تغيير الرقم السري */}
@@ -517,15 +536,15 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         )}
       </Card>
 
-      {/* تأكيد حذف المنتج */}
-      {delTarget && (
+      {/* تأكيد حذف المنتجات المحددة */}
+      {showDelConfirm && (
         <ConfirmModal
-          title="حذف منتج نهائياً"
-          message={`سيُحذف "${delTarget.name}" (${delTarget.barcode}) من كل النظام. لا يمكن التراجع.`}
-          confirmLabel="احذف"
+          title="حذف منتجات نهائياً"
+          message={`سيُحذف ${delSelected.length} منتج من كل النظام. لا يمكن التراجع.`}
+          confirmLabel="احذف الكل"
           confirmColor="red"
           onConfirm={confirmDelete}
-          onCancel={()=>setDelTarget(null)}
+          onCancel={()=>setShowDelConfirm(false)}
         />
       )}
 
