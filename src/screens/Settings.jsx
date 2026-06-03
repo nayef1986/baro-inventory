@@ -173,11 +173,17 @@ function SmartScanUpload({ products, onBulkSaveImage }) {
   );
 }
 
-export default function SettingsScreen({ products, periods, settings, onSaveSettings, onClearAll, onBulkSaveImage }) {
+export default function SettingsScreen({ products, periods, settings, onSaveSettings, onClearAll, onBulkSaveImage, onUpdateProducts }) {
   const [brandName, setBrandName] = useState(settings?.brandName ?? "البارو");
   const [minStock,  setMinStock]  = useState(settings?.minStock ?? 12);
   const [localFac,  setLocalFac]  = useState({ ...settings?.factories ?? {} });
   const [closedBranches, setClosedBranches] = useState(settings?.closedBranches ?? []);
+  // حذف منتج محمي برقم سري
+  const [delSearch, setDelSearch]   = useState("");
+  const [delPin,    setDelPin]      = useState("");
+  const [delTarget, setDelTarget]   = useState(null);
+  const [newPin,    setNewPin]      = useState("");
+  const SECRET = settings?.deletePin ?? "0000";
   const [facSearch, setFacSearch] = useState("");
   const [showClear,  setShowClear]  = useState(false);
   const [bulkStatus, setBulkStatus] = useState({ loading: false, done: false, success: 0, failed: 0, total: 0, current: 0 });
@@ -201,6 +207,32 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const branches = useMemo(() => allBranches(periods), [periods]);
   const toggleBranch = (b) => {
     setClosedBranches(prev => prev.includes(b) ? prev.filter(x=>x!==b) : [...prev, b]);
+  };
+
+  // نتائج بحث الحذف
+  const delResults = useMemo(() => {
+    if (!delSearch || delPin !== SECRET) return [];
+    const s = delSearch.toLowerCase();
+    return products.filter(p =>
+      p.barcode?.toLowerCase().includes(s) || getFactoryCode(p.barcode).includes(s) ||
+      (p.name && p.name.toLowerCase().includes(s))
+    ).slice(0, 20);
+  }, [delSearch, delPin, products, SECRET]);
+
+  const confirmDelete = async () => {
+    if (!delTarget || !onUpdateProducts) return;
+    const updated = products.filter(p => p.barcode !== delTarget.barcode);
+    await onUpdateProducts(updated);
+    setDelTarget(null);
+    setDelSearch("");
+    show(`تم حذف ${delTarget.name}`, "success");
+  };
+
+  const changePin = async () => {
+    if (delPin !== SECRET) { show("الرقم الحالي غير صحيح", "error"); return; }
+    if (!newPin || newPin.length < 4) { show("الرقم الجديد 4 خانات على الأقل", "error"); return; }
+    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, deletePin: newPin });
+    if (ok) { show("تم تغيير الرقم السري ✓"); setNewPin(""); setDelPin(newPin); }
   };
 
   const handleFacChange = (code, value) => {
@@ -434,6 +466,67 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
 
           <Btn color="green" onClick={handleSave} className="w-full mt-3">💾 حفظ الكل</Btn>
         </Card>
+      )}
+
+      {/* 🔒 حذف منتج (محمي برقم سري) */}
+      <Card>
+        <SectionHeader icon="🔒" title="حذف منتج" subtitle="محمي برقم سري — للأشياء الشخصية والأخطاء" />
+
+        {/* الرقم السري */}
+        <div className="mb-3">
+          <label className="text-xs text-slate-400 block mb-1">الرقم السري</label>
+          <input type="password" value={delPin} onChange={e=>setDelPin(e.target.value)} placeholder="••••"
+            className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:border-blue-500" />
+        </div>
+
+        {delPin === SECRET ? (
+          <>
+            {/* بحث المنتج */}
+            <input value={delSearch} onChange={e=>setDelSearch(e.target.value)} placeholder="🔍 ابحث بالاسم أو الباركود…"
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 mb-2" />
+
+            {delSearch && (
+              <div className="space-y-2 mb-3">
+                {delResults.length === 0 ? (
+                  <div className="text-center text-slate-500 text-sm py-3">لا نتائج</div>
+                ) : delResults.map(p => (
+                  <div key={p.barcode} className="flex items-center justify-between bg-slate-700/40 rounded-xl px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-100 truncate">{p.name}</div>
+                      <div className="text-xs text-slate-500 font-mono">{p.barcode}</div>
+                    </div>
+                    <button onClick={()=>setDelTarget(p)}
+                      className="bg-red-900/40 text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0">🗑️ حذف</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* تغيير الرقم السري */}
+            <div className="border-t border-slate-700 pt-3 mt-3">
+              <label className="text-xs text-slate-400 block mb-1">تغيير الرقم السري</label>
+              <div className="flex gap-2">
+                <input type="text" value={newPin} onChange={e=>setNewPin(e.target.value)} placeholder="رقم جديد (4 خانات)"
+                  className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                <button onClick={changePin} className="bg-blue-600 text-white px-4 rounded-xl text-sm font-bold">حفظ</button>
+              </div>
+            </div>
+          </>
+        ) : (
+          delPin && <div className="text-xs text-red-400 text-center py-2">الرقم السري غير صحيح</div>
+        )}
+      </Card>
+
+      {/* تأكيد حذف المنتج */}
+      {delTarget && (
+        <ConfirmModal
+          title="حذف منتج نهائياً"
+          message={`سيُحذف "${delTarget.name}" (${delTarget.barcode}) من كل النظام. لا يمكن التراجع.`}
+          confirmLabel="احذف"
+          confirmColor="red"
+          onConfirm={confirmDelete}
+          onCancel={()=>setDelTarget(null)}
+        />
       )}
 
       {/* حذف */}
