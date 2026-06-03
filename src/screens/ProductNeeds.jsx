@@ -77,17 +77,21 @@ function downloadCsv(csv, title) {
 }
 
 // طباعة تقرير
-function printReport(items, title, brandName) {
+function printReport(items, title, brandName, images = {}) {
   const rows = buildRows(items);
   const now = new Date();
   const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
   const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
   const totReorder = rows.reduce((s,r)=>s+r.reorder,0);
   const totCost = rows.reduce((s,r)=>s+r.reorder*r.cost,0);
-  const body = rows.map((r,i)=>`
-    <tr><td class="num">${i+1}</td><td>${r.barcode}</td><td class="desc">${r.name}</td>
+  const body = rows.map((r,i)=>{
+    const img = images?.[r.barcode];
+    const imgCell = img ? `<img src="${img}" class="thumb"/>` : `<div class="noimg">📦</div>`;
+    return `
+    <tr><td class="num">${i+1}</td><td class="imgc">${imgCell}</td><td>${r.barcode}</td><td class="desc">${r.name}</td>
     <td>${fmtN(r.qtyIn)}</td><td>${fmtN(r.sold)}</td><td>${fmtN(r.balance)}</td><td class="ro">${fmtN(r.reorder)}</td>
-    <td>${fmtN(r.cost)}</td><td>${fmtN(r.price)} ﷼</td></tr>`).join("");
+    <td>${fmtN(r.cost)}</td><td>${fmtN(r.price)} ﷼</td></tr>`;
+  }).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -103,6 +107,9 @@ function printReport(items, title, brandName) {
       th{background:#0f172a;color:#fff;padding:9px 6px;font-size:12px;line-height:1.4}
       td{border:1px solid #e2e8f0;padding:8px 6px;text-align:center}
       td.num{background:#f1f5f9;font-weight:900;color:#888}
+      td.imgc{padding:3px;width:46px}
+      .thumb{width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0}
+      .noimg{width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:6px;margin:0 auto}
       td.desc{text-align:right;font-weight:700}
       td.ro{color:#2563eb;font-weight:900;font-size:15px}
       tr:nth-child(even){background:#f8fafc}
@@ -116,7 +123,7 @@ function printReport(items, title, brandName) {
       <h1>${title}</h1>
       <div class="date">📅 ${greg} — ${hijri} هـ · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
       <table><thead><tr>
-        <th>#</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
+        <th>#</th><th>صورة<br>Image</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
         <th>Qty In<br>جاء</th><th>Sold<br>اتباع</th><th>Balance<br>باقي</th><th>Reorder<br>الاحتياج</th>
         <th>Cost<br>التكلفة</th><th>Price ﷼<br>السعر</th>
       </tr></thead><tbody>${body}</tbody></table>
@@ -396,7 +403,7 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
       <div className="grid grid-cols-3 gap-2">
         <button onClick={()=>exportExcel(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
         <button onClick={()=>exportExcelFull(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
-        <button onClick={()=>printReport(filtered, title, "ALBAROO")} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
+        <button onClick={()=>printReport(filtered, title, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
@@ -431,7 +438,7 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
 });
 
 // ─── عرض مصانع الكونتينر مع بحث ──────────────────────────────
-const FactoriesView = memo(({ container, factories, allItems, redMax, greenMin, setRedMax, setGreenMin, onSelectFactory, onBack }) => {
+const FactoriesView = memo(({ container, factories, allItems, images, redMax, greenMin, setRedMax, setGreenMin, onSelectFactory, onBack }) => {
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => {
     if (!search) return factories;
@@ -453,7 +460,7 @@ const FactoriesView = memo(({ container, factories, allItems, redMax, greenMin, 
       <div className="grid grid-cols-3 gap-2">
         <button onClick={()=>exportExcel(allItems, container)} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
         <button onClick={()=>exportExcelFull(allItems, container)} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
-        <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO")} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
+        <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
 
       {/* حدود التلوين */}
@@ -554,7 +561,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
 
   // عرض: مصانع الكونتينر
   if (container) {
-    return <FactoriesView container={container} factories={factories} allItems={factories.flatMap(f=>f.items)} redMax={redMax} greenMin={greenMin}
+    return <FactoriesView container={container} factories={factories} allItems={factories.flatMap(f=>f.items)} images={images} redMax={redMax} greenMin={greenMin}
       setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
   }
 
@@ -580,3 +587,4 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     </div>
   );
 }
+غ
