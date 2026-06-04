@@ -410,8 +410,20 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
       <div className="space-y-2">
         {filtered.slice(0, visible).map(x => {
           const c = colorOf(x.soldPct);
+          // كشف التكرار: جاء في أكثر من كونتينر
+          const conts = [...new Set((x.p.purchases ?? []).map(pu => pu.container ?? x.p.container).filter(Boolean))];
+          const isDup = conts.length > 1;
           return (
-            <div key={x.p.barcode} onClick={()=>onSelect(x.p)} style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:"14px",padding:"12px",cursor:"pointer"}}>
+            <div key={x.p.barcode} onClick={()=>onSelect(x.p)} style={{
+              background:c.bg,
+              border: isDup ? "2px solid #a855f7" : `1.5px solid ${c.border}`,
+              borderRadius:"14px",padding:"12px",cursor:"pointer",position:"relative"
+            }}>
+              {isDup && (
+                <div style={{position:"absolute",top:"-9px",left:"10px",background:"#a855f7",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>
+                  🔁 مكرر · {conts.length} كونتينر
+                </div>
+              )}
               <div className="flex items-start gap-3">
                 {images?.[x.p.barcode]
                   ? <img src={images[x.p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
