@@ -587,4 +587,3 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     </div>
   );
 }
-غ
