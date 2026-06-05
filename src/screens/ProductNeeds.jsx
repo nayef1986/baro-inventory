@@ -77,6 +77,95 @@ function downloadCsv(csv, title) {
 }
 
 // طباعة تقرير
+// ─── بوليصات التوزيع (كاشير 80mm) ────────────────────────────
+function printPolicies(items, periods, images, brandName) {
+  // لكل منتج: نحسب فروعه، ونطلّع بوليصة فقط لو عنده مخزون + فرع ناقص
+  const slips = [];
+  items.forEach(x => {
+    const p = x.p;
+    if (x.closing <= 0) return; // نافذ — ما عنده شي يوزّع
+    const branchSales = {};
+    periods.forEach(per => {
+      Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
+        const q = num(d[p.barcode]?.qty ?? 0);
+        if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
+      });
+    });
+    const branches = Object.entries(branchSales).map(([branch, sold]) => {
+      const given = toDozen(sold);
+      return { branch, sold, given, remaining: given - sold };
+    }).sort((a,b)=>a.remaining-b.remaining);
+    const hasNeed = branches.some(b => b.remaining < 7);
+    if (!hasNeed) return; // ما فيه فرع ناقص — لا حاجة لبوليصة
+    slips.push({ p, closing: x.closing, branches });
+  });
+
+  if (slips.length === 0) { alert("لا توجد منتجات تحتاج توزيع"); return; }
+
+  const now = new Date();
+  const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {month:"short",day:"numeric"});
+  const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {month:"short",day:"numeric"});
+
+  const slipHtml = slips.map(s => {
+    const img = images?.[s.p.barcode];
+    const rows = s.branches.map(b => `
+      <tr class="${b.remaining < 7 ? 'need' : ''}">
+        <td>${b.branch}</td><td>${b.sold}</td><td>${b.given}</td>
+        <td>${b.remaining}${b.remaining < 7 ? ' ✅' : ''}</td></tr>`).join("");
+    return `<div class="slip">
+      <div class="hd">${brandName ?? "ALBAROO"}</div>
+      <div class="dt">📅 ${greg} · ${hijri}هـ</div>
+      ${img ? `<img src="${img}" class="pimg"/>` : ''}
+      <div class="pname">${s.p.name}</div>
+      <svg class="bc" data-code="${s.p.barcode}"></svg>
+      <div class="bcn">${s.p.barcode}</div>
+      <div class="meta">🏭 ${getFactoryCode(s.p.barcode)} · 📦 ${s.p.container ?? ""}</div>
+      <div class="stock">المتبقي بالمخزون: <b>${fmtN(s.closing)}</b></div>
+      <table><tr><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th></tr>${rows}</table>
+      <div class="note">✅ = يحتاج توزيع (أقل من 7)</div>
+    </div>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>بوليصات التوزيع</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+      *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+      body{background:#ddd}
+      .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+      .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+      .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+      .wrap{padding:60px 10px 20px}
+      .slip{width:80mm;background:#fff;margin:0 auto 8px;padding:10px 8px;page-break-after:always;text-align:center;border:1px dashed #999}
+      .hd{font-size:16px;font-weight:900;color:#0f172a;letter-spacing:1px}
+      .dt{font-size:10px;color:#888;margin-bottom:6px}
+      .pimg{width:90px;height:90px;object-fit:cover;border-radius:8px;margin:4px auto;display:block;border:1px solid #ddd}
+      .pname{font-size:15px;font-weight:900;color:#0f172a;margin:4px 0}
+      .bc{width:90%;height:50px;margin:4px auto;display:block}
+      .bcn{font-size:13px;font-family:monospace;font-weight:700;letter-spacing:1px}
+      .meta{font-size:11px;color:#666;margin:4px 0}
+      .stock{font-size:13px;color:#0f172a;background:#f1f5f9;border-radius:6px;padding:5px;margin:6px 0}
+      .stock b{font-size:16px;color:#2563eb}
+      table{width:100%;border-collapse:collapse;margin-top:4px}
+      th{background:#0f172a;color:#fff;padding:5px;font-size:11px}
+      td{border:1px solid #ddd;padding:5px;font-size:12px;text-align:center}
+      tr.need{background:#dcfce7;font-weight:900}
+      tr.need td{color:#166534}
+      .note{font-size:10px;color:#888;margin-top:6px}
+      @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{border:none;margin:0 auto}}
+    </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length} بوليصة)</button></div>
+    <div class="wrap">${slipHtml}</div>
+    <script>
+      document.querySelectorAll('svg.bc').forEach(function(el){
+        try{ JsBarcode(el, el.getAttribute('data-code'), {format:"CODE128",width:1.8,height:45,displayValue:false,margin:2}); }catch(e){}
+      });
+    <\/script>
+    </body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 function printReport(items, title, brandName, images = {}) {
   const rows = buildRows(items);
   const now = new Date();
@@ -370,7 +459,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
 });
 
 // ─── منتجات المصنع ───────────────────────────────────────────
-const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, title }) => {
+const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, onBack, title }) => {
   const [search, setSearch] = useState("");
   const [scan, setScan] = useState(false);
   const [visible, setVisible] = useState(30);
@@ -405,28 +494,37 @@ const ProductList = memo(({ items, images, redMax, greenMin, onSelect, onBack, t
         <button onClick={()=>exportExcelFull(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
         <button onClick={()=>printReport(filtered, title, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
+      <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO")} className="w-full bg-purple-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ اطبع بوليصات التوزيع</button>
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
       <div className="space-y-2">
         {filtered.slice(0, visible).map(x => {
-          const c = colorOf(x.soldPct);
-          // كشف التكرار: جاء في أكثر من كونتينر
+          const soldOut = x.closing <= 0;
+          const c = soldOut
+            ? { border:"#64748b", txt:"#94a3b8", bg:"rgba(100,116,139,0.12)" }
+            : colorOf(x.soldPct);
           const conts = [...new Set((x.p.purchases ?? []).map(pu => pu.container ?? x.p.container).filter(Boolean))];
           const isDup = conts.length > 1;
           return (
             <div key={x.p.barcode} onClick={()=>onSelect(x.p)} style={{
               background:c.bg,
-              border: isDup ? "2px solid #a855f7" : `1.5px solid ${c.border}`,
-              borderRadius:"14px",padding:"12px",cursor:"pointer",position:"relative"
+              border: soldOut ? "1.5px solid #64748b" : isDup ? "2px solid #a855f7" : `1.5px solid ${c.border}`,
+              borderRadius:"14px",padding:"12px",cursor:"pointer",position:"relative",
+              opacity: soldOut ? 0.7 : 1
             }}>
-              {isDup && (
+              {soldOut && (
+                <div style={{position:"absolute",top:"-9px",left:"10px",background:"#64748b",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>
+                  SOLD OUT
+                </div>
+              )}
+              {!soldOut && isDup && (
                 <div style={{position:"absolute",top:"-9px",left:"10px",background:"#a855f7",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>
                   🔁 مكرر · {conts.length} كونتينر
                 </div>
               )}
               <div className="flex items-start gap-3">
                 {images?.[x.p.barcode]
-                  ? <img src={images[x.p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                  ? <img src={images[x.p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" style={{filter:soldOut?"grayscale(1)":"none"}} />
                   : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
@@ -566,7 +664,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   // عرض: منتجات المصنع
   if (factory) {
     const f = factories.find(x=>x.code===factory);
-    return <ProductList items={factoryItems} images={images} redMax={redMax} greenMin={greenMin}
+    return <ProductList items={factoryItems} images={images} periods={periods} redMax={redMax} greenMin={greenMin}
       onSelect={setSelected} onBack={()=>setFactory(null)}
       title={`🏭 ${f?.code}${f?.name?` · ${f.name}`:""}`} />;
   }
