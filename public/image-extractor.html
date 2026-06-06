@@ -88,59 +88,85 @@ $("file").onchange = async (e) => {
   try {
     const buf = await f.arrayBuffer();
     const zip = await JSZip.loadAsync(buf);
+    const fileNames = Object.keys(zip.files);
 
-    // 1) نقرأ sharedStrings (النصوص) و sheet1
-    const sheetXml = await zip.file(/xl\/worksheets\/sheet1\.xml/i)?.[0]?.async("string")
-      ?? await (Object.keys(zip.files).find(n=>/xl\/worksheets\/sheet1\.xml/i.test(n)) ? zip.files[Object.keys(zip.files).find(n=>/xl\/worksheets\/sheet1\.xml/i.test(n))].async("string") : null);
-
-    // 2) نطلّع الصور من xl/media بالترتيب
-    const mediaNames = Object.keys(zip.files).filter(n=>/xl\/media\/image/i.test(n))
-      .sort((a,b)=>{
-        const na=parseInt(a.match(/image(\d+)/i)?.[1]??0);
-        const nb=parseInt(b.match(/image(\d+)/i)?.[1]??0);
-        return na-nb;
+    // 1) sharedStrings
+    const ssName = fileNames.find(n=>/xl\/sharedStrings\.xml/i.test(n));
+    let shared = [];
+    if(ssName){
+      const ss = await zip.files[ssName].async("string");
+      shared = [...ss.matchAll(/<si>([\s\S]*?)<\/si>/g)].map(m=>{
+        const txt = [...m[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(x=>x[1]).join("");
+        return txt;
       });
-    log(`عدد الصور في الملف: ${mediaNames.length}`,"info");
-
-    // 3) نقرأ الباركودات من الشيت (sharedStrings)
-    const ssFile = Object.keys(zip.files).find(n=>/xl\/sharedStrings\.xml/i.test(n));
-    let strings = [];
-    if(ssFile){
-      const ss = await zip.files[ssFile].async("string");
-      strings = [...ss.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(m=>m[1]);
     }
-    // نطلّع الباركودات + الاسم اللي بعده (الاسم عمود مجاور للباركود)
-    const items = [];
-    for(let i=0;i<strings.length;i++){
-      const s = strings[i];
-      if(/^\d{8}B\d{3}$/.test(s) || /^\d{12,13}$/.test(s)){
-        // الاسم: النص التالي اللي مو باركود ولا رقم
-        let nm = "";
-        for(let j=i+1;j<Math.min(i+4,strings.length);j++){
-          const t = strings[j];
-          if(!/^\d{8}B\d{3}$/.test(t) && !/^\d{12,13}$/.test(t) && !/^\d+(\.\d+)?$/.test(t) && t.trim()){ nm=t.trim(); break; }
-        }
-        items.push({ barcode:s, name:nm });
+
+    // 2) sheet — نقرأ الخلايا (صف، عمود، قيمة)
+    const sheetName = fileNames.find(n=>/xl\/worksheets\/sheet1\.xml/i.test(n)) || fileNames.find(n=>/xl\/worksheets\/.*\.xml/i.test(n));
+    const sheetXml = await zip.files[sheetName].async("string");
+    // خريطة: صف → نص الباركود في ذلك الصف
+    const rowBarcode = {};
+    const cellRe = /<c r="([A-Z]+)(\d+)"[^>]*?(t="(\w+)")?[^>]*>(?:<v>([^<]*)<\/v>)?/g;
+    let cm;
+    while((cm = cellRe.exec(sheetXml))){
+      const col = cm[1], row = parseInt(cm[2]), type = cm[4], v = cm[5];
+      if(v===undefined) continue;
+      let val = v;
+      if(type==="s"){ val = shared[parseInt(v)] ?? ""; } // sharedString
+      val = String(val).trim();
+      if(/^\d{8}B\d{3}$/.test(val) || /^\d{12,13}$/.test(val)){
+        rowBarcode[row] = val; // باركود هذا الصف
       }
     }
-    const barcodes = items.map(x=>x.barcode);
-    log(`عدد الباركودات: ${barcodes.length}`,"info");
 
-    if(mediaNames.length===0){ log("لا توجد صور في الملف","err"); return; }
-    if(barcodes.length===0){ log("لا توجد باركودات — تأكد من العمود","err"); return; }
-
-    // 4) نربط بالترتيب: صورة[i] ← باركود[i]
-    const count = Math.min(mediaNames.length, barcodes.length);
-    matched = [];
-    for(let i=0;i<count;i++){
-      const blob = await zip.files[mediaNames[i]].async("base64");
-      const ext = mediaNames[i].split(".").pop();
-      const dataUrl = `data:image/${ext};base64,${blob}`;
-      const small = await shrink(dataUrl);
-      matched.push({ barcode: items[i].barcode, name: items[i].name, img: small });
+    // 3) drawings — نربط كل صورة بصفها
+    const drawNames = fileNames.filter(n=>/xl\/drawings\/drawing\d+\.xml$/i.test(n));
+    // rels: rId → ملف الصورة
+    const relName = fileNames.find(n=>/xl\/drawings\/_rels\/drawing\d+\.xml\.rels/i.test(n));
+    const relMap = {};
+    if(relName){
+      const rels = await zip.files[relName].async("string");
+      [...rels.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)].forEach(m=>{
+        relMap[m[1]] = m[2].replace(/\.\.\//g,"").replace(/^/,"xl/").replace("xl/xl/","xl/");
+      });
+    }
+    // كل anchor: صف + rId
+    let imgRow = []; // {row, mediaPath}
+    for(const dn of drawNames){
+      const dxml = await zip.files[dn].async("string");
+      // twoCellAnchor / oneCellAnchor: <xdr:from><xdr:row>R</xdr:row> ... r:embed="rIdX"
+      const anchors = dxml.split(/<xdr:(?:two|one)CellAnchor/).slice(1);
+      anchors.forEach(a=>{
+        const rowM = a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+        const embM = a.match(/r:embed="([^"]+)"/);
+        if(rowM && embM){
+          const row = parseInt(rowM[1]) + 1; // xdr صفر-based
+          const media = relMap[embM[1]];
+          if(media) imgRow.push({ row, media });
+        }
+      });
     }
 
-    log(`تم ربط ${matched.length} صورة بباركوداتها ✓`,"ok");
+    log(`خلايا الباركود: ${Object.keys(rowBarcode).length} · صور بمواقع: ${imgRow.length}`,"info");
+
+    // 4) نربط كل صورة بالباركود اللي في نفس صفها (أو أقرب صف فوقها)
+    matched = [];
+    const seen = new Set();
+    for(const ir of imgRow){
+      // نلقى باركود نفس الصف، أو أقرب صف تحته/فوقه
+      let bc = rowBarcode[ir.row];
+      if(!bc){ for(let d=1;d<=3;d++){ if(rowBarcode[ir.row+d]){bc=rowBarcode[ir.row+d];break;} if(rowBarcode[ir.row-d]){bc=rowBarcode[ir.row-d];break;} } }
+      if(!bc || seen.has(bc)) continue;
+      const mediaFile = zip.files[ir.media];
+      if(!mediaFile) continue;
+      const blob = await mediaFile.async("base64");
+      const ext = ir.media.split(".").pop();
+      const small = await shrink(`data:image/${ext};base64,${blob}`);
+      if(small){ matched.push({ barcode: bc, name: "", img: small }); seen.add(bc); }
+    }
+
+    log(`تم ربط ${matched.length} صورة بمواقعها الصحيحة ✓`,"ok");
+    if(matched.length===0){ log("لم يتم ربط أي صورة — تأكد أن الملف فيه صور وباركود","err"); return; }
 
     // معاينة أول 30
     $("preview").innerHTML = matched.slice(0,30).map(m=>`
