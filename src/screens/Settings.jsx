@@ -331,6 +331,18 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         </Card>
       )}
 
+      {/* أداة استخراج الصور من Excel */}
+      <Card>
+        <SectionHeader icon="📷" title="استخراج صور من Excel" subtitle="ترفع ملف الفاتورة بالصور · تربط تلقائياً" />
+        <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3">
+          ترفع ملف Excel (نفس فاتورة المشتريات + عمود الصور)، تستخرج الصور وتربطها بالباركود تلقائياً
+        </div>
+        <a href="https://baro-inventory-qmpp.vercel.app/image-extractor.html" target="_blank" rel="noopener noreferrer"
+          className="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl font-bold text-sm">
+          📷 افتح أداة استخراج الصور
+        </a>
+      </Card>
+
       {/* رفع صور مجمّع */}
       <Card>
         <SectionHeader icon="📷" title="رفع صور مجمّعة" subtitle="أسماء الملفات = الباركود" />
