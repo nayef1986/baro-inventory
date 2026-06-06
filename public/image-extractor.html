@@ -109,8 +109,21 @@ $("file").onchange = async (e) => {
       const ss = await zip.files[ssFile].async("string");
       strings = [...ss.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(m=>m[1]);
     }
-    // نطلّع الباركودات (نمط: أرقام+B+أرقام أو 12-13 رقم)
-    const barcodes = strings.filter(s=>/^\d{8}B\d{3}$/.test(s) || /^\d{12,13}$/.test(s));
+    // نطلّع الباركودات + الاسم اللي بعده (الاسم عمود مجاور للباركود)
+    const items = [];
+    for(let i=0;i<strings.length;i++){
+      const s = strings[i];
+      if(/^\d{8}B\d{3}$/.test(s) || /^\d{12,13}$/.test(s)){
+        // الاسم: النص التالي اللي مو باركود ولا رقم
+        let nm = "";
+        for(let j=i+1;j<Math.min(i+4,strings.length);j++){
+          const t = strings[j];
+          if(!/^\d{8}B\d{3}$/.test(t) && !/^\d{12,13}$/.test(t) && !/^\d+(\.\d+)?$/.test(t) && t.trim()){ nm=t.trim(); break; }
+        }
+        items.push({ barcode:s, name:nm });
+      }
+    }
+    const barcodes = items.map(x=>x.barcode);
     log(`عدد الباركودات: ${barcodes.length}`,"info");
 
     if(mediaNames.length===0){ log("لا توجد صور في الملف","err"); return; }
@@ -124,14 +137,14 @@ $("file").onchange = async (e) => {
       const ext = mediaNames[i].split(".").pop();
       const dataUrl = `data:image/${ext};base64,${blob}`;
       const small = await shrink(dataUrl);
-      matched.push({ barcode: barcodes[i], img: small });
+      matched.push({ barcode: items[i].barcode, name: items[i].name, img: small });
     }
 
     log(`تم ربط ${matched.length} صورة بباركوداتها ✓`,"ok");
 
     // معاينة أول 30
     $("preview").innerHTML = matched.slice(0,30).map(m=>`
-      <div class="row"><img src="${m.img}"/><div><div class="bc">${m.barcode}</div></div></div>`).join("")
+      <div class="row"><img src="${m.img}"/><div><div class="nm">${m.name||"—"}</div><div class="bc">${m.barcode}</div></div></div>`).join("")
       + (matched.length>30?`<div style="text-align:center;color:#888;font-size:12px">و ${matched.length-30} أكثر…</div>`:"");
     $("previewCard").style.display = "block";
 
