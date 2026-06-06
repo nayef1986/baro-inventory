@@ -88,85 +88,40 @@ $("file").onchange = async (e) => {
   try {
     const buf = await f.arrayBuffer();
     const zip = await JSZip.loadAsync(buf);
-    const fileNames = Object.keys(zip.files);
 
-    // 1) sharedStrings
-    const ssName = fileNames.find(n=>/xl\/sharedStrings\.xml/i.test(n));
-    let shared = [];
-    if(ssName){
-      const ss = await zip.files[ssName].async("string");
-      shared = [...ss.matchAll(/<si>([\s\S]*?)<\/si>/g)].map(m=>{
-        const txt = [...m[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(x=>x[1]).join("");
-        return txt;
+    // الصور من media بالترتيب
+    const mediaNames = Object.keys(zip.files).filter(n=>/xl\/media\/image/i.test(n))
+      .sort((a,b)=>{
+        const na=parseInt(a.match(/image(\d+)/i)?.[1]??0);
+        const nb=parseInt(b.match(/image(\d+)/i)?.[1]??0);
+        return na-nb;
       });
-    }
+    log(`عدد الصور في الملف: ${mediaNames.length}`,"info");
 
-    // 2) sheet — نقرأ الخلايا (صف، عمود، قيمة)
-    const sheetName = fileNames.find(n=>/xl\/worksheets\/sheet1\.xml/i.test(n)) || fileNames.find(n=>/xl\/worksheets\/.*\.xml/i.test(n));
-    const sheetXml = await zip.files[sheetName].async("string");
-    // خريطة: صف → نص الباركود في ذلك الصف
-    const rowBarcode = {};
-    const cellRe = /<c r="([A-Z]+)(\d+)"[^>]*?(t="(\w+)")?[^>]*>(?:<v>([^<]*)<\/v>)?/g;
-    let cm;
-    while((cm = cellRe.exec(sheetXml))){
-      const col = cm[1], row = parseInt(cm[2]), type = cm[4], v = cm[5];
-      if(v===undefined) continue;
-      let val = v;
-      if(type==="s"){ val = shared[parseInt(v)] ?? ""; } // sharedString
-      val = String(val).trim();
-      if(/^\d{8}B\d{3}$/.test(val) || /^\d{12,13}$/.test(val)){
-        rowBarcode[row] = val; // باركود هذا الصف
-      }
+    // الباركودات من sharedStrings
+    const ssFile = Object.keys(zip.files).find(n=>/xl\/sharedStrings\.xml/i.test(n));
+    let strings = [];
+    if(ssFile){
+      const ss = await zip.files[ssFile].async("string");
+      strings = [...ss.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(m=>m[1]);
     }
+    const barcodes = strings.filter(s=>/^\d{8}B\d{3}$/.test(s) || /^\d{12,13}$/.test(s));
+    log(`عدد الباركودات: ${barcodes.length}`,"info");
 
-    // 3) drawings — نربط كل صورة بصفها
-    const drawNames = fileNames.filter(n=>/xl\/drawings\/drawing\d+\.xml$/i.test(n));
-    // rels: rId → ملف الصورة
-    const relName = fileNames.find(n=>/xl\/drawings\/_rels\/drawing\d+\.xml\.rels/i.test(n));
-    const relMap = {};
-    if(relName){
-      const rels = await zip.files[relName].async("string");
-      [...rels.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)].forEach(m=>{
-        relMap[m[1]] = m[2].replace(/\.\.\//g,"").replace(/^/,"xl/").replace("xl/xl/","xl/");
-      });
-    }
-    // كل anchor: صف + rId
-    let imgRow = []; // {row, mediaPath}
-    for(const dn of drawNames){
-      const dxml = await zip.files[dn].async("string");
-      // twoCellAnchor / oneCellAnchor: <xdr:from><xdr:row>R</xdr:row> ... r:embed="rIdX"
-      const anchors = dxml.split(/<xdr:(?:two|one)CellAnchor/).slice(1);
-      anchors.forEach(a=>{
-        const rowM = a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
-        const embM = a.match(/r:embed="([^"]+)"/);
-        if(rowM && embM){
-          const row = parseInt(rowM[1]) + 1; // xdr صفر-based
-          const media = relMap[embM[1]];
-          if(media) imgRow.push({ row, media });
-        }
-      });
-    }
+    if(mediaNames.length===0){ log("لا توجد صور في الملف","err"); return; }
+    if(barcodes.length===0){ log("لا توجد باركودات — تأكد من العمود","err"); return; }
 
-    log(`خلايا الباركود: ${Object.keys(rowBarcode).length} · صور بمواقع: ${imgRow.length}`,"info");
-
-    // 4) نربط كل صورة بالباركود اللي في نفس صفها (أو أقرب صف فوقها)
+    // ربط بالترتيب
+    const count = Math.min(mediaNames.length, barcodes.length);
     matched = [];
-    const seen = new Set();
-    for(const ir of imgRow){
-      // نلقى باركود نفس الصف، أو أقرب صف تحته/فوقه
-      let bc = rowBarcode[ir.row];
-      if(!bc){ for(let d=1;d<=3;d++){ if(rowBarcode[ir.row+d]){bc=rowBarcode[ir.row+d];break;} if(rowBarcode[ir.row-d]){bc=rowBarcode[ir.row-d];break;} } }
-      if(!bc || seen.has(bc)) continue;
-      const mediaFile = zip.files[ir.media];
-      if(!mediaFile) continue;
-      const blob = await mediaFile.async("base64");
-      const ext = ir.media.split(".").pop();
+    for(let i=0;i<count;i++){
+      const blob = await zip.files[mediaNames[i]].async("base64");
+      const ext = mediaNames[i].split(".").pop();
       const small = await shrink(`data:image/${ext};base64,${blob}`);
-      if(small){ matched.push({ barcode: bc, name: "", img: small }); seen.add(bc); }
+      if(small) matched.push({ barcode: barcodes[i], name: "", img: small });
     }
-
-    log(`تم ربط ${matched.length} صورة بمواقعها الصحيحة ✓`,"ok");
-    if(matched.length===0){ log("لم يتم ربط أي صورة — تأكد أن الملف فيه صور وباركود","err"); return; }
+    log(`تم ربط ${matched.length} صورة ✓`,"ok");
+    if(matched.length===0){ log("لم يتم ربط أي صورة","err"); return; }
 
     // معاينة أول 30
     $("preview").innerHTML = matched.slice(0,30).map(m=>`
