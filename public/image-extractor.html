@@ -99,17 +99,19 @@ $("file").onchange = async (e) => {
         [...m[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(x=>x[1]).join(""));
     }
 
-    // 2) sheet1 — صف → باركود (نفحص كل خلايا الصف، نلقى الباركود)
+    // 2) sheet1 — صف → باركود (نقرأ خلايا العمود C = ITEM NO)
     const sheetXml = await zip.files["xl/worksheets/sheet1.xml"].async("string");
     const rowBarcode = {};
-    // كل صف <row r="N"> ... خلاياه
     [...sheetXml.matchAll(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)].forEach(rm=>{
       const row = parseInt(rm[1]);
       const cells = rm[2];
-      // كل خلية: نطلّع قيمتها
-      [...cells.matchAll(/<c[^>]*?(?:t="(\w+)")?[^>]*><v>([^<]*)<\/v>/g)].forEach(cm=>{
-        const type=cm[1], v=cm[2];
-        let val = type==="s" ? (shared[parseInt(v)]??"") : v;
+      // كل خلية: <c r="C6" s="7" t="s"><v>8</v></c> — t قد يكون بأي موضع
+      [...cells.matchAll(/<c\s+r="([A-Z]+)\d+"([^>]*)>\s*<v>([^<]*)<\/v>/g)].forEach(cm=>{
+        const col = cm[1];
+        const attrs = cm[2];
+        const v = cm[3];
+        const isStr = /t="s"/.test(attrs);
+        let val = isStr ? (shared[parseInt(v)] ?? "") : v;
         val = String(val).trim();
         if(/^\d{8}B\d{3}$/.test(val) || /^\d{12,13}$/.test(val)){
           rowBarcode[row] = val;
