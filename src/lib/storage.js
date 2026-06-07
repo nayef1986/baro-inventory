@@ -73,18 +73,24 @@ function cacheClear() {
 
 async function load(key) {
   const remote = await sbGet(key);
-  if (remote !== null) { cacheSet(key, remote); return remote; }
+  if (remote !== null) {
+    if (key !== KEYS.IMAGES) cacheSet(key, remote); // الصور ما تُخزّن بالكاش
+    return remote;
+  }
   return cacheGet(key);
 }
 
 async function save(key, value) {
-  cacheSet(key, value);
+  // لا نخزّن الصور في الكاش المحلي (تملأ localStorage وتفسد باقي البيانات)
+  if (key !== KEYS.IMAGES) cacheSet(key, value);
   return await sbSet(key, value);
 }
 
 // ─── تهيئة ───────────────────────────────────────────────────
 
 export async function initStorage() {
+  // ننظّف الصور العالقة في الكاش (تملأ المساحة وتفسد البيانات)
+  try { localStorage.removeItem(KEYS.IMAGES); } catch {}
   const meta = await load(KEYS.META);
   if (!meta) {
     await save(KEYS.META,     { version: VERSION, created: new Date().toISOString() });
@@ -116,8 +122,7 @@ export async function loadPeriods() {
 }
 
 export async function savePeriods(periods) {
-  const trimmed = periods.slice(-52);
-  return await save(KEYS.PERIODS, trimmed);
+  return await save(KEYS.PERIODS, periods);
 }
 
 export async function addPeriod(period) {
