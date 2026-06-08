@@ -225,6 +225,40 @@ function printReport(items, title, brandName, images = {}) {
   if (w) { w.document.write(html); w.document.close(); }
 }
 
+// ─── عارض الصور الموحّد (فتح + تكبير + حفظ) ──────────────────
+const ImageViewer = memo(({ src, name, onClose }) => {
+  const save = async () => {
+    try {
+      // نجيب الصورة كـ blob ونحفظها (متوافق آيفون عبر المشاركة)
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const fileName = (name || "image").replace(/[^\w\u0600-\u06FF]/g,"_") + ".jpg";
+      if (navigator.canShare) {
+        const file = new File([blob], fileName, { type: blob.type });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file] });
+          return;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fileName; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    } catch { alert("تعذّر الحفظ — اضغط مطوّل على الصورة لحفظها"); }
+  };
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <img src={src} alt={name} onClick={e=>e.stopPropagation()} style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:"14px",objectFit:"contain"}} />
+      {name && <div style={{color:"#fff",fontWeight:"700",marginTop:"12px",textAlign:"center"}}>{name}</div>}
+      <div style={{display:"flex",gap:"10px",marginTop:"16px"}} onClick={e=>e.stopPropagation()}>
+        <button onClick={save} style={{padding:"12px 24px",borderRadius:"100px",border:"none",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>💾 حفظ الصورة</button>
+        <button onClick={onClose} style={{padding:"12px 24px",borderRadius:"100px",border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"#fff",fontSize:"14px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>إغلاق</button>
+      </div>
+      <div style={{color:"rgba(255,255,255,0.4)",fontSize:"11px",marginTop:"10px"}}>اضغط خارج الصورة للإغلاق</div>
+    </div>
+  );
+});
+
 // ─── زر نسخ الباركود ─────────────────────────────────────────
 const CopyBarcode = memo(({ barcode }) => {
   const [copied, setCopied] = useState(false);
@@ -462,6 +496,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
 const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, onBack, title }) => {
   const [search, setSearch] = useState("");
   const [scan, setScan] = useState(false);
+  const [viewImg, setViewImg] = useState(null);
   const [visible, setVisible] = useState(30);
 
   const filtered = useMemo(() => {
@@ -478,6 +513,7 @@ const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, 
   return (
     <div className="space-y-3">
       {scan && <BarcodeScanner onDetect={(code)=>{ setSearch(code); setScan(false); }} onClose={()=>setScan(false)} />}
+      {viewImg && <ImageViewer src={viewImg.src} name={viewImg.name} onClose={()=>setViewImg(null)} />}
       <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع</button>
       <div className="font-black text-slate-100">{title}</div>
 
@@ -524,7 +560,7 @@ const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, 
               )}
               <div className="flex items-start gap-3">
                 {images?.[x.p.barcode]
-                  ? <img src={images[x.p.barcode]} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" style={{filter:soldOut?"grayscale(1)":"none"}} />
+                  ? <img src={images[x.p.barcode]} alt="" onClick={(e)=>{e.stopPropagation(); setViewImg({src:images[x.p.barcode], name:x.p.name});}} className="w-14 h-14 rounded-lg object-cover shrink-0" style={{filter:soldOut?"grayscale(1)":"none"}} />
                   : <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
