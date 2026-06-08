@@ -524,27 +524,22 @@ const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, 
               )}
               <div className="flex items-start gap-3">
                 {images?.[x.p.barcode]
-                  ? <img src={images[x.p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" style={{filter:soldOut?"grayscale(1)":"none"}} />
-                  : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
+                  ? <img src={images[x.p.barcode]} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" style={{filter:soldOut?"grayscale(1)":"none"}} />
+                  : <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
-                  {/* معلومات تفصيلية */}
-                  <div className="flex gap-2 flex-wrap mt-1.5 text-xs">
-                    <span className="text-blue-400">جاء {fmtN(x.bought)}</span>
-                    <span className="text-amber-400">باع {fmtN(x.sold)}</span>
-                    <span className="text-slate-300">باقي {fmtN(x.closing)}</span>
-                  </div>
-                  <div className="flex gap-2 flex-wrap mt-0.5 text-xs">
-                    <span className="text-red-300">شراء {fmtN(num(x.p.purchases?.slice(-1)[0]?.buyPrice??0))}﷼</span>
-                    <span className="text-emerald-300">بيع {fmtN(num(x.p.sellPrice))}﷼</span>
-                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div style={{fontSize:"18px",fontWeight:"900",color:c.txt}}>{fmtN(x.closing)}</div>
-                  <div className="text-xs text-slate-500">باقي</div>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:c.txt,marginTop:"2px"}}>{fmtPct(x.soldPct)} باع</div>
-                </div>
+                <div style={{fontSize:"20px",fontWeight:"900",color:c.txt}} className="shrink-0">{fmtPct(x.soldPct)}</div>
+              </div>
+              {/* شارات منظّمة زي المصنع */}
+              <div className="flex gap-1.5 flex-wrap mt-2">
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(x.bought)}</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(x.closing)}</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/20 text-red-300">شراء {fmtN(num(x.p.purchases?.slice(-1)[0]?.buyPrice??0))}﷼</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/20 text-emerald-300">بيع {fmtN(num(x.p.sellPrice))}﷼</span>
+              </div>
               </div>
             </div>
           );
@@ -707,4 +702,3 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     </div>
   );
 }
- 
