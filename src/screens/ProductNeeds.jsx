@@ -540,7 +540,6 @@ const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, 
                 <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/20 text-red-300">شراء {fmtN(num(x.p.purchases?.slice(-1)[0]?.buyPrice??0))}﷼</span>
                 <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/20 text-emerald-300">بيع {fmtN(num(x.p.sellPrice))}﷼</span>
               </div>
-              </div>
             </div>
           );
         })}
