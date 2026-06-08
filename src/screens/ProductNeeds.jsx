@@ -529,6 +529,16 @@ const ProductList = memo(({ items, images, periods, redMax, greenMin, onSelect, 
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
+                  {/* معلومات تفصيلية */}
+                  <div className="flex gap-2 flex-wrap mt-1.5 text-xs">
+                    <span className="text-blue-400">جاء {fmtN(x.bought)}</span>
+                    <span className="text-amber-400">باع {fmtN(x.sold)}</span>
+                    <span className="text-slate-300">باقي {fmtN(x.closing)}</span>
+                  </div>
+                  <div className="flex gap-2 flex-wrap mt-0.5 text-xs">
+                    <span className="text-red-300">شراء {fmtN(num(x.p.purchases?.slice(-1)[0]?.buyPrice??0))}﷼</span>
+                    <span className="text-emerald-300">بيع {fmtN(num(x.p.sellPrice))}﷼</span>
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   <div style={{fontSize:"18px",fontWeight:"900",color:c.txt}}>{fmtN(x.closing)}</div>
@@ -697,3 +707,4 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     </div>
   );
 }
+ 
