@@ -227,14 +227,13 @@ function printPolicies(items, periods, images, brandName) {
 }
 
 // ─── خطة النقل المجمّعة (كل المنتجات) ────────────────────────
-function printTransferPlan(items, periods, title, brandName, cityOverrides = {}) {
-  // نحسب نقل كل منتج، ونجمّع بالفرع المصدر
-  const bySource = {}; // فرع مصدر → [نقلات]
-  const fromWarehouse = []; // من المستودع
+// ─── خطة النقل/التموين الاحترافية (كل المنتجات) ──────────────
+function printTransferPlan(items, periods, title, brandName, images = {}, cityOverrides = {}) {
+  const bySource = {};
+  const fromWarehouse = [];
 
   items.forEach(x => {
     const p = x.p;
-    // نحسب فروع المنتج
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
@@ -258,56 +257,95 @@ function printTransferPlan(items, periods, title, brandName, cityOverrides = {})
   });
 
   const totalMoves = Object.values(bySource).reduce((s,a)=>s+a.length,0) + fromWarehouse.length;
-  if (totalMoves === 0) { alert("لا توجد عمليات نقل مقترحة"); return; }
+  if (totalMoves === 0) { alert("لا توجد عمليات نقل/تموين مقترحة"); return; }
 
   const now = new Date();
   const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
   const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+  const refNo = "TR-" + now.getFullYear() + (now.getMonth()+1+"").padStart(2,"0") + (now.getDate()+"").padStart(2,"0") + "-" + (now.getHours()+"").padStart(2,"0")+(now.getMinutes()+"").padStart(2,"0");
 
-  // قسم المستودع
+  const whQty = fromWarehouse.reduce((s,m)=>s+m.qty,0);
+  const trQty = Object.values(bySource).flat().reduce((s,m)=>s+m.qty,0);
+
+  const imgCell = (bc) => {
+    const im = images?.[bc];
+    return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`;
+  };
+
   let whHtml = "";
   if (fromWarehouse.length) {
-    whHtml = `<div class="src"><div class="srch">🏬 من المستودع الرئيسي (${fromWarehouse.length})</div>
-      <table><tr><th>المنتج</th><th>الباركود</th><th>إلى فرع</th><th>الكمية</th></tr>
-      ${fromWarehouse.map(m=>`<tr><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td>${m.to}</td><td class="q">${fmtN(m.qty)}</td></tr>`).join("")}
-      </table></div>`;
+    whHtml = `<div class="sec">
+      <div class="sech wh">🏬 التموين من المستودع الرئيسي <span class="cnt">${fromWarehouse.length} صنف</span></div>
+      <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>إلى فرع</th><th>الكمية</th></tr></thead><tbody>
+      ${fromWarehouse.map(m=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td class="to">${m.to}</td><td class="q">${fmtN(m.qty)}</td></tr>`).join("")}
+      </tbody></table></div>`;
   }
 
-  // أقسام الفروع المصدر
   const srcHtml = Object.entries(bySource).map(([src, moves]) => `
-    <div class="src"><div class="srch">🏪 من فرع: ${src} (${moves.length})</div>
-      <table><tr><th>المنتج</th><th>الباركود</th><th>إلى فرع</th><th>الكمية</th><th>المنطقة</th></tr>
-      ${moves.map(m=>`<tr><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td>${m.to}</td><td class="q">${fmtN(m.qty)}</td><td class="${m.sameCity?'same':'diff'}">${m.sameCity?'نفس المدينة ✓':m.toCity}</td></tr>`).join("")}
-      </table></div>`).join("");
+    <div class="sec">
+      <div class="sech tr">🔀 نقل من فرع: ${src} <span class="cnt">${moves.length} صنف</span></div>
+      <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>إلى فرع</th><th>الكمية</th><th>المنطقة</th></tr></thead><tbody>
+      ${moves.map(m=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td class="to">${m.to}</td><td class="q">${fmtN(m.qty)}</td><td class="${m.sameCity?'same':'diff'}">${m.sameCity?'نفس المدينة ✓':m.toCity}</td></tr>`).join("")}
+      </tbody></table></div>`).join("");
 
-  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة النقل</title>
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة التموين والنقل</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
       *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
-      body{background:#fff;color:#1a1a1a}
+      body{background:#f1f5f9;color:#1a1a1a}
       .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
       .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
       .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
-      .w{max-width:800px;margin:0 auto;padding:70px 16px 40px}
-      h1{text-align:center;color:#0f172a;margin-bottom:4px}
-      .date{text-align:center;color:#888;font-size:13px;margin-bottom:20px}
-      .src{margin-bottom:20px;page-break-inside:avoid}
-      .srch{background:#0f172a;color:#fff;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:900;font-size:15px}
+      .page{max-width:820px;margin:70px auto 30px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+      .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:18px}
+      .brand{font-size:26px;font-weight:900;color:#0f172a;letter-spacing:2px}
+      .ttl{font-size:15px;color:#475569;margin-top:2px}
+      .ref{text-align:left;font-size:12px;color:#64748b;line-height:1.7}
+      .ref b{color:#0f172a;font-size:14px}
+      .sum{display:flex;gap:10px;margin-bottom:20px}
+      .sum div{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center}
+      .sum .v{font-size:22px;font-weight:900;color:#0f172a}.sum .l{font-size:11px;color:#64748b;margin-top:2px}
+      .sec{margin-bottom:22px;page-break-inside:avoid}
+      .sech{padding:11px 16px;border-radius:10px 10px 0 0;font-weight:900;font-size:15px;color:#fff;display:flex;justify-content:space-between;align-items:center}
+      .sech.wh{background:linear-gradient(135deg,#2563eb,#1d4ed8)}
+      .sech.tr{background:linear-gradient(135deg,#ea580c,#c2410c)}
+      .cnt{font-size:12px;font-weight:700;background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:100px}
       table{width:100%;border-collapse:collapse}
-      th{background:#e2e8f0;padding:8px;font-size:12px}
-      td{border:1px solid #e2e8f0;padding:9px;text-align:center;font-size:13px}
-      td.nm{text-align:right;font-weight:700}td.bc{font-family:monospace;font-size:11px;color:#666}
-      td.q{font-weight:900;font-size:16px;color:#2563eb}
-      td.same{color:#16a34a;font-weight:700}td.diff{color:#d97706}
-      .note{text-align:center;color:#888;font-size:12px;margin-top:16px}
-      @media print{.tb{display:none}.w{padding:16px}}
+      th{background:#e2e8f0;padding:8px 6px;font-size:11px;color:#334155}
+      td{border:1px solid #e2e8f0;padding:7px 6px;text-align:center;font-size:12px;vertical-align:middle}
+      td.chk{font-size:18px;color:#94a3b8;width:30px}
+      td.imgc{width:50px;padding:3px}
+      .th{width:44px;height:44px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+      .noimg{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
+      td.nm{text-align:right;font-weight:700;color:#0f172a}
+      td.bc{font-family:monospace;font-size:10px;color:#64748b}
+      td.to{font-weight:700;color:#0f172a}
+      td.q{font-size:18px;font-weight:900;color:#2563eb}
+      td.same{color:#16a34a;font-weight:700;font-size:11px}td.diff{color:#d97706;font-size:11px}
+      tr:nth-child(even) td{background:#fafbfc}
+      .ftr{margin-top:24px;border-top:2px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between}
+      .sign{text-align:center;font-size:12px;color:#64748b}
+      .sign .line{border-top:1px solid #94a3b8;width:160px;margin:30px auto 6px}
+      .warn{text-align:center;color:#d97706;font-size:12px;margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px}
+      @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
-    <div class="w">
-      <h1>🔀 خطة النقل والتموين</h1>
-      <div class="date">📅 ${greg} — ${hijri}هـ · ${title} · ${brandName ?? "ALBAROO"} · ${totalMoves} عملية</div>
+    <div class="page">
+      <div class="hd">
+        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">📋 خطة التموين والنقل بين الفروع</div></div>
+        <div class="ref"><b>${refNo}</b><br>📅 ${greg}<br>📅 ${hijri}هـ<br>${title}</div>
+      </div>
+      <div class="sum">
+        <div><div class="v">${totalMoves}</div><div class="l">إجمالي العمليات</div></div>
+        <div><div class="v">${fmtN(whQty)}</div><div class="l">قطعة من المستودع</div></div>
+        <div><div class="v">${fmtN(trQty)}</div><div class="l">قطعة نقل بين الفروع</div></div>
+      </div>
       ${whHtml}${srcHtml}
-      <div class="note">⚠️ الكميات تقديرية من المبيعات — تأكد من رف الفرع قبل النقل</div>
+      <div class="warn">⚠️ الكميات تقديرية من المبيعات — يُرجى التأكد من الرف الفعلي قبل التنفيذ</div>
+      <div class="ftr">
+        <div class="sign"><div class="line"></div>أمين المستودع</div>
+        <div class="sign"><div class="line"></div>المستلم</div>
+      </div>
     </div></body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); }
@@ -718,7 +756,7 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
         <button onClick={()=>printReport(filtered, title, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
       <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO")} className="w-full bg-purple-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ اطبع بوليصات التوزيع</button>
-      <button onClick={()=>printTransferPlan(filtered, periods, title, "ALBAROO", settings?.cityOverrides ?? {})} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🔀 خطة النقل بين الفروع</button>
+      <button onClick={()=>printTransferPlan(filtered, periods, title, "ALBAROO", images, settings?.cityOverrides ?? {})} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🔀 خطة النقل بين الفروع</button>
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
       <div className="space-y-2">
@@ -800,7 +838,7 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
         <button onClick={()=>exportExcelFull(allItems, container)} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
         <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
-      <button onClick={()=>printTransferPlan(allItems, periods, `كونتينر ${container}`, "ALBAROO", settings?.cityOverrides ?? {})} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold">🔀 خطة النقل بين الفروع</button>
+      <button onClick={()=>printTransferPlan(allItems, periods, `كونتينر ${container}`, "ALBAROO", images, settings?.cityOverrides ?? {})} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold">🔀 خطة النقل بين الفروع</button>
 
       {/* حدود التلوين */}
       <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
