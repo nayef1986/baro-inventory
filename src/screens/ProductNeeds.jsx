@@ -877,12 +877,23 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
 });
 
 // ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
-export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {} }) {
+export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {}, onSaveSettings }) {
   const [container, setContainer] = useState(null);
   const [factory,   setFactory]   = useState(null);
   const [selected,  setSelected]  = useState(null);
   const [redMax,    setRedMax]    = useState(30);
   const [greenMin,  setGreenMin]  = useState(60);
+  const [showHeroes, setShowHeroes] = useState(false);
+  const [starred, setStarred] = useState(settings?.starred ?? []);
+
+  // نجمة يدوية (toggle) — تُحفظ في الإعدادات (خفيف)
+  const toggleStar = async (barcode) => {
+    const next = starred.includes(barcode) ? starred.filter(b=>b!==barcode) : [...starred, barcode];
+    setStarred(next);
+    if (onSaveSettings) await onSaveSettings({ ...settings, starred: next });
+  };
+  // رابح تلقائي
+  const isWinner = (soldPct, margin) => soldPct > 70 && margin > 20;
 
   // حساب منتج (نسبة + متبقي)
   const calcItem = (p) => {
@@ -942,12 +953,61 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
   }
 
+  // عرض: الأبطال (الرابحون + المنجّمون)
+  if (showHeroes) {
+    const heroes = products.map(p => {
+      const x = calcItem(p);
+      const margin = x.p.buyPrice > 0 ? ((num(x.p.sellPrice) - num(x.p.purchases?.slice(-1)[0]?.buyPrice??0)) / num(x.p.purchases?.slice(-1)[0]?.buyPrice??1)) * 100 : 0;
+      const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+      const m = buyPrice > 0 ? ((num(p.sellPrice)-buyPrice)/buyPrice)*100 : 0;
+      const winner = isWinner(x.soldPct, m);
+      const star = starred.includes(p.barcode);
+      return { ...x, margin:m, winner, star };
+    }).filter(h => h.winner || h.star)
+      .sort((a,b)=> (b.winner?1:0)-(a.winner?1:0) || b.soldPct-a.soldPct);
+
+    return (
+      <div className="space-y-3">
+        <button onClick={()=>setShowHeroes(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
+        <div className="font-black text-slate-100 text-lg">⭐ الأبطال ({heroes.length})</div>
+        <div className="text-xs text-slate-500">المنتجات الرابحة 🎉 والمفضّلة ⭐</div>
+        <div className="space-y-2">
+          {heroes.map(h => (
+            <div key={h.p.barcode} style={{background:"rgba(212,168,83,0.08)",border:"1.5px solid rgba(212,168,83,0.3)",borderRadius:"14px",padding:"12px",position:"relative"}}>
+              {h.winner && <div style={{position:"absolute",top:"-9px",left:"10px",background:"linear-gradient(135deg,#d4a853,#b8935a)",color:"#0a0804",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>🎉 مبروك رابح</div>}
+              <div className="flex items-start gap-3">
+                {images?.[h.p.barcode]
+                  ? <img src={images[h.p.barcode]} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                  : <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
+                  <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
+                  <div className="flex gap-1.5 flex-wrap mt-1.5">
+                    <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/30 text-emerald-300">باع {fmtPct(h.soldPct)}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-lg bg-purple-900/30 text-purple-300">هامش {Math.round(h.margin)}%</span>
+                  </div>
+                </div>
+                <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
+                  {h.star ? "⭐" : "☆"}
+                </button>
+              </div>
+            </div>
+          ))}
+          {heroes.length === 0 && <div className="text-center text-slate-500 py-12">لا أبطال بعد — نجّم منتجاتك المفضّلة ⭐</div>}
+        </div>
+      </div>
+    );
+  }
+
   // عرض: الكونتينرات
   return (
     <div className="space-y-3">
-      <div>
-        <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
-        <div className="text-xs text-slate-500">اختر كونتينر → مصنع → منتج</div>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
+          <div className="text-xs text-slate-500">اختر كونتينر → مصنع → منتج</div>
+        </div>
+        <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-bold shrink-0">⭐ الأبطال</button>
       </div>
       <div className="space-y-2">
         {containers.map(c => {
