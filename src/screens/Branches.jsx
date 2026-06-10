@@ -532,12 +532,80 @@ const TransferSection = memo(({ branch, products, periods, images, settings, onS
     if (onSaveSettings) await onSaveSettings({ ...settings, transfers: next });
   };
 
+  // طباعة خطة النقل المحجوزة لهذا الفرع — مرتّبة بالفرع المصدر
+  const printPlan = () => {
+    const mine = reservations.filter(r => r.to === branch);
+    if (mine.length === 0) { alert("لا توجد حجوزات"); return; }
+    // نجمّع بالفرع المصدر
+    const bySource = {};
+    mine.forEach(r => { if (!bySource[r.from]) bySource[r.from] = []; bySource[r.from].push(r); });
+    const now = new Date();
+    const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
+    const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+    const ref = "TR-" + now.getFullYear() + (now.getMonth()+1+"").padStart(2,"0") + (now.getDate()+"").padStart(2,"0") + "-" + (now.getHours()+"").padStart(2,"0")+(now.getMinutes()+"").padStart(2,"0");
+    const totQty = mine.reduce((s,r)=>s+r.qty,0);
+    const imgCell = (bc) => { const im = images?.[bc]; return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`; };
+    const sections = Object.entries(bySource).map(([src, rows]) => `
+      <div class="sec">
+        <div class="sech">🏪 اجمع من فرع: ${src} <span class="cnt">${rows.length} صنف · ${fmtN(rows.reduce((s,r)=>s+r.qty,0))} قطعة</span></div>
+        <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>الكمية</th></tr></thead><tbody>
+        ${rows.map(r=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(r.barcode)}</td><td class="nm">${r.name}</td><td class="bc">${r.barcode}</td><td class="q">${fmtN(r.qty)}</td></tr>`).join("")}
+        </tbody></table>
+      </div>`).join("");
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة النقل</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+        *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+        body{background:#f1f5f9;color:#1a1a1a}
+        .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+        .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+        .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+        .page{max-width:800px;margin:70px auto 30px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+        .hd{display:flex;justify-content:space-between;border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:18px}
+        .brand{font-size:24px;font-weight:900;color:#0f172a;letter-spacing:2px}
+        .ttl{font-size:15px;color:#475569;margin-top:2px}
+        .to{font-size:14px;color:#2563eb;font-weight:900;margin-top:4px}
+        .ref{text-align:left;font-size:12px;color:#64748b;line-height:1.7}.ref b{color:#0f172a}
+        .sum{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px;text-align:center;margin-bottom:18px}
+        .sum b{font-size:22px;color:#0f172a}
+        .sec{margin-bottom:20px;page-break-inside:avoid}
+        .sech{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;padding:11px 16px;border-radius:10px 10px 0 0;font-weight:900;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+        .cnt{font-size:12px;background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:100px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#e2e8f0;padding:8px;font-size:11px;color:#334155}
+        td{border:1px solid #e2e8f0;padding:7px;text-align:center;font-size:12px;vertical-align:middle}
+        td.chk{font-size:18px;color:#94a3b8;width:30px}td.imgc{width:50px;padding:3px}
+        .th{width:44px;height:44px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+        .noimg{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
+        td.nm{text-align:right;font-weight:700;color:#0f172a}td.bc{font-family:monospace;font-size:10px;color:#64748b}
+        td.q{font-size:18px;font-weight:900;color:#2563eb}
+        tr:nth-child(even) td{background:#fafbfc}
+        .ftr{margin-top:24px;border-top:2px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between}
+        .sign{text-align:center;font-size:12px;color:#64748b}.sign .line{border-top:1px solid #94a3b8;width:150px;margin:28px auto 6px}
+        @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+      </style></head><body>
+      <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+      <div class="page">
+        <div class="hd">
+          <div><div class="brand">${settings?.brandName ?? "ALBAROO"}</div><div class="ttl">📋 خطة النقل والتجميع</div><div class="to">↓ إلى فرع: ${branch}</div></div>
+          <div class="ref"><b>${ref}</b><br>📅 ${greg}<br>📅 ${hijri}هـ</div>
+        </div>
+        <div class="sum">إجمالي المطلوب نقله: <b>${fmtN(totQty)}</b> قطعة · ${mine.length} صنف · من ${Object.keys(bySource).length} فرع</div>
+        ${sections}
+        <div class="ftr"><div class="sign"><div class="line"></div>أمين الفرع المرسِل</div><div class="sign"><div class="line"></div>مستلم فرع ${branch}</div></div>
+      </div></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
   // يحسب الفروع اللي عندها فائض من منتج معيّن (عند الطلب فقط — خفيف)
   const findSources = (barcode) => {
     const sources = [];
+    const closed = settings?.closedBranches ?? [];
     const allB = allBranches(periods);
     allB.forEach(b => {
       if (b === branch) return; // مو نفس الفرع المحتاج
+      if (closed.includes(b)) return; // الفرع المغلق ما ننقل منه
       let sold = 0;
       periods.forEach(per => { sold += num(per.sales?.[b]?.[barcode]?.qty ?? 0); });
       if (sold <= 0) return;
@@ -699,6 +767,7 @@ const TransferSection = memo(({ branch, products, periods, images, settings, onS
               </div>
             ))}
           </div>
+          <button onClick={printPlan} className="w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🖨️ اطبع خطة النقل</button>
         </div>
       )}
       <div className="text-xs text-slate-500">{factories.length} مصنع في هذا الفرع</div>
