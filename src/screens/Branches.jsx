@@ -504,11 +504,33 @@ const TopBottomSection = memo(({ branch, products, periods, images, onSaveImage,
   );
 });
 // ─── قسم النقل (هرمي: مصنع → منتج بعلامات) ──────────────────
-const TransferSection = memo(({ branch, products, periods, images, settings }) => {
+const TransferSection = memo(({ branch, products, periods, images, settings, onSaveSettings }) => {
   const [factory, setFactory] = useState(null);
   const [minPct, setMinPct] = useState(40); // نسبة الفائض (تتحكم فيها)
   const [search, setSearch] = useState("");
   const [sourcesFor, setSourcesFor] = useState(null); // باركود المنتج المعروض مصادره
+  const [reservations, setReservations] = useState(settings?.transfers ?? []); // الحجوزات
+
+  // المحجوز من فرع معيّن لمنتج معيّن (لخصمه من الفائض)
+  const reservedFrom = (fromBranch, barcode) =>
+    reservations.filter(r => r.from===fromBranch && r.barcode===barcode).reduce((s,r)=>s+r.qty, 0);
+
+  // حجز نقل (يُخصم من الفائض + يُحفظ)
+  const book = async (barcode, name, from, toQty, available) => {
+    const qty = Math.min(toQty, available);
+    if (qty <= 0) return;
+    const next = [...reservations, { barcode, name, from, to: branch, qty, ts: Date.now() }];
+    setReservations(next);
+    if (onSaveSettings) await onSaveSettings({ ...settings, transfers: next });
+    setSourcesFor(null);
+  };
+
+  // إلغاء حجز
+  const unbook = async (idx) => {
+    const next = reservations.filter((_,i)=>i!==idx);
+    setReservations(next);
+    if (onSaveSettings) await onSaveSettings({ ...settings, transfers: next });
+  };
 
   // يحسب الفروع اللي عندها فائض من منتج معيّن (عند الطلب فقط — خفيف)
   const findSources = (barcode) => {
@@ -520,7 +542,8 @@ const TransferSection = memo(({ branch, products, periods, images, settings }) =
       periods.forEach(per => { sold += num(per.sales?.[b]?.[barcode]?.qty ?? 0); });
       if (sold <= 0) return;
       const given = Math.ceil(sold / 12) * 12;
-      const remaining = given - sold;
+      const reserved = reservedFrom(b, barcode); // المحجوز مسبقاً
+      const remaining = given - sold - reserved; // الفائض المتاح (بعد الحجز)
       const sPct = given > 0 ? (sold/given)*100 : 0;
       if (sPct < minPct && remaining >= 7) {
         sources.push({ branch: b, sold, remaining, soldPct: sPct });
@@ -637,7 +660,11 @@ const TransferSection = memo(({ branch, products, periods, images, settings }) =
                           ) : sources.map(s => (
                             <div key={s.branch} className="flex items-center justify-between bg-emerald-900/15 border border-emerald-800/30 rounded-lg px-3 py-2">
                               <div className="text-xs text-emerald-300 font-bold">🏪 {s.branch}</div>
-                              <div className="text-xs text-slate-300">فائض <b className="text-emerald-400">{fmtN(s.remaining)}</b> · باع {fmtPct(s.soldPct)}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-slate-300">فائض <b className="text-emerald-400">{fmtN(s.remaining)}</b></div>
+                                <button onClick={()=>book(p.barcode, p.name, s.branch, Math.max(7, p.given - p.remaining) || 12, s.remaining)}
+                                  className="bg-blue-600 text-white text-xs px-3 py-1 rounded-lg font-bold">احجز</button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -657,6 +684,23 @@ const TransferSection = memo(({ branch, products, periods, images, settings }) =
   // عرض المصانع (بعدّاد)
   return (
     <div className="space-y-3">
+      {/* خطة النقل المحجوزة لهذا الفرع */}
+      {reservations.filter(r=>r.to===branch).length > 0 && (
+        <div className="bg-blue-900/20 border border-blue-700/40 rounded-xl p-3">
+          <div className="text-sm font-black text-blue-300 mb-2">📋 محجوز لهذا الفرع ({reservations.filter(r=>r.to===branch).length})</div>
+          <div className="space-y-1">
+            {reservations.map((r,idx)=> r.to===branch && (
+              <div key={idx} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-slate-100 truncate">{r.name}</div>
+                  <div className="text-xs text-emerald-300">من 🏪 {r.from} · {fmtN(r.qty)} قطعة</div>
+                </div>
+                <button onClick={()=>unbook(idx)} className="text-red-400 text-xs px-2 py-1 shrink-0">✕ إلغاء</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="text-xs text-slate-500">{factories.length} مصنع في هذا الفرع</div>
       <div className="space-y-2">
         {factories.map(f => {
@@ -683,7 +727,7 @@ const TransferSection = memo(({ branch, products, periods, images, settings }) =
 
 // ─── تفاصيل الفرع ────────────────────────────────────────────
 
-const BranchDetail = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings, onBack }) => {
+const BranchDetail = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings, onBack, onSaveSettings }) => {
   const [view, setView] = useState("need");
   return (
     <div className="space-y-4">
@@ -698,7 +742,7 @@ const BranchDetail = memo(({ branch, products, periods, images, onSaveImage, onR
         ))}
       </div>
       {view === "need"     && <NeedSection branch={branch} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
-      {view === "transfer" && <TransferSection branch={branch} products={products} periods={periods} images={images} settings={settings} />}
+      {view === "transfer" && <TransferSection branch={branch} products={products} periods={periods} images={images} settings={settings} onSaveSettings={onSaveSettings} />}
       {view === "top"      && <TopBottomSection branch={branch} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
       {view === "search"   && <SmartSearch products={products} periods={periods} settings={settings} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} />}
     </div>
@@ -785,13 +829,13 @@ const BranchSelector = memo(({ branches, periods, products, settings, onSelect, 
 
 // ─── الشاشة الرئيسية ─────────────────────────────────────────
 
-export default function BranchesScreen({ products, periods, settings, images, onSaveImage, onRemoveImage, branchSummary }) {
+export default function BranchesScreen({ products, periods, settings, images, onSaveImage, onRemoveImage, branchSummary, onSaveSettings }) {
   const [selected, setSelected] = useState(null);
   const branches = useMemo(() => allBranches(periods), [periods]);
 
   if (selected) {
     return (
-      <BranchDetail branch={selected} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} onBack={() => setSelected(null)} />
+      <BranchDetail branch={selected} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} onBack={() => setSelected(null)} onSaveSettings={onSaveSettings} />
     );
   }
   if (branches.length === 0) return <EmptyState icon="🏪" title="لا توجد فروع" subtitle="ارفع ملف مبيعات أولاً" />;
