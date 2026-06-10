@@ -508,6 +508,26 @@ const TransferSection = memo(({ branch, products, periods, images, settings }) =
   const [factory, setFactory] = useState(null);
   const [minPct, setMinPct] = useState(40); // نسبة الفائض (تتحكم فيها)
   const [search, setSearch] = useState("");
+  const [sourcesFor, setSourcesFor] = useState(null); // باركود المنتج المعروض مصادره
+
+  // يحسب الفروع اللي عندها فائض من منتج معيّن (عند الطلب فقط — خفيف)
+  const findSources = (barcode) => {
+    const sources = [];
+    const allB = allBranches(periods);
+    allB.forEach(b => {
+      if (b === branch) return; // مو نفس الفرع المحتاج
+      let sold = 0;
+      periods.forEach(per => { sold += num(per.sales?.[b]?.[barcode]?.qty ?? 0); });
+      if (sold <= 0) return;
+      const given = Math.ceil(sold / 12) * 12;
+      const remaining = given - sold;
+      const sPct = given > 0 ? (sold/given)*100 : 0;
+      if (sPct < minPct && remaining >= 7) {
+        sources.push({ branch: b, sold, remaining, soldPct: sPct });
+      }
+    });
+    return sources.sort((a,b)=>b.remaining-a.remaining);
+  };
 
   // مبيعات الفرع لكل منتج (كل الفترات)
   const branchData = useMemo(() => {
@@ -601,6 +621,30 @@ const TransferSection = memo(({ branch, products, periods, images, settings }) =
                   <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">أخذ {fmtN(p.given)}</span>
                   <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">متبقي {fmtN(p.remaining)}</span>
                 </div>
+                {/* متوفّر في فروع — للمنتج المحتاج */}
+                {p.needTransfer && (
+                  <div className="mt-2">
+                    <button onClick={()=>setSourcesFor(sourcesFor===p.barcode?null:p.barcode)}
+                      className="w-full bg-blue-900/30 border border-blue-700/40 text-blue-300 py-2 rounded-lg text-xs font-bold">
+                      {sourcesFor===p.barcode ? "▲ إخفاء المصادر" : "🔍 متوفّر في فروع؟"}
+                    </button>
+                    {sourcesFor===p.barcode && (() => {
+                      const sources = findSources(p.barcode);
+                      return (
+                        <div className="mt-2 space-y-1">
+                          {sources.length === 0 ? (
+                            <div className="text-xs text-slate-500 text-center py-2">🏬 غير متوفّر بفائض في الفروع — اطلبه من المستودع</div>
+                          ) : sources.map(s => (
+                            <div key={s.branch} className="flex items-center justify-between bg-emerald-900/15 border border-emerald-800/30 rounded-lg px-3 py-2">
+                              <div className="text-xs text-emerald-300 font-bold">🏪 {s.branch}</div>
+                              <div className="text-xs text-slate-300">فائض <b className="text-emerald-400">{fmtN(s.remaining)}</b> · باع {fmtPct(s.soldPct)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             );
           })}
