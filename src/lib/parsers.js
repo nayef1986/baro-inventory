@@ -9,6 +9,11 @@ function cleanBarcode(raw) {
   return String(raw ?? "").trim().replace(/了/g, "B").replace(/\s+/g, "");
 }
 
+// تنظيف اسم الفرع — يوحّد المسافات (يمنع التكرار)
+function cleanBranch(raw) {
+  return String(raw ?? "").trim().replace(/\s+/g, " ");
+}
+
 function toNum(raw) {
   const n = parseFloat(String(raw ?? "").replace(/,/g, ""));
   return isNaN(n) ? 0 : n;
@@ -23,8 +28,6 @@ function uuid() {
 }
 
 function fingerprint(sales) {
-  // بصمة دقيقة: إجمالي الكمية + كل الباركودات وكمياتها مرتبة
-  // الاعتماد على الكل (مو أول 20) يمنع رفض فواتير صحيحة لها نفس المنتجات
   const total = Object.values(sales).reduce((s, b) =>
     s + Object.values(b).reduce((ss, v) => ss + num(v.qty), 0), 0);
   const allBarcodes = [...new Set(
@@ -34,7 +37,6 @@ function fingerprint(sales) {
     const qty = Object.values(sales).reduce((s, b) => s + num(b[bc]?.qty ?? 0), 0);
     return `${bc}:${qty}`;
   }).join("|");
-  // عدد الفروع أيضاً يميّز الفواتير
   const branchCount = Object.keys(sales).length;
   return `${total}_${allBarcodes.length}_${branchCount}_${perBarcode}`;
 }
@@ -59,7 +61,6 @@ export function parsePurchaseFile(buffer) {
     return { items: [], container: "", errors: ["الملف فارغ أو أقل من 3 صفوف"], warnings: [] };
   }
 
-  // رقم الكونتينر من الصف الأول
   const row0 = rows[0].join(" ");
   const contMatch = row0.match(/BAR[A-Z0-9]+/i);
   if (contMatch) container = contMatch[0].toUpperCase();
@@ -69,11 +70,9 @@ export function parsePurchaseFile(buffer) {
 
   for (let i = 2; i < rows.length; i++) {
     const row = rows[i];
-
     const barcodeStr = cleanBarcode(row[1]);
     const nameStr    = String(row[2] ?? "").trim();
 
-    // تجاهل بدون باركود
     if (!barcodeStr || barcodeStr.toLowerCase() === "item no") continue;
     if (!nameStr    || nameStr.toLowerCase()    === "name")    continue;
     if (nameStr.toLowerCase() === "freight")                   continue;
@@ -87,7 +86,6 @@ export function parsePurchaseFile(buffer) {
 
     if (buyPrice === 0) warnings.push(`سطر ${i+1}: سعر شراء صفر للمنتج "${nameStr}"`);
 
-    // باركود مكرر في نفس الملف = يجمع
     if (merged[barcodeStr]) {
       merged[barcodeStr].qty += qty;
       if (buyPrice  > 0) merged[barcodeStr].buyPrice  = buyPrice;
@@ -115,18 +113,15 @@ export function parseSalesFile(buffer, label = "") {
     return { period: null, periods: [], errors: [`فشل فتح الملف: ${e.message}`], warnings: [] };
   }
 
-  // كشف ذكي: هل الملف فيه شهور؟ (صف 2 يحوي سنة أو اسم شهر)
   const monthRow = rows[1] ?? [];
   const monthKeywords = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
   const hasMonths = monthRow.some(v => typeof v === "string" && monthKeywords.test(v) && v.trim() !== "الإجمالي");
 
   if (hasMonths) {
-    // ملف أشهر → نفصله لفترات منفصلة
     const r = parseMonthlyFile(buffer);
     return { period: r.periods?.[0] ?? null, periods: r.periods ?? [], errors: r.errors ?? [], warnings: r.warnings ?? [] };
   }
 
-  // فترة واحدة
   const single = parseSalesFileFromRows(rows, label);
   return { period: single.period, periods: single.period ? [single.period] : [], errors: single.errors, warnings: single.warnings };
 }
@@ -139,7 +134,6 @@ export function parseSalesFileFromRows(rows, label = "") {
     return { period: null, errors: ["الملف أقل من 5 صفوف"], warnings: [] };
   }
 
-  // استخراج الفروع من الصف الثاني
   const branchRow = rows[1] ?? [];
   const branches  = {};
 
@@ -148,14 +142,11 @@ export function parseSalesFileFromRows(rows, label = "") {
     const str = val.trim();
     if (!str) return;
 
-    // نستخرج الاسم من القوسين لو موجود
     const parenMatch = str.match(/\(([^)]+)\)\s*$/);
     let name;
-
     if (parenMatch) {
       const inner = parenMatch[1].trim();
       if (inner === "غير مستخدَم" || inner === "غير مستخدم") {
-        // نستخدم الاسم الكامل من قبل القوسين كاسم للفرع
         name = str.replace(/\s*\([^)]+\)\s*$/, "").trim();
       } else {
         name = inner;
@@ -164,8 +155,9 @@ export function parseSalesFileFromRows(rows, label = "") {
       name = str;
     }
 
+    name = cleanBranch(name);
     if (!name) return;
-    // نتجنب التكرار بالاسم الكامل فقط
+    // نتجنب التكرار بالاسم النظيف
     const alreadyExists = Object.values(branches).some(b => b === name);
     if (alreadyExists) return;
     branches[colIdx] = name;
@@ -176,7 +168,6 @@ export function parseSalesFileFromRows(rows, label = "") {
     return { period: null, errors, warnings };
   }
 
-  // تهيئة البيانات
   const sales = {};
   Object.values(branches).forEach(b => { sales[b] = {}; });
 
@@ -193,7 +184,6 @@ export function parseSalesFileFromRows(rows, label = "") {
     const barcode  = cleanBarcode(bcMatch[1]);
     if (!barcode) continue;
 
-    // استخراج الاسم من السطر: [BARCODE] اسم المنتج
     const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
 
     Object.entries(branches).forEach(([colStr, branchName]) => {
@@ -205,7 +195,6 @@ export function parseSalesFileFromRows(rows, label = "") {
 
       if (sales[branchName][barcode]) {
         sales[branchName][barcode].qty        += qty;
-        // نضيف الاسم لو مختلف
         if (salesName && !sales[branchName][barcode].salesNames?.includes(salesName)) {
           sales[branchName][barcode].salesNames = sales[branchName][barcode].salesNames ?? [];
           sales[branchName][barcode].salesNames.push(salesName);
@@ -217,9 +206,7 @@ export function parseSalesFileFromRows(rows, label = "") {
     });
   }
 
-  const totalRecords = Object.values(sales).reduce(
-    (s, d) => s + Object.keys(d).length, 0
-  );
+  const totalRecords = Object.values(sales).reduce((s, d) => s + Object.keys(d).length, 0);
 
   if (totalRecords === 0) {
     errors.push("لم يُعثر على أي مبيعات");
@@ -240,12 +227,10 @@ export function parseSalesFileFromRows(rows, label = "") {
 // ─── حذف كونتينر وعكس تأثيره ────────────────────────────────
 
 export function reversePurchases(existingProducts, container) {
-  // نحذف كل purchases المرتبطة بهذا الكونتينر
   const result = existingProducts.map(p => {
     const purchases = (p.purchases ?? []).filter(pur => pur.container !== container);
-    // لو المنتج ما عنده أي purchases تانية نحذفه كلياً
     if (purchases.length === 0 && (p.purchases ?? []).some(pur => pur.container === container)) {
-      return null; // سيُحذف
+      return null;
     }
     return { ...p, purchases };
   }).filter(Boolean);
@@ -269,13 +254,11 @@ export function applyPurchases(existingProducts, newItems, container) {
 
   newItems.forEach(item => {
     if (resultMap[item.barcode]) {
-      // باركود موجود = يجمع دائماً
       const existing = resultMap[item.barcode];
       existing.purchases = existing.purchases ?? [];
       existing.purchases.push({ container, qty: item.qty, buyPrice: item.buyPrice, date });
       if (item.sellPrice > 0) existing.sellPrice = item.sellPrice;
     } else {
-      // منتج جديد
       const newProduct = {
         barcode:   item.barcode,
         name:      item.name,
@@ -291,7 +274,6 @@ export function applyPurchases(existingProducts, newItems, container) {
   return result;
 }
 
-
 // ─── رفع ملف شهري (1-12 شهر) ─────────────────────────────────
 
 export function parseMonthlyFile(buffer) {
@@ -304,12 +286,9 @@ export function parseMonthlyFile(buffer) {
   const monthRow  = rows[1] ?? [];
   const branchRow = rows[2] ?? [];
 
-  // ─── كشف ذكي: هل صف 2 فيه شهور حقيقية أم فروع؟ ──────────
-  // الشهور تحوي سنة (2025/2026) أو اسم شهر. الفروع تحوي "البارو".
   const monthKeywords = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
   const row1HasMonths = monthRow.some(v => typeof v === "string" && monthKeywords.test(v) && v.trim() !== "الإجمالي");
 
-  // لو ما فيه شهور في صف 2 → الملف فترة واحدة، نعالجه عبر parseSalesFile
   if (!row1HasMonths) {
     const single = parseSalesFileFromRows(rows, "");
     if (single.period) {
@@ -318,7 +297,6 @@ export function parseMonthlyFile(buffer) {
     return { periods: [], errors: single.errors.length ? single.errors : ["لم يُعثر على شهور أو فروع صالحة"] };
   }
 
-  // ─── نجمع مواضع الشهور ───────────────────────────────────
   const monthCols = [];
   monthRow.forEach((val, colIdx) => {
     if (!val || typeof val !== "string") return;
@@ -331,7 +309,6 @@ export function parseMonthlyFile(buffer) {
     return { periods: [], errors: ["لم يُعثر على شهور في الصف الثاني"] };
   }
 
-  // ─── لكل شهر نحدد فروعه ─────────────────────────────────
   const monthData = monthCols.map((m, i) => {
     const start = m.col;
     const end   = i + 1 < monthCols.length ? monthCols[i + 1].col : branchRow.length;
@@ -354,18 +331,15 @@ export function parseMonthlyFile(buffer) {
         name = s;
       }
 
+      name = cleanBranch(name);
       if (!name) continue;
-      // نضيف رقم العمود لضمان الفريد
-      const uniqueName = Object.values(branches).some(b => b === name)
-        ? `${name}_${col}`
-        : name;
-      branches[col] = uniqueName;
+      // نفس الفرع داخل الشهر = نفس الاسم (لا نضيف رقم العمود — يمنع التكرار)
+      branches[col] = name;
     }
 
     return { name: m.name, start, end, branches };
   });
 
-  // ─── نقرأ البيانات لكل شهر ───────────────────────────────
   const periods = [];
 
   monthData.forEach(month => {
@@ -384,7 +358,6 @@ export function parseMonthlyFile(buffer) {
       const barcode = cleanBarcode(bcMatch[1]);
       if (!barcode) continue;
 
-      // استخراج الاسم من السطر
       const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
 
       Object.entries(month.branches).forEach(([colStr, branchName]) => {
@@ -408,14 +381,12 @@ export function parseMonthlyFile(buffer) {
       });
     }
 
-    // إجمالي كل فرع
     const branchTotals = {};
     Object.entries(sales).forEach(([branch, data]) => {
       branchTotals[branch] = Object.values(data).reduce((s, v) => s + v.qty, 0);
     });
 
     const fp = fingerprint(sales);
-    // المعرّف يعتمد على اسم الشهر فقط — إعادة الرفع تستبدل بدل التكرار
     const id = `monthly_${month.name.replace(/\s+/g, "_")}`;
 
     periods.push({
