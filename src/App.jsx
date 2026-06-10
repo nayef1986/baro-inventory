@@ -232,7 +232,7 @@ export default function App() {
     sales:      <SalesScreen      {...screenProps} />,
     branches:   <BranchesScreen   {...screenProps} />,
     ideas:      <IdeasScreen     products={state.products} periods={state.periods} settings={state.settings} images={state.images} onSaveImage={handleSaveImage} onRemoveImage={handleRemoveImage} />,
-    needs:      <ProductNeedsScreen products={state.products} periods={state.periods} images={state.images} settings={state.settings} />,
+    needs:      <ProductNeedsScreen products={state.products} periods={state.periods} images={state.images} settings={state.settings} onSaveSettings={handleSaveSettings} />,
     compare:    <CompareScreen     {...screenProps} images={state.images} onSaveImage={handleSaveImage} onRemoveImage={handleRemoveImage} />,
     reports:    <ReportsScreen     {...screenProps} />,
   };
