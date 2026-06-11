@@ -545,14 +545,20 @@ const TransferSection = memo(({ branch, products, periods, images, settings, onS
     const ref = "TR-" + now.getFullYear() + (now.getMonth()+1+"").padStart(2,"0") + (now.getDate()+"").padStart(2,"0") + "-" + (now.getHours()+"").padStart(2,"0")+(now.getMinutes()+"").padStart(2,"0");
     const totQty = mine.reduce((s,r)=>s+r.qty,0);
     const imgCell = (bc) => { const im = images?.[bc]; return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`; };
-    const sections = Object.entries(bySource).map(([src, rows]) => `
-      <div class="sec">
-        <div class="sech">🏪 اجمع من فرع: ${src} <span class="cnt">${rows.length} صنف · ${fmtN(rows.reduce((s,r)=>s+r.qty,0))} قطعة</span></div>
+    const sections = Object.entries(bySource).map(([src, rows], idx) => `
+      <div class="sheet">
+        <div class="hd">
+          <div><div class="brand">${settings?.brandName ?? "ALBAROO"}</div><div class="ttl">📋 خطة نقل وتجميع</div></div>
+          <div class="ref"><b>${ref}</b><br>📅 ${greg}<br>📅 ${hijri}هـ</div>
+        </div>
+        <div class="route">من فرع: <b>${src}</b> &nbsp;←&nbsp; إلى فرع: <b class="dest">${branch}</b></div>
+        <div class="sech">🏪 اجمع من ${src} <span class="cnt">${rows.length} صنف · ${fmtN(rows.reduce((s,r)=>s+r.qty,0))} قطعة</span></div>
         <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>الكمية</th></tr></thead><tbody>
         ${rows.map(r=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(r.barcode)}</td><td class="nm">${r.name}</td><td class="bc">${r.barcode}</td><td class="q">${fmtN(r.qty)}</td></tr>`).join("")}
         </tbody></table>
+        <div class="ftr"><div class="sign"><div class="line"></div>أمين فرع ${src}</div><div class="sign"><div class="line"></div>مستلم فرع ${branch}</div></div>
       </div>`).join("");
-    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة النقل</title>
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة النقل — إلى ${branch}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
@@ -582,18 +588,14 @@ const TransferSection = memo(({ branch, products, periods, images, settings, onS
         tr:nth-child(even) td{background:#fafbfc}
         .ftr{margin-top:24px;border-top:2px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between}
         .sign{text-align:center;font-size:12px;color:#64748b}.sign .line{border-top:1px solid #94a3b8;width:150px;margin:28px auto 6px}
-        @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+        .sheet{max-width:800px;margin:0 auto 24px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+        .route{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px;text-align:center;font-size:15px;margin-bottom:14px}
+        .route b{color:#0f172a}.route .dest{color:#2563eb}
+        @media print{body{background:#fff}.tb{display:none}.sheet{margin:0;box-shadow:none;border-radius:0;max-width:100%;page-break-after:always}.sheet:last-child{page-break-after:auto}}
       </style></head><body>
-      <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
-      <div class="page">
-        <div class="hd">
-          <div><div class="brand">${settings?.brandName ?? "ALBAROO"}</div><div class="ttl">📋 خطة النقل والتجميع</div><div class="to">↓ إلى فرع: ${branch}</div></div>
-          <div class="ref"><b>${ref}</b><br>📅 ${greg}<br>📅 ${hijri}هـ</div>
-        </div>
-        <div class="sum">إجمالي المطلوب نقله: <b>${fmtN(totQty)}</b> قطعة · ${mine.length} صنف · من ${Object.keys(bySource).length} فرع</div>
-        ${sections}
-        <div class="ftr"><div class="sign"><div class="line"></div>أمين الفرع المرسِل</div><div class="sign"><div class="line"></div>مستلم فرع ${branch}</div></div>
-      </div></body></html>`;
+      <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة (${Object.keys(bySource).length} صفحة)</button></div>
+      ${sections}
+      </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
   };
