@@ -143,7 +143,7 @@ export function parseSalesFileFromRows(rows, label = "") {
     if (!str) return;
 
     // دائماً نأخذ الاسم الكامل قبل القوس (نتجاهل محتوى القوس — يوحّد الفروع)
-    let name = str.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    let name = str.replace(/\s*\(.*$/, "").trim();
     if (!name) name = str.trim();
 
     name = cleanBranch(name);
@@ -312,7 +312,7 @@ export function parseMonthlyFile(buffer) {
       if (!s) continue;
 
       // دائماً نأخذ الاسم قبل القوس (يوحّد الفروع عبر الفواتير)
-      let name = s.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      let name = s.replace(/\s*\(.*$/, "").trim();
       if (!name) name = s.trim();
 
       name = cleanBranch(name);
