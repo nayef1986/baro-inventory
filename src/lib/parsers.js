@@ -386,4 +386,3 @@ export function parseMonthlyFile(buffer) {
 
   return { periods, errors: [], warnings: [] };
 }
-ق
