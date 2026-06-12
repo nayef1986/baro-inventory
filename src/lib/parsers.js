@@ -142,18 +142,9 @@ export function parseSalesFileFromRows(rows, label = "") {
     const str = val.trim();
     if (!str) return;
 
-    const parenMatch = str.match(/\(([^)]+)\)\s*$/);
-    let name;
-    if (parenMatch) {
-      const inner = parenMatch[1].trim();
-      if (inner === "غير مستخدَم" || inner === "غير مستخدم") {
-        name = str.replace(/\s*\([^)]+\)\s*$/, "").trim();
-      } else {
-        name = inner;
-      }
-    } else {
-      name = str;
-    }
+    // دائماً نأخذ الاسم الكامل قبل القوس (نتجاهل محتوى القوس — يوحّد الفروع)
+    let name = str.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    if (!name) name = str.trim();
 
     name = cleanBranch(name);
     if (!name) return;
@@ -320,16 +311,9 @@ export function parseMonthlyFile(buffer) {
       const s = val.trim();
       if (!s) continue;
 
-      const parenMatch = s.match(/\(([^)]+)\)\s*$/);
-      let name;
-      if (parenMatch) {
-        const inner = parenMatch[1].trim();
-        name = (inner === "غير مستخدَم" || inner === "غير مستخدم")
-          ? s.replace(/\s*\([^)]+\)\s*$/, "").trim()
-          : inner;
-      } else {
-        name = s;
-      }
+      // دائماً نأخذ الاسم قبل القوس (يوحّد الفروع عبر الفواتير)
+      let name = s.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      if (!name) name = s.trim();
 
       name = cleanBranch(name);
       if (!name) continue;
@@ -402,3 +386,4 @@ export function parseMonthlyFile(buffer) {
 
   return { periods, errors: [], warnings: [] };
 }
+ق
