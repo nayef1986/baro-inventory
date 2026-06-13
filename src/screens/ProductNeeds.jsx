@@ -8,6 +8,15 @@ import {
 const MIN = 12;
 const toDozen = n => Math.ceil(n / MIN) * MIN;
 
+// تواريخ بأرقام إنجليزية (لاتينية) — للتقارير والبوليصات
+function dateEN(opts = { year:"numeric", month:"long", day:"numeric" }) {
+  const now = new Date();
+  const greg = now.toLocaleDateString("en-GB", opts);
+  // الهجري بأرقام لاتينية
+  const hijri = now.toLocaleDateString("en-GB-u-ca-islamic", opts);
+  return { greg, hijri };
+}
+
 // استخراج المدينة من اسم الفرع (البارو-مول-مدينة-رقم)
 function cityOf(branch, overrides = {}) {
   if (overrides[branch]) return overrides[branch];
@@ -138,7 +147,7 @@ function downloadCsv(csv, title) {
 
 // طباعة تقرير
 // ─── بوليصات التوزيع (كاشير 80mm) ────────────────────────────
-function printPolicies(items, periods, images, brandName) {
+function printPolicies(items, periods, images, brandName, closedBranches = [], paperSize = "80mm") {
   // لكل منتج: نحسب فروعه، ونطلّع بوليصة فقط لو عنده مخزون + فرع ناقص
   const slips = [];
   items.forEach(x => {
@@ -147,6 +156,7 @@ function printPolicies(items, periods, images, brandName) {
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
+        if (closedBranches.includes(branch)) return; // استبعاد المغلقة
         const q = num(d[p.barcode]?.qty ?? 0);
         if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
       });
@@ -162,31 +172,31 @@ function printPolicies(items, periods, images, brandName) {
 
   if (slips.length === 0) { alert("لا توجد منتجات تحتاج توزيع"); return; }
 
-  const now = new Date();
-  const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {month:"short",day:"numeric"});
-  const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {month:"short",day:"numeric"});
+  const { greg, hijri } = dateEN({ month:"short", day:"numeric" });
 
   const slipHtml = slips.map(s => {
     const img = images?.[s.p.barcode];
     const rows = s.branches.map(b => `
       <tr class="${b.remaining < 7 ? 'need' : ''}">
-        <td>${b.branch}</td><td>${b.sold}</td><td>${b.given}</td>
-        <td>${b.remaining}${b.remaining < 7 ? ' ✅' : ''}</td></tr>`).join("");
+        <td class="brc">${b.branch}</td><td class="qn">${b.sold}</td><td class="qn">${b.given}</td>
+        <td class="qn">${b.remaining}${b.remaining < 7 ? ' ✅' : ''}</td></tr>`).join("");
     return `<div class="slip">
       <div class="hd">${brandName ?? "ALBAROO"}</div>
-      <div class="dt">📅 ${greg} · ${hijri}هـ</div>
+      <div class="dt">📅 ${greg} · ${hijri}H</div>
       ${img ? `<img src="${img}" class="pimg"/>` : ''}
       <div class="pname">${s.p.name}</div>
       <svg class="bc" data-code="${s.p.barcode}"></svg>
       <div class="bcn">${s.p.barcode}</div>
       <div class="meta">🏭 ${getFactoryCode(s.p.barcode)} · 📦 ${s.p.container ?? ""}</div>
-      <div class="stock">المتبقي بالمخزون: <b>${fmtN(s.closing)}</b></div>
-      <table><tr><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th></tr>${rows}</table>
-      <div class="note">✅ = يحتاج توزيع (أقل من 7)</div>
+      <div class="stock">المتبقي بالمخزون / In Stock: <b>${fmtN(s.closing)}</b></div>
+      <table><tr><th>الفرع<br>Branch</th><th>باع<br>Sold</th><th>أخذ<br>Sent</th><th>باقي<br>Left</th></tr>${rows}</table>
+      <div class="note">✅ = يحتاج توزيع / Needs restock (< 7)</div>
     </div>`;
   }).join("");
 
-  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>بوليصات التوزيع</title>
+  const isA5 = paperSize === "A5";
+  const slipW = isA5 ? "148mm" : "80mm";
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>بوليصات التوزيع / Distribution Slips</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -196,29 +206,31 @@ function printPolicies(items, periods, images, brandName) {
       .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
       .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
       .wrap{padding:60px 10px 20px}
-      .slip{width:80mm;background:#fff;margin:0 auto 8px;padding:10px 8px;page-break-after:always;text-align:center;border:1px dashed #999}
-      .hd{font-size:16px;font-weight:900;color:#0f172a;letter-spacing:1px}
-      .dt{font-size:10px;color:#888;margin-bottom:6px}
-      .pimg{width:90px;height:90px;object-fit:cover;border-radius:8px;margin:4px auto;display:block;border:1px solid #ddd}
-      .pname{font-size:15px;font-weight:900;color:#0f172a;margin:4px 0}
-      .bc{width:90%;height:50px;margin:4px auto;display:block}
-      .bcn{font-size:13px;font-family:monospace;font-weight:700;letter-spacing:1px}
-      .meta{font-size:11px;color:#666;margin:4px 0}
-      .stock{font-size:13px;color:#0f172a;background:#f1f5f9;border-radius:6px;padding:5px;margin:6px 0}
-      .stock b{font-size:16px;color:#2563eb}
+      .slip{width:${slipW};background:#fff;margin:0 auto 8px;padding:${isA5?"16px 14px":"10px 8px"};page-break-after:always;text-align:center;border:1px dashed #999}
+      .hd{font-size:${isA5?"22px":"16px"};font-weight:900;color:#0f172a;letter-spacing:1px}
+      .dt{font-size:${isA5?"12px":"10px"};color:#888;margin-bottom:6px}
+      .pimg{width:${isA5?"180px":"130px"};height:auto;max-height:${isA5?"180px":"130px"};object-fit:contain;border-radius:8px;margin:4px auto;display:block;border:1px solid #ddd;background:#fafafa}
+      .pname{font-size:${isA5?"19px":"15px"};font-weight:900;color:#0f172a;margin:4px 0}
+      .bc{width:90%;height:${isA5?"70px":"55px"};margin:4px auto;display:block}
+      .bcn{font-size:${isA5?"22px":"18px"};font-family:monospace;font-weight:900;letter-spacing:2px;color:#0f172a}
+      .meta{font-size:${isA5?"13px":"11px"};color:#666;margin:4px 0}
+      .stock{font-size:${isA5?"15px":"13px"};color:#0f172a;background:#f1f5f9;border-radius:6px;padding:6px;margin:6px 0}
+      .stock b{font-size:${isA5?"22px":"18px"};color:#2563eb}
       table{width:100%;border-collapse:collapse;margin-top:4px}
-      th{background:#0f172a;color:#fff;padding:5px;font-size:11px}
-      td{border:1px solid #ddd;padding:5px;font-size:12px;text-align:center}
-      tr.need{background:#dcfce7;font-weight:900}
-      tr.need td{color:#166534}
-      .note{font-size:10px;color:#888;margin-top:6px}
+      th{background:#0f172a;color:#fff;padding:6px;font-size:${isA5?"12px":"10px"};line-height:1.3}
+      td{border:1px solid #ddd;padding:6px;font-size:${isA5?"15px":"13px"};text-align:center}
+      td.brc{font-weight:700}
+      td.qn{font-size:${isA5?"18px":"15px"};font-weight:900}
+      tr.need{background:#dcfce7}
+      tr.need td{color:#166534;font-weight:900}
+      .note{font-size:${isA5?"11px":"9px"};color:#888;margin-top:6px}
       @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{border:none;margin:0 auto}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length} بوليصة)</button></div>
+    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length})</button></div>
     <div class="wrap">${slipHtml}</div>
     <script>
       document.querySelectorAll('svg.bc').forEach(function(el){
-        try{ JsBarcode(el, el.getAttribute('data-code'), {format:"CODE128",width:1.8,height:45,displayValue:false,margin:2}); }catch(e){}
+        try{ JsBarcode(el, el.getAttribute('data-code'), {format:"CODE128",width:${isA5?"2.4":"1.8"},height:${isA5?"60":"48"},displayValue:false,margin:2}); }catch(e){}
       });
     <\/script>
     </body></html>`;
@@ -228,7 +240,7 @@ function printPolicies(items, periods, images, brandName) {
 
 // ─── خطة النقل المجمّعة (كل المنتجات) ────────────────────────
 // ─── خطة النقل/التموين الاحترافية (كل المنتجات) ──────────────
-function printTransferPlan(items, periods, title, brandName, images = {}, cityOverrides = {}) {
+function printTransferPlan(items, periods, title, brandName, images = {}, cityOverrides = {}, closedBranches = []) {
   const bySource = {};
   const fromWarehouse = [];
 
@@ -237,6 +249,7 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
+        if (closedBranches.includes(branch)) return; // استبعاد المغلقة
         const q = num(d[p.barcode]?.qty ?? 0);
         if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
       });
@@ -260,8 +273,7 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
   if (totalMoves === 0) { alert("لا توجد عمليات نقل/تموين مقترحة"); return; }
 
   const now = new Date();
-  const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
-  const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+  const { greg, hijri } = dateEN();
   const refNo = "TR-" + now.getFullYear() + (now.getMonth()+1+"").padStart(2,"0") + (now.getDate()+"").padStart(2,"0") + "-" + (now.getHours()+"").padStart(2,"0")+(now.getMinutes()+"").padStart(2,"0");
 
   const whQty = fromWarehouse.reduce((s,m)=>s+m.qty,0);
@@ -353,9 +365,7 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
 
 function printReport(items, title, brandName, images = {}) {
   const rows = buildRows(items);
-  const now = new Date();
-  const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
-  const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+  const { greg, hijri } = dateEN();
   const totReorder = rows.reduce((s,r)=>s+r.reorder,0);
   const totCost = rows.reduce((s,r)=>s+r.reorder*r.cost,0);
   const body = rows.map((r,i)=>{
@@ -463,42 +473,66 @@ const CopyBarcode = memo(({ barcode }) => {
 
 // ─── ماسح الباركود بالكاميرا ─────────────────────────────────
 const BarcodeScanner = memo(({ onDetect, onClose }) => {
-  const videoRef = useRef();
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
+  const scannerRef = useRef(null);
+  const doneRef = useRef(false);
 
   useEffect(() => {
-    let stream, raf, detector, cancelled = false;
-    (async () => {
-      if (!("BarcodeDetector" in window)) {
-        setErr("جهازك لا يدعم المسح — اكتب الباركود يدوياً");
-        return;
-      }
+    let scanner;
+    const containerId = "bc-reader-" + Math.random().toString(36).slice(2,8);
+    const el = document.getElementById("bc-scanner-mount");
+    if (el) el.id = containerId;
+
+    // نحمّل مكتبة html5-qrcode من CDN (تقرأ Code128/EAN زي السكانر، تشتغل بآيفون)
+    const startScanner = async () => {
       try {
-        detector = new window.BarcodeDetector();
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        if (cancelled) { stream.getTracks().forEach(t=>t.stop()); return; }
-        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-        const scan = async () => {
-          if (cancelled || !videoRef.current) return;
-          try {
-            const codes = await detector.detect(videoRef.current);
-            if (codes.length > 0) {
-              navigator.vibrate?.(200);
-              onDetect(codes[0].rawValue);
-              return;
-            }
-          } catch {}
-          raf = requestAnimationFrame(scan);
-        };
-        raf = requestAnimationFrame(scan);
-      } catch {
-        setErr("تعذّر فتح الكاميرا — تأكد من الإذن");
+        if (!window.Html5Qrcode) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js";
+            s.onload = resolve; s.onerror = reject;
+            document.head.appendChild(s);
+          });
+        }
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = window;
+        scanner = new Html5Qrcode(containerId, {
+          formats: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE,
+          ],
+          verbose: false,
+        });
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 260, height: 160 }, aspectRatio: 1.4 },
+          (decodedText) => {
+            if (doneRef.current) return;
+            doneRef.current = true;
+            navigator.vibrate?.(200);
+            scanner.stop().then(()=>scanner.clear()).catch(()=>{});
+            onDetect(decodedText);
+          },
+          () => {} // تجاهل أخطاء كل فريم
+        );
+        setLoading(false);
+      } catch (e) {
+        setErr("تعذّر فتح الكاميرا — تأكد من الإذن، أو اكتب الباركود يدوياً");
+        setLoading(false);
       }
-    })();
+    };
+    startScanner();
+
     return () => {
-      cancelled = true;
-      if (raf) cancelAnimationFrame(raf);
-      if (stream) stream.getTracks().forEach(t=>t.stop());
+      doneRef.current = true;
+      const sc = scannerRef.current;
+      if (sc) { try { sc.stop().then(()=>sc.clear()).catch(()=>{}); } catch {} }
     };
   }, [onDetect]);
 
@@ -506,11 +540,11 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:100,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div style={{color:"#fff",fontWeight:"900",fontSize:"16px",marginBottom:"14px"}}>📷 وجّه الكاميرا للباركود</div>
       {err ? (
-        <div style={{color:"#e8855a",textAlign:"center",fontSize:"14px",marginBottom:"16px"}}>{err}</div>
+        <div style={{color:"#e8855a",textAlign:"center",fontSize:"14px",marginBottom:"16px",maxWidth:"300px"}}>{err}</div>
       ) : (
-        <div style={{position:"relative",width:"100%",maxWidth:"340px",aspectRatio:"4/3",borderRadius:"16px",overflow:"hidden",border:"2px solid #d4a853"}}>
-          <video ref={videoRef} playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}} />
-          <div style={{position:"absolute",top:"50%",left:"10%",right:"10%",height:"2px",background:"#22c55e",boxShadow:"0 0 12px #22c55e"}} />
+        <div style={{position:"relative",width:"100%",maxWidth:"340px",borderRadius:"16px",overflow:"hidden",border:"2px solid #d4a853",background:"#000"}}>
+          {loading && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#d4a853",fontSize:"14px",zIndex:2}}>جاري فتح الكاميرا…</div>}
+          <div id="bc-scanner-mount" style={{width:"100%"}} />
         </div>
       )}
       <button onClick={onClose} style={{marginTop:"18px",padding:"12px 28px",borderRadius:"100px",border:"none",background:"#334155",color:"#fff",fontSize:"14px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>إغلاق</button>
@@ -565,9 +599,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
     const rows = printBranches.map((b, i) => `
       <tr><td class="num">${i+1}</td><td>${b.branch} ${b.remaining < 7 ? '<span class="chk">✅</span>' : ''}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
     const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
-    const now = new Date();
-    const greg = now.toLocaleDateString("ar-SA-u-ca-gregory", {year:"numeric",month:"long",day:"numeric"});
-    const hijri = now.toLocaleDateString("ar-SA-u-ca-islamic", {year:"numeric",month:"long",day:"numeric"});
+    const { greg, hijri } = dateEN();
     const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${product.name}</title>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
       <style>
@@ -583,17 +615,17 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         .hd{display:flex;gap:16px;align-items:center;border-bottom:2px solid #e2e8f0;padding-bottom:16px;margin-bottom:16px}
         .hd img{width:110px;height:110px;border-radius:12px;object-fit:cover;border:1px solid #e2e8f0}
         .bc{text-align:center;flex:1}.bc svg{max-width:100%}
-        .bcnum{font-size:22px;font-weight:900;color:#0f172a;font-family:monospace;letter-spacing:2px;margin-top:4px}
+        .bcnum{font-size:30px;font-weight:900;color:#0f172a;font-family:monospace;letter-spacing:3px;margin-top:6px}
         .meta{font-size:14px;color:#555;margin-top:6px}
         .tot{display:flex;gap:10px;margin:16px 0}
         .tot div{flex:1;background:#f1f5f9;border-radius:12px;padding:16px}
-        .tot .v{font-size:32px;font-weight:900;color:#0f172a;text-align:center}
+        .tot .v{font-size:38px;font-weight:900;color:#0f172a;text-align:center}
         .tot .l{font-size:14px;color:#888;margin-top:4px;text-align:center}
         .sortlbl{text-align:center;font-size:13px;color:#2563eb;font-weight:700;margin:10px 0}
         table{width:100%;border-collapse:collapse;margin-top:8px}
         th{background:#0f172a;color:#fff;padding:12px;font-size:16px}
-        td{border:1px solid #e2e8f0;padding:12px;text-align:center;font-size:17px}
-        td.big{font-size:20px;font-weight:900}td.rem{color:#dc2626}
+        td{border:1px solid #e2e8f0;padding:12px;text-align:center;font-size:18px}
+        td.big{font-size:24px;font-weight:900}td.rem{color:#dc2626}
         td.num{font-weight:900;color:#888;background:#f1f5f9}
         .chk{font-size:16px}
         tr:nth-child(even){background:#f8fafc}
@@ -755,8 +787,11 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
         <button onClick={()=>exportExcelFull(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
         <button onClick={()=>printReport(filtered, title, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
-      <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO")} className="w-full bg-purple-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ اطبع بوليصات التوزيع</button>
-      <button onClick={()=>printTransferPlan(filtered, periods, title, "ALBAROO", images, settings?.cityOverrides ?? {})} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🔀 خطة النقل بين الفروع</button>
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO", settings?.closedBranches ?? [], "80mm")} className="bg-purple-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ بوليصات 80mm</button>
+        <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO", settings?.closedBranches ?? [], "A5")} className="bg-purple-700 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ بوليصات A5</button>
+      </div>
+      <button onClick={()=>printTransferPlan(filtered, periods, title, "ALBAROO", images, settings?.cityOverrides ?? {}, settings?.closedBranches ?? [])} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🔀 خطة النقل بين الفروع</button>
       <div className="text-xs text-slate-500">{filtered.length} منتج</div>
 
       <div className="space-y-2">
@@ -838,7 +873,7 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
         <button onClick={()=>exportExcelFull(allItems, container)} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
         <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
-      <button onClick={()=>printTransferPlan(allItems, periods, `كونتينر ${container}`, "ALBAROO", images, settings?.cityOverrides ?? {})} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold">🔀 خطة النقل بين الفروع</button>
+      <button onClick={()=>printTransferPlan(allItems, periods, `كونتينر ${container}`, "ALBAROO", images, settings?.cityOverrides ?? {}, settings?.closedBranches ?? [])} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold">🔀 خطة النقل بين الفروع</button>
 
       {/* حدود التلوين */}
       <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
@@ -884,6 +919,9 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [redMax,    setRedMax]    = useState(30);
   const [greenMin,  setGreenMin]  = useState(60);
   const [showHeroes, setShowHeroes] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchScan, setSearchScan] = useState(false);
   const [starred, setStarred] = useState(settings?.starred ?? []);
 
   // نجمة يدوية (toggle) — تُحفظ في الإعدادات (خفيف)
@@ -953,6 +991,49 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
   }
 
+  // عرض: البحث بالباركود (في كل المنتجات)
+  if (showSearch) {
+    const q = searchQuery.trim().toLowerCase();
+    const results = q
+      ? products.filter(p => p.barcode.toLowerCase().includes(q) || arabicIncludes(p.name, searchQuery)).slice(0, 50)
+      : [];
+    return (
+      <div className="space-y-3">
+        {searchScan && <BarcodeScanner onDetect={(code)=>{ setSearchQuery(code); setSearchScan(false); }} onClose={()=>setSearchScan(false)} />}
+        <button onClick={()=>{ setShowSearch(false); setSearchQuery(""); }} className="text-blue-400 font-bold text-sm">← رجوع</button>
+        <div className="font-black text-slate-100 text-lg">🔍 بحث بالباركود</div>
+        <div className="flex gap-2">
+          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} autoFocus placeholder="باركود أو اسم المنتج…"
+            className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+          <button onClick={()=>setSearchScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
+        </div>
+        {q && <div className="text-xs text-slate-500">{results.length} نتيجة</div>}
+        <div className="space-y-2">
+          {results.map(p => {
+            const x = calcItem(p);
+            return (
+              <div key={p.barcode} onClick={()=>{ setSelected(p); setShowSearch(false); }} className="bg-slate-800 border border-slate-700 rounded-xl p-3 cursor-pointer flex items-center gap-3">
+                {images?.[p.barcode]
+                  ? <img src={images[p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                  : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-lg shrink-0">📦</div>}
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
+                  <div className="text-xs text-slate-400 font-mono">{p.barcode}</div>
+                  <div className="flex gap-1.5 mt-1">
+                    <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(x.closing)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {q && results.length === 0 && <div className="text-center text-slate-500 py-12">لا نتائج لـ "{searchQuery}"</div>}
+          {!q && <div className="text-center text-slate-500 py-12">اكتب باركود أو اسم، أو امسح 📷</div>}
+        </div>
+      </div>
+    );
+  }
+
   // عرض: الأبطال (الرابحون + المنجّمون)
   if (showHeroes) {
     const heroes = products.map(p => {
@@ -1007,7 +1088,10 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
           <div className="text-xs text-slate-500">اختر كونتينر → مصنع → منتج</div>
         </div>
-        <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-bold shrink-0">⭐ الأبطال</button>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={()=>setShowSearch(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-bold">🔍 بحث</button>
+          <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-bold">⭐ الأبطال</button>
+        </div>
       </div>
       <div className="space-y-2">
         {containers.map(c => {
