@@ -178,6 +178,7 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const [minStock,  setMinStock]  = useState(settings?.minStock ?? 12);
   const [localFac,  setLocalFac]  = useState({ ...settings?.factories ?? {} });
   const [closedBranches, setClosedBranches] = useState(settings?.closedBranches ?? []);
+  const [whPin, setWhPin] = useState(settings?.warehousePin ?? "1234");
   // حذف منتج محمي برقم سري
   const [delSearch, setDelSearch]   = useState("");
   const [delPin,    setDelPin]      = useState("");
@@ -204,6 +205,12 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const handleSave = async () => {
     const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches });
     if (ok) show("تم الحفظ ✓"); else show("فشل الحفظ", "error");
+  };
+
+  const saveWhPin = async () => {
+    if (!whPin || whPin.length < 4) { show("الرقم 4 خانات على الأقل", "error"); return; }
+    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, warehousePin: whPin });
+    if (ok) show("تم حفظ رقم المستودع ✓"); else show("فشل الحفظ", "error");
   };
 
   const branches = useMemo(() => allBranches(periods), [periods]);
@@ -340,6 +347,27 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         <a href="https://baro-inventory-qmpp.vercel.app/image-extractor.html" target="_blank" rel="noopener noreferrer"
           className="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl font-bold text-sm">
           📷 افتح أداة استخراج الصور
+        </a>
+      </Card>
+
+      {/* صفحة مدير المستودع */}
+      <Card>
+        <SectionHeader icon="🏬" title="صفحة مدير المستودع" subtitle="توزيع النواقص · اعتماد · يفتحها المدير برقم سري" />
+        <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3 space-y-1">
+          <div>🏬 صفحة مستقلة لمدير المستودع — يشوف النواقص، يطبع البوليصة، يعتمد التوزيع</div>
+          <div className="text-slate-600">يفتحها كمبيوتر أو جوال · محمية برقم سري</div>
+        </div>
+        <div className="mb-3">
+          <label className="text-xs text-slate-400 block mb-1">الرقم السري لمدير المستودع</label>
+          <div className="flex gap-2">
+            <input type="text" value={whPin} onChange={e=>setWhPin(e.target.value)} placeholder="مثال: 1234"
+              className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:border-blue-500" />
+            <button onClick={saveWhPin} className="bg-blue-600 text-white px-4 rounded-xl text-sm font-bold">حفظ</button>
+          </div>
+        </div>
+        <a href="https://baro-inventory-qmpp.vercel.app/warehouse.html" target="_blank" rel="noopener noreferrer"
+          className="block w-full text-center bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold text-sm">
+          🏬 افتح صفحة مدير المستودع
         </a>
       </Card>
 
