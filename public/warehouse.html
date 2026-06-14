@@ -34,7 +34,7 @@
   .prodh .noimg{width:60px;height:60px;border-radius:10px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:26px}
   .prodh .info{flex:1;min-width:0}
   .prodh .pnm{font-weight:900;font-size:14px;color:#fff;line-height:1.3}
-  .prodh .pbc{font-family:monospace;font-size:11px;color:#5b6b85;margin-top:2px}
+  .prodh .pbc{font-family:monospace;font-size:15px;font-weight:900;color:#94a3b8;margin-top:3px;letter-spacing:1px}
   .prodh .arrow{font-size:14px;color:#5b6b85}
   .pstats{display:flex;gap:5px;margin-top:6px}
   .pstats span{flex:1;text-align:center;padding:4px 2px;border-radius:7px;font-size:9px}
@@ -53,12 +53,12 @@
   .br .chk{font-size:20px;cursor:pointer;width:26px;text-align:center}
   .br .bn{flex:1}
   .br .bname{font-size:13px;font-weight:700;color:#e8eef7}
-  .br .q3{display:flex;gap:5px;margin-top:3px}
-  .br .q3 span{padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700}
+  .br .q3{display:flex;gap:5px;margin-top:4px}
+  .br .q3 span{padding:4px 8px;border-radius:7px;font-size:9px;text-align:center;line-height:1.2}
+  .br .q3 b{display:block;font-size:17px;font-weight:900;margin-bottom:1px}
   .s-sold{background:rgba(245,158,11,0.15);color:#fbbf24}
   .s-given{background:rgba(91,155,213,0.15);color:#7cb3e8}
   .s-left{background:rgba(34,197,94,0.18);color:#4ade80}
-  .s-left b{font-size:16px}
   .br .qty{width:48px;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:7px;padding:6px;font-size:16px;font-weight:900;text-align:center;font-family:'Cairo'}
   .empty{text-align:center;padding:50px;color:#5b6b85}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:12px 24px;border-radius:100px;font-weight:900;z-index:99;opacity:0;transition:opacity 0.3s}
@@ -95,7 +95,10 @@ let SALES_MAP = null;
 let currentNeeds = [];
 let activeTab = "needs";
 let openCont = null, openProd = null, openLog = null;
+let selectedCont = null; // الكونتينر المفتوح (شاشة مستقلة)
 let excluded = {}; // {barcode_branch: true} = مستثنى
+let qtyEdit = {};  // {barcode_branch: qty} كمية معدّلة
+let viewImg = null; // الصورة المكبّرة
 
 async function load(key) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
@@ -182,16 +185,21 @@ async function saveProduct(bc){
   const added = [];
   n.branches.forEach(b=>{
     const key = bc+"_"+b.branch;
-    if (excluded[key]) return; // مستثنى
-    TRANSFERS.push({ barcode:bc, name:n.p.name, from:"المستودع", to:b.branch, qty:FIXED_QTY, date:Date.now() });
+    if (excluded[key]) return;
+    const qty = num(qtyEdit[key] ?? FIXED_QTY);
+    TRANSFERS.push({ barcode:bc, name:n.p.name, from:"المستودع", to:b.branch, qty, date:Date.now(), printed:false });
     added.push(b.branch);
   });
   if (added.length === 0){ showToast("ما فيه فروع معتمدة"); return; }
   await save("baro_transfers_v2", TRANSFERS);
-  showToast(`✓ اعتُمد ${added.length} فرع · ${added.length*FIXED_QTY} قطعة`);
-  SALES_MAP = null; // نعيد الحساب (الخصم الذكي)
-  openProd = null;
-  renderContent();
+  showToast(`✓ اعتُمد ${added.length} فرع — في تبويب الطباعة`);
+  SALES_MAP = null;
+  // يبقى المنتج مفتوح (لا نغلقه) — نعيد الحساب ونرسم مع الحفاظ على التمرير
+  const y = window.scrollY;
+  currentNeeds = computeNeeds();
+  renderStats();
+  if (selectedCont) drawContPage(document.getElementById("content"));
+  requestAnimationFrame(()=>window.scrollTo(0,y));
 }
 
 async function cancelTransferByDate(date, name){
@@ -240,81 +248,119 @@ function renderStats(){
 }
 
 function renderApp(){
+  const unprinted = TRANSFERS.filter(t=>!t.printed).length;
   document.getElementById("app").innerHTML = `
     <h1>🏬 مدير المستودع</h1>
     <div class="sub">توزيع النواقص · ALBAROO</div>
     <div class="tabs">
       <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
-      <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 سجل التوزيع</button>
+      <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
+      <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 السجل</button>
     </div>
     <div id="stats" class="stats"></div>
+    ${activeTab==='needs' && !selectedCont?`<input id="searchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="onSearch(this.value)" value="${searchTerm}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`:''}
     <div id="content"></div>`;
   renderStats();
   renderContent();
 }
-function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; renderApp(); }
+let searchTerm = "";
+function onSearch(v){ searchTerm = v; drawNeeds(document.getElementById("content")); }
+function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; selectedCont=null; searchTerm=""; renderApp(); }
 
 function renderContent(){
   const c = document.getElementById("content");
   if (activeTab === "log"){ renderLog(c); return; }
-  // النواقص — تحميل ثم حساب
-  c.innerHTML = `<div class="loading"><span class="spin">⏳</span><div style="margin-top:10px;font-size:13px">جاري حساب النواقص…</div></div>`;
-  setTimeout(()=>{
-    currentNeeds = computeNeeds();
-    renderStats();
-    if (currentNeeds.length === 0){ c.innerHTML = `<div class="empty">✅ لا نواقص حالياً</div>`; return; }
-    const groups = groupByContainer(currentNeeds);
-    const contNames = Object.keys(groups).sort();
-    c.innerHTML = contNames.map(cont=>{
-      const list = groups[cont];
-      const isOpen = openCont === cont;
-      const prods = isOpen ? list.map(n=>renderProd(n)).join("") : "";
-      return `<div class="cont">
-        <div class="conth" onclick="toggleCont('${cont.replace(/'/g,'')}')">
-          <div class="nm">📦 ${cont}</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="badge">${list.length} صنف</span>
-            <span style="color:#5b6b85">${isOpen?'▲':'▼'}</span>
-          </div>
-        </div>
-        ${isOpen?`<div class="contbody">${prods}</div>`:''}
-      </div>`;
-    }).join("");
-  }, 50);
+  if (activeTab === "print"){ renderPrintQueue(c); return; }
+  // النواقص
+  if (currentNeeds.length === 0 && !SALES_MAP){
+    c.innerHTML = `<div class="loading"><span class="spin">⏳</span><div style="margin-top:10px;font-size:13px">جاري حساب النواقص…</div></div>`;
+    setTimeout(()=>{ currentNeeds = computeNeeds(); renderStats(); routeNeeds(c); }, 50);
+  } else {
+    if (!SALES_MAP || currentNeeds.length===0) currentNeeds = computeNeeds();
+    renderStats(); routeNeeds(c);
+  }
 }
+
+function routeNeeds(c){
+  if (selectedCont) drawContPage(c); else drawNeeds(c);
+}
+
+// قائمة الكونتينرات (شبكة)
+function drawNeeds(c){
+  if (currentNeeds.length === 0){ c.innerHTML = `<div class="empty">✅ لا نواقص حالياً</div>`; return; }
+  let filtered = currentNeeds;
+  const q = (searchTerm||"").trim().toLowerCase();
+  if (q) filtered = currentNeeds.filter(n => n.p.barcode.toLowerCase().includes(q) || (n.p.name||"").toLowerCase().includes(q));
+  if (filtered.length === 0){ c.innerHTML = `<div class="empty">لا نتائج لـ "${searchTerm}"</div>`; return; }
+  const groups = groupByContainer(filtered);
+  const contNames = Object.keys(groups).sort();
+  // لو بحث، نعرض المنتجات مباشرة (كل الكونتينرات)
+  if (q){
+    c.innerHTML = contNames.map(cont=>`<div class="cont"><div class="conth"><div class="nm">📦 ${cont}</div><span class="badge">${groups[cont].length}</span></div><div class="contbody">${groups[cont].map(n=>renderProd(n)).join("")}</div></div>`).join("");
+    return;
+  }
+  // شبكة الكونتينرات
+  c.innerHTML = contNames.map(cont=>{
+    const list = groups[cont];
+    return `<div class="cont"><div class="conth" onclick="enterCont('${cont.replace(/'/g,'')}')">
+      <div class="nm">📦 ${cont}</div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="badge">${list.length} صنف</span><span style="color:#5b6b85">←</span></div>
+    </div></div>`;
+  }).join("");
+}
+
+// داخل كونتينر (شاشة مستقلة)
+function drawContPage(c){
+  const groups = groupByContainer(currentNeeds);
+  const list = groups[selectedCont] || [];
+  c.innerHTML = `
+    <button onclick="exitCont()" style="background:#1f2940;color:#7cb3e8;border:none;border-radius:10px;padding:10px 16px;font-family:'Cairo';font-weight:700;font-size:14px;cursor:pointer;margin-bottom:12px">← كل الكونتينرات</button>
+    <div style="font-weight:900;font-size:17px;color:#fff;margin-bottom:4px">📦 ${selectedCont}</div>
+    <div style="font-size:12px;color:#5b6b85;margin-bottom:12px">${list.length} صنف يحتاج توزيع</div>
+    ${list.map(n=>renderProd(n)).join("")}`;
+}
+
+function enterCont(cont){ selectedCont = cont; openProd = null; renderApp(); }
+function exitCont(){ selectedCont = null; openProd = null; renderApp(); }
 
 function renderProd(n){
   const bc = n.p.barcode;
   const img = IMAGES?.[bc];
   const isOpen = openProd === bc;
   const safeBc = bc.replace(/'/g,'');
+  const safeName = (n.p.name||'').replace(/'/g,'');
   let body = "";
   if (isOpen){
     const brs = n.branches.map(b=>{
       const key = bc+"_"+b.branch;
       const ex = excluded[key];
+      const qv = qtyEdit[key] ?? FIXED_QTY;
       const recentWarn = b.recent>0 ? `<div class="recent">⚠️ نُقل ${fmtN(b.recent)} قطعة خلال أسبوع — تأكد</div>` : "";
       return `${recentWarn}<div class="br${ex?' excluded':''}" id="br_${key}">
         <span class="chk" id="chk_${key}" onclick="toggleExclude('${safeBc}','${b.branch.replace(/'/g,'')}')">${ex?'☐':'✅'}</span>
         <div class="bn">
           <div class="bname">🏪 ${b.branch}</div>
-          <div class="q3"><span class="s-sold">باع ${fmtN(b.sold)}</span><span class="s-given">أخذ ${fmtN(b.given)}</span><span class="s-left">باقي <b>${fmtN(b.remaining)}</b></span></div>
+          <div class="q3">
+            <span class="s-sold"><b>${fmtN(b.sold)}</b>باع</span>
+            <span class="s-given"><b>${fmtN(b.given)}</b>أخذ</span>
+            <span class="s-left"><b>${fmtN(b.remaining)}</b>باقي</span>
+          </div>
         </div>
-        <input class="qty" type="number" value="${FIXED_QTY}" readonly />
+        <input class="qty" type="number" value="${qv}" onchange="qtyEdit['${key}']=this.value" />
       </div>`;
     }).join("");
     body = `<div class="prodbody">
       ${brs}
       <div class="saverow">
-        <button class="save" onclick="saveProduct('${safeBc}')">✅ اعتمد التوزيع (${n.branches.length} فرع × 12)</button>
+        <button class="save" onclick="saveProduct('${safeBc}')">✅ اعتمد التوزيع (${n.branches.length} فرع)</button>
         <button class="slip" onclick="printSlip('${safeBc}')">🖨️ بوليصة</button>
       </div>
     </div>`;
   }
   return `<div class="prod">
-    <div class="prodh" onclick="toggleProd('${safeBc}')">
-      ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
-      <div class="info">
+    <div class="prodh">
+      ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${img.replace(/'/g,"\\\\'")}','${safeName}')"/>`:`<div class="noimg" onclick="toggleProd('${safeBc}')">📦</div>`}
+      <div class="info" onclick="toggleProd('${safeBc}')">
         <div class="pnm">${n.p.name}</div>
         <div class="pbc">${bc}</div>
         <div class="pstats">
@@ -323,19 +369,52 @@ function renderProd(n){
           <span class="ps-left"><b>${fmtN(n.closing)}</b>باقي</span>
         </div>
       </div>
-      <span class="arrow">${isOpen?'▲':'▼ّ'}</span>
+      <span class="arrow" onclick="toggleProd('${safeBc}')">${isOpen?'▲':'▼'}</span>
     </div>
     ${body}
   </div>`;
 }
 
 function toggleCont(cont){ openCont = (openCont===cont)?null:cont; openProd=null; renderContent(); }
-function toggleProd(bc){ openProd = (openProd===bc)?null:bc; renderContent(); }
+function toggleProd(bc){
+  const y = window.scrollY;
+  openProd = (openProd===bc)?null:bc;
+  routeNeeds(document.getElementById("content"));
+  requestAnimationFrame(()=>window.scrollTo(0,y));
+}
+
+// عارض الصورة (تكبير + حفظ)
+function openImg(src, name){
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px";
+  ov.onclick = ()=>ov.remove();
+  ov.innerHTML = `
+    <img src="${src}" style="max-width:100%;max-height:70vh;border-radius:14px;object-fit:contain" onclick="event.stopPropagation()" />
+    <div style="color:#fff;font-weight:700;margin-top:12px;text-align:center">${name||''}</div>
+    <div style="display:flex;gap:10px;margin-top:16px" onclick="event.stopPropagation()">
+      <button id="saveImgBtn" style="padding:12px 24px;border-radius:100px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer">💾 حفظ الصورة</button>
+      <button onclick="this.closest('div').parentElement.remove()" style="padding:12px 24px;border-radius:100px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;font-weight:700;font-family:'Cairo';cursor:pointer">إغلاق</button>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#saveImgBtn").onclick = async ()=>{
+    try {
+      const res = await fetch(src); const blob = await res.blob();
+      const fn = (name||"image").replace(/[^\w\u0600-\u06FF]/g,"_")+".jpg";
+      if (navigator.canShare){
+        const file = new File([blob], fn, {type:blob.type});
+        if (navigator.canShare({files:[file]})){ await navigator.share({files:[file]}); return; }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href=url; a.download=fn; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch { alert("اضغط مطوّل على الصورة لحفظها"); }
+  };
+}
 
 function renderLog(c){
-  // نجمّع السجل بالمنتج (بدون تراكم)
+  // السجل = المطبوع (المُرحّل) فقط
   const byProd = {};
-  TRANSFERS.forEach(t=>{
+  TRANSFERS.filter(t=>t.printed).forEach(t=>{
     if (!byProd[t.barcode]) byProd[t.barcode] = { name:t.name, barcode:t.barcode, items:[] };
     byProd[t.barcode].items.push(t);
   });
@@ -373,6 +452,92 @@ function renderLog(c){
   }).join("");
 }
 function toggleLog(bc){ openLog = (openLog===bc)?null:bc; renderContent(); }
+
+// ─── تبويب جاهز للطباعة ──────────────────────────────────────
+function renderPrintQueue(c){
+  const unprinted = TRANSFERS.filter(t=>!t.printed);
+  if (unprinted.length === 0){ c.innerHTML = `<div class="empty">لا شيء جاهز للطباعة<br><span style="font-size:12px">اعتمد منتجات من تبويب النواقص</span></div>`; return; }
+  // تجميع بالمنتج
+  const byProd = {};
+  unprinted.forEach(t=>{
+    if (!byProd[t.barcode]) byProd[t.barcode] = { name:t.name, barcode:t.barcode, items:[] };
+    byProd[t.barcode].items.push(t);
+  });
+  const list = Object.values(byProd);
+  const totalQty = unprinted.reduce((s,t)=>s+num(t.qty),0);
+  c.innerHTML = `
+    <button class="save" style="width:100%;padding:14px;border:none;border-radius:12px;font-family:'Cairo';font-weight:900;font-size:15px;color:#fff;background:#7c3aed;cursor:pointer;margin-bottom:12px" onclick="printAll()">🖨️ اطبع الكل (${list.length} صنف · ${fmtN(totalQty)} قطعة)</button>
+    ${list.map(pr=>{
+      const img = IMAGES?.[pr.barcode];
+      const q = pr.items.reduce((s,t)=>s+num(t.qty),0);
+      return `<div class="log"><div class="logh">
+        ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(pr.name||'').replace(/'/g,'')}')"/>`:`<div class="noimg">📦</div>`}
+        <div class="info"><div class="lnm">${pr.name}</div><div class="lqt">${pr.items.length} فرع · ${fmtN(q)} قطعة</div></div>
+        <button onclick="deleteProduct('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer">🗑️</button>
+      </div></div>`;
+    }).join("")}`;
+}
+
+// طباعة كل المعتمد غير المطبوع — ثم سؤال الترحيل
+function printAll(){
+  const unprinted = TRANSFERS.filter(t=>!t.printed);
+  if (unprinted.length === 0) return;
+  const byProd = {};
+  unprinted.forEach(t=>{
+    if (!byProd[t.barcode]) byProd[t.barcode] = [];
+    byProd[t.barcode].push(t);
+  });
+  const d = new Date();
+  const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+  const slips = Object.entries(byProd).map(([bc, items])=>{
+    const prod = PRODUCTS.find(p=>p.barcode===bc) ?? { name:items[0].name, barcode:bc, container:"" };
+    const img = IMAGES?.[bc];
+    const rows = items.map((t,i)=>`<tr><td class="rn">${i+1}</td><td>${t.to}</td><td><b>${fmtN(t.qty)}</b></td></tr>`).join("");
+    return `<div class="slip">
+      <div class="hd">
+        ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
+        <div class="ti"><div class="brand">${SETTINGS?.brandName ?? "ALBAROO"}</div><div class="pnm">${prod.name}</div>
+        <div class="meta">🏭 ${getFactoryCode(bc)} · 📦 ${prod.container ?? ""} · 📅 ${ds}</div></div>
+      </div>
+      <div class="bcwrap"><svg class="bcsvg" data-code="${bc}"></svg><div class="bcn">${bc}</div></div>
+      <div class="needbar">🔴 فروع: <b>${items.length}</b></div>
+      <table><thead><tr><th>#</th><th>الفرع</th><th>يُرسل</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>طباعة الكل</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
+    <style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo';box-sizing:border-box;margin:0;padding:0}body{color:#1a1a1a;background:#ddd}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:14px;display:flex;gap:12px;justify-content:center;z-index:99}
+    .tb button{font-family:'Cairo';font-size:17px;font-weight:900;border:none;border-radius:12px;padding:14px 32px;cursor:pointer}
+    .pr{background:#2563eb;color:#fff}.bk{background:#475569;color:#fff}
+    .wrap{padding:90px 10px 30px}
+    .slip{width:100%;max-width:680px;background:#fff;margin:0 auto 14px;padding:18px;border-radius:10px;page-break-after:always;page-break-inside:avoid}
+    .hd{display:flex;gap:14px;align-items:center;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:12px}
+    .hd img{width:100px;height:100px;border-radius:10px;object-fit:contain;border:1px solid #ddd;background:#fafafa}
+    .hd .noimg{width:100px;height:100px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:40px}
+    .brand{font-size:20px;font-weight:900;color:#0f172a}
+    .pnm{font-size:18px;font-weight:900;margin:3px 0}.meta{font-size:12px;color:#666}
+    .bcwrap{text-align:center;margin:10px 0}.bcn{font-family:monospace;font-size:24px;font-weight:900;letter-spacing:3px;margin-top:4px}
+    .needbar{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:8px;text-align:center;font-weight:700;margin:10px 0}.needbar b{font-size:18px}
+    table{width:100%;border-collapse:collapse}th{background:#0f172a;color:#fff;padding:10px;font-size:14px}
+    td{border:1px solid #ddd;padding:10px;text-align:center;font-size:16px}td.rn{font-weight:900;color:#888;background:#f8fafc;width:34px}td b{font-size:20px;color:#2563eb}
+    @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{box-shadow:none;border-radius:0;margin:0 auto}}
+    </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length})</button></div>
+    <div class="wrap">${slips}</div>
+    <script>document.querySelectorAll('svg.bcsvg').forEach(function(el){try{JsBarcode(el,el.getAttribute('data-code'),{format:"CODE128",width:2,height:55,displayValue:false,margin:2});}catch(e){}});<\/script>
+    </body></html>`;
+  const w = window.open("","_blank");
+  if (w){ w.document.write(html); w.document.close(); }
+  // بعد فتح الطباعة، نسأل الترحيل
+  setTimeout(()=>{
+    if (confirm("بعد ما طبعت — أرحّل المطبوعات لسجل التوزيع؟")){
+      TRANSFERS.forEach(t=>{ if(!t.printed) t.printed = true; });
+      save("baro_transfers_v2", TRANSFERS).then(()=>{ showToast("رُحّلت للسجل ✓"); renderApp(); });
+    }
+  }, 800);
+}
 
 function printSlip(bc){
   const n = currentNeeds.find(x=>x.p.barcode===bc);
