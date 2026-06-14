@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>رصد الترند — ALBAROO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+  *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0804;color:#f0e6d0;padding:16px;max-width:520px;margin:0 auto;padding-bottom:60px}
+  h1{font-size:22px;color:#fff}
+  .sub{font-size:12px;color:#d4a853;margin-bottom:4px}
+  .hint{font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;margin:12px 0;line-height:1.6}
+  .cat{display:flex;gap:6px;overflow-x:auto;padding:8px 0;margin-bottom:12px;-webkit-overflow-scrolling:touch}
+  .cat button{white-space:nowrap;padding:8px 14px;border-radius:100px;border:1px solid rgba(212,168,83,0.3);background:rgba(212,168,83,0.08);color:#d4a853;font-family:'Cairo';font-size:13px;font-weight:700;cursor:pointer}
+  .cat button.on{background:#d4a853;color:#0a0804}
+  .src{background:rgba(255,255,255,0.04);border:1px solid rgba(212,168,83,0.15);border-radius:16px;padding:14px;margin-bottom:12px}
+  .srch{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .srch .ico{font-size:22px}
+  .srch .nm{font-size:16px;font-weight:900;color:#fff}
+  .srch .badge{font-size:9px;padding:2px 7px;border-radius:100px;font-weight:700;margin-right:auto}
+  .official{background:rgba(34,197,94,0.2);color:#22c55e}
+  .china{background:rgba(239,68,68,0.15);color:#f87171}
+  .links{display:flex;flex-direction:column;gap:6px}
+  .links a{display:block;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:11px 13px;color:#e0d5b8;text-decoration:none;font-size:13px;font-weight:700;transition:all 0.15s}
+  .links a:active{background:rgba(212,168,83,0.15)}
+  .links a .arrow{float:left;color:#d4a853}
+  .note{font-size:10px;color:#64748b;margin-top:6px}
+  .tip{background:rgba(212,168,83,0.08);border:1px solid rgba(212,168,83,0.2);border-radius:12px;padding:12px;margin-top:16px;font-size:12px;color:#d4a853;line-height:1.7}
+</style>
+</head>
+<body>
+<h1>📡 رصد الترند</h1>
+<div class="sub">عالمي · إكسسوارات · مكياج · أطفال · كرتون — ALBAROO</div>
+<div class="hint">💡 الروابط تفتح المحتوى الحيّ مباشرة — كل مرة تدخلها تشوف أحدث ترند (المنصة تحدّثه تلقائياً). ما تحتاج زر تحديث.</div>
+
+<div class="cat" id="cats"></div>
+<div id="sources"></div>
+
+<div class="tip">⚡ نصيحة: شيك يومياً <b>TikTok Top Products</b> و<b>Pinterest Trends</b> — أسرع إشارة للترند. الصيني (RedNote/Taobao) منبع الموضة قبل الغرب بأسابيع.</div>
+
+<script>
+// الفئات
+const CATS = ["الكل","إكسسوارات","مكياج","مجوهرات","شنط","ساعات","إكسسوارات شعر","أطفال","شخصيات كرتونية"];
+
+// المصادر — لكل فئة روابط مفلترة
+const SOURCES = [
+  {
+    ico:"📌", nm:"Pinterest Trends", badge:"official", cats:{
+      "إكسسوارات":"https://trends.pinterest.com/?country=Global&q=accessories",
+      "مكياج":"https://trends.pinterest.com/?country=Global&q=makeup",
+      "مجوهرات":"https://trends.pinterest.com/?country=Global&q=jewelry",
+      "شنط":"https://trends.pinterest.com/?country=Global&q=bags",
+      "ساعات":"https://trends.pinterest.com/?country=Global&q=watches",
+      "إكسسوارات شعر":"https://trends.pinterest.com/?country=Global&q=hair%20accessories",
+      "أطفال":"https://trends.pinterest.com/?country=Global&q=kids%20accessories",
+      "شخصيات كرتونية":"https://trends.pinterest.com/?country=Global&q=character%20merch",
+      "_all":"https://trends.pinterest.com/"
+    }
+  },
+  {
+    ico:"🎵", nm:"TikTok Top Products", badge:"official", cats:{
+      "_all":"https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en",
+      "مكياج":"https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en?category=beauty_personal_care",
+      "إكسسوارات":"https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en?category=fashion_accessories"
+    }, note:"فلتر: Region=Global · Category=Beauty/Fashion · 7 أيام"
+  },
+  {
+    ico:"🔥", nm:"TikTok Trending Hashtags", badge:"official", cats:{
+      "_all":"https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en"
+    }
+  },
+  {
+    ico:"📦", nm:"Amazon Movers & Shakers", badge:"official", cats:{
+      "إكسسوارات":"https://www.amazon.com/gp/movers-and-shakers/fashion",
+      "مكياج":"https://www.amazon.com/gp/movers-and-shakers/beauty",
+      "مجوهرات":"https://www.amazon.com/gp/movers-and-shakers/jewelry",
+      "شنط":"https://www.amazon.com/gp/movers-and-shakers/fashion/handbags",
+      "ساعات":"https://www.amazon.com/gp/movers-and-shakers/watches",
+      "أطفال":"https://www.amazon.com/gp/movers-and-shakers/toys-and-games",
+      "_all":"https://www.amazon.com/gp/movers-and-shakers"
+    }, note:"الأسرع صعوداً خلال 24 ساعة"
+  },
+  {
+    ico:"🛒", nm:"Temu Best Sellers", badge:"", cats:{
+      "إكسسوارات":"https://www.temu.com/jewelry-accessories-o3-1.html",
+      "مكياج":"https://www.temu.com/beauty-health-o3-26.html",
+      "أطفال":"https://www.temu.com/toys-games-o3-30.html",
+      "_all":"https://www.temu.com/best-sellers.html"
+    }
+  },
+  {
+    ico:"👗", nm:"Shein Trends", badge:"", cats:{
+      "إكسسوارات":"https://www.shein.com/accessories-c-1760.html",
+      "مكياج":"https://www.shein.com/beauty-c-1864.html",
+      "مجوهرات":"https://www.shein.com/Jewelry-c-1759.html",
+      "شنط":"https://www.shein.com/bags-c-2160.html",
+      "إكسسوارات شعر":"https://www.shein.com/Hair-Accessories-c-1987.html",
+      "_all":"https://www.shein.com/New-in-sc-001.html"
+    }
+  },
+  {
+    ico:"💎", nm:"Claire's New Arrivals", badge:"", cats:{
+      "إكسسوارات":"https://www.claires.com/us/new/",
+      "إكسسوارات شعر":"https://www.claires.com/us/accessories/hair-accessories/",
+      "مجوهرات":"https://www.claires.com/us/jewelry/",
+      "أطفال":"https://www.claires.com/us/kids/",
+      "_all":"https://www.claires.com/us/new/"
+    }
+  },
+  {
+    ico:"🛍️", nm:"Taobao 淘宝", badge:"china", cats:{
+      "_all":"https://www.taobao.com/",
+      "إكسسوارات":"https://s.taobao.com/search?q=accessories+饰品",
+      "مكياج":"https://s.taobao.com/search?q=化妆品"
+    }, note:"قد يحتاج حساب/تطبيق صيني"
+  },
+  {
+    ico:"📕", nm:"RedNote 小红书", badge:"china", cats:{
+      "_all":"https://www.xiaohongshu.com/explore",
+      "مكياج":"https://www.xiaohongshu.com/search_result?keyword=makeup",
+      "شخصيات كرتونية":"https://www.xiaohongshu.com/search_result?keyword=labubu"
+    }, note:"منبع الموضة الصيني — قد يحتاج تطبيق"
+  },
+  {
+    ico:"📊", nm:"Google Trends", badge:"official", cats:{
+      "_all":"https://trends.google.com/trends/trendingsearches/daily?geo=US",
+      "إكسسوارات":"https://trends.google.com/trends/explore?q=accessories",
+      "مكياج":"https://trends.google.com/trends/explore?q=makeup",
+      "شخصيات كرتونية":"https://trends.google.com/trends/explore?q=labubu"
+    }
+  },
+];
+
+let activeCat = "الكل";
+
+function render() {
+  // الفئات
+  document.getElementById("cats").innerHTML = CATS.map(c =>
+    `<button class="${c===activeCat?'on':''}" onclick="setCat('${c}')">${c}</button>`).join("");
+  // المصادر
+  document.getElementById("sources").innerHTML = SOURCES.map(s => {
+    // نختار الرابط حسب الفئة، أو _all
+    let link = activeCat==="الكل" ? s.cats["_all"] : (s.cats[activeCat] || s.cats["_all"]);
+    const badgeHtml = s.badge==="official" ? '<span class="badge official">رسمي مجاني</span>'
+                    : s.badge==="china" ? '<span class="badge china">صيني</span>' : '';
+    return `<div class="src">
+      <div class="srch"><span class="ico">${s.ico}</span><span class="nm">${s.nm}</span>${badgeHtml}</div>
+      <div class="links">
+        <a href="${link}" target="_blank" rel="noopener">افتح ${activeCat==="الكل"?"":("· "+activeCat)} <span class="arrow">←</span></a>
+      </div>
+      ${s.note?`<div class="note">📌 ${s.note}</div>`:''}
+    </div>`;
+  }).join("");
+}
+function setCat(c){ activeCat=c; render(); }
+render();
+</script>
+</body>
+</html>
