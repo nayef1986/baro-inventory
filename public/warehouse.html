@@ -74,6 +74,11 @@
   .logbr{display:flex;justify-content:space-between;align-items:center;background:#0f1626;border-radius:8px;padding:8px 10px;margin-top:6px;font-size:12px}
   .logbr .ldt{color:#5b6b85;font-size:10px}
   .logbr button{background:rgba(239,68,68,0.15);color:#fca5a5;border:none;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer}
+  @media print {
+    body > #app, body > .toast { display: none !important; }
+    #printOverlay { position: static !important; overflow: visible !important; background:#fff !important; }
+    #printOverlay .tb { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -526,12 +531,9 @@ function slipCSS(){
 function printAll(){
   const unprinted = TRANSFERS.filter(t=>!t.printed);
   if (unprinted.length === 0) return;
-  // نضمن حساب النواقص (للأرقام الصحيحة)
   if (!SALES_MAP) SALES_MAP = buildSalesMap();
-  if (currentNeeds.length === 0) currentNeeds = computeNeeds();
   const d = new Date();
   const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
-  // تجميع بالمنتج
   const byProd = {};
   unprinted.forEach(t=>{ if(!byProd[t.barcode]) byProd[t.barcode]=[]; byProd[t.barcode].push(t); });
 
@@ -541,7 +543,6 @@ function printAll(){
     const salesByBranch = SALES_MAP?.[bc] ?? {};
     const totalSold = Object.values(salesByBranch).reduce((s,q)=>s+q,0);
     const closing = Math.max(0, bought-totalSold);
-    // باع/أخذ/باقي لكل فرع — من المبيعات مباشرة (مو من النواقص المخصومة)
     const rows = items.map((t,i)=>{
       const sold = num(salesByBranch[t.to] ?? 0);
       const given = toDozen(sold);
@@ -552,21 +553,35 @@ function printAll(){
     return buildSlipBody(bc, rows, info);
   }).join("");
 
-  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>طباعة الكل</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
-    <style>${slipCSS()}</style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة (${Object.keys(byProd).length})</button></div>
-    <div class="wrap">${slips}</div>
-    <script>document.querySelectorAll('svg.bcsvg').forEach(function(el){try{JsBarcode(el,el.getAttribute('data-code'),{format:"CODE128",width:2,height:60,displayValue:false,margin:2});}catch(e){}});<\/script>
-    </body></html>`;
-  const w = window.open("","_blank");
-  if (w){ w.document.write(html); w.document.close(); }
-  setTimeout(()=>{
-    if (confirm("بعد ما طبعت — أرحّل المطبوعات لسجل التوزيع؟")){
-      TRANSFERS.forEach(t=>{ if(!t.printed) t.printed = true; });
-      save("baro_transfers_v2", TRANSFERS).then(()=>{ showToast("رُحّلت للسجل ✓"); renderApp(); });
-    }
-  }, 800);
+  const count = Object.keys(byProd).length;
+  // نعرض overlay داخل الصفحة (مو نافذة — عشان الإغلاق يشتغل أكيد)
+  const ov = document.createElement("div");
+  ov.id = "printOverlay";
+  ov.style.cssText = "position:fixed;inset:0;background:#ddd;z-index:500;overflow:auto;-webkit-overflow-scrolling:touch";
+  ov.innerHTML = `
+    <style>${slipCSS()}</style>
+    <div class="tb" style="position:sticky">
+      <button class="bk" onclick="closePrintOverlay()">✕ إغلاق</button>
+      <button class="pr" onclick="doPrintOverlay()">🖨️ طباعة (${count})</button>
+    </div>
+    <div class="wrap" id="printSlips">${slips}</div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = "hidden";
+  // نرسم الباركودات
+  ov.querySelectorAll('svg.bcsvg').forEach(function(el){ try{ JsBarcode(el, el.getAttribute('data-code'), {format:"CODE128",width:2,height:60,displayValue:false,margin:2}); }catch(e){} });
+}
+
+function doPrintOverlay(){ window.print(); }
+
+function closePrintOverlay(){
+  const ov = document.getElementById("printOverlay");
+  if (ov) ov.remove();
+  document.body.style.overflow = "";
+  // نسأل الترحيل
+  if (confirm("هل طبعت البوليصات؟ أرحّلها لسجل التوزيع؟")){
+    TRANSFERS.forEach(t=>{ if(!t.printed) t.printed = true; });
+    save("baro_transfers_v2", TRANSFERS).then(()=>{ showToast("رُحّلت للسجل ✓"); renderApp(); });
+  }
 }
 
 
