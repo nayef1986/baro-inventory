@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مدير المستودع — ALBAROO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+  *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0e1a;color:#e8eef7;padding:14px;max-width:680px;margin:0 auto;padding-bottom:60px}
+  h1{font-size:20px;color:#fff}
+  .sub{font-size:11px;color:#5b9bd5;margin-bottom:12px}
+  .gate{max-width:300px;margin:80px auto;text-align:center}
+  .gate input{width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:14px;font-size:18px;text-align:center;font-family:'Cairo';letter-spacing:4px;margin:14px 0}
+  .gate button{width:100%;background:#2563eb;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:900;font-family:'Cairo';cursor:pointer}
+  .loading{text-align:center;padding:60px;color:#5b9bd5}
+  .spin{font-size:32px;animation:s 1s linear infinite;display:inline-block}@keyframes s{to{transform:rotate(360deg)}}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+  .stat{background:#141b2d;border:1px solid #1f2940;border-radius:12px;padding:10px;text-align:center}
+  .stat .v{font-size:20px;font-weight:900}.stat .l{font-size:10px;color:#5b6b85;margin-top:2px}
+  .card{background:#141b2d;border:1px solid #1f2940;border-radius:14px;padding:13px;margin-bottom:10px}
+  .ph{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .ph img{width:54px;height:54px;border-radius:10px;object-fit:cover;border:1px solid #2d3a52}
+  .ph .noimg{width:54px;height:54px;border-radius:10px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:24px}
+  .ph .nm{font-weight:900;font-size:14px;color:#fff;line-height:1.3}
+  .ph .bc{font-family:monospace;font-size:11px;color:#5b6b85}
+  .recent{background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:7px 10px;font-size:11px;color:#fca5a5;margin-bottom:8px}
+  .brs{display:flex;flex-direction:column;gap:6px}
+  .br{display:flex;align-items:center;gap:8px;background:#0f1626;border-radius:9px;padding:8px 10px}
+  .br .bn{flex:1;font-size:13px;font-weight:700}
+  .br .qt{font-size:11px;color:#5b6b85}
+  .br .q3{display:flex;gap:6px;font-size:10px}
+  .br .q3 span{padding:1px 5px;border-radius:5px}
+  .s-sold{background:rgba(245,158,11,0.15);color:#fbbf24}
+  .s-given{background:rgba(91,155,213,0.15);color:#7cb3e8}
+  .s-left{background:rgba(34,197,94,0.15);color:#4ade80}
+  .br input{width:54px;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:7px;padding:5px;font-size:15px;font-weight:900;text-align:center;font-family:'Cairo'}
+  .br .ok{background:#16a34a;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:900;font-family:'Cairo';cursor:pointer}
+  .br.done{opacity:0.5}
+  .br.done .ok{background:#334155}
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{flex:1;border:none;border-radius:9px;padding:10px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer}
+  .print{background:#7c3aed;color:#fff}
+  .empty{text-align:center;padding:50px;color:#5b6b85}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:12px 24px;border-radius:100px;font-weight:900;z-index:99;opacity:0;transition:opacity 0.3s}
+  .toast.show{opacity:1}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{flex:1;padding:9px;border-radius:10px;border:1px solid #2d3a52;background:#141b2d;color:#5b6b85;font-family:'Cairo';font-weight:700;font-size:13px;cursor:pointer}
+  .tabs button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+  .log{background:#141b2d;border:1px solid #1f2940;border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px}
+  .log .top{display:flex;justify-content:space-between;color:#7cb3e8;font-weight:700}
+  .log .dt{color:#5b6b85;font-size:10px}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading"><span class="spin">⏳</span></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+const MIN = 12, RECENT_DAYS = 7;
+const toDozen = n => Math.ceil(n/MIN)*MIN;
+const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
+const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
+
+let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [];
+let edited = {}; // {barcode_branch: qty}
+
+async function load(key) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+    { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+  const j = await r.json();
+  return j?.[0]?.value ?? null;
+}
+async function save(key, value) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+    method:"POST",
+    headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value })
+  });
+}
+
+function getFactoryCode(bc){ const m=String(bc).match(/^(\d+)B/); return m?m[1]:""; }
+function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
+function soldAll(bc){ return PERIODS.reduce((s,per)=>s+Object.values(per.sales??{}).reduce((ss,d)=>ss+num(d[bc]?.qty??0),0),0); }
+
+// نقل معتمد حديثاً (خلال 7 أيام) لمنتج+فرع
+function recentTransfer(bc, branch){
+  const now = Date.now();
+  return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && (now-t.date) < RECENT_DAYS*86400000)
+    .reduce((s,t)=>s+num(t.qty),0);
+}
+
+function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
+
+// ─── حساب النواقص: فروع تحتاج توزيع ──────────────────────────
+function computeNeeds(){
+  const closed = SETTINGS?.closedBranches ?? [];
+  const needs = [];
+  PRODUCTS.forEach(p=>{
+    const bought = totalPurchases(p);
+    const sold = soldAll(p.barcode);
+    const closing = Math.max(0, bought-sold);
+    if (closing <= 0) return; // ما عنده مخزون يوزّع
+    // فروعه
+    const bs = {};
+    PERIODS.forEach(per=>{
+      Object.entries(per.sales??{}).forEach(([branch,d])=>{
+        if (closed.includes(branch)) return;
+        const q = num(d[p.barcode]?.qty??0);
+        if (q>0) bs[branch]=(bs[branch]??0)+q;
+      });
+    });
+    const branches = Object.entries(bs).map(([branch,bsold])=>{
+      const given = toDozen(bsold);
+      const recent = recentTransfer(p.barcode, branch);
+      const remaining = given - bsold + recent; // الخصم الذكي: نضيف المنقول حديثاً
+      return { branch, sold:bsold, given, remaining, recent };
+    }).filter(b=> b.remaining < 7).sort((a,b)=>a.remaining-b.remaining);
+    if (branches.length === 0) return;
+    needs.push({ p, closing, branches });
+  });
+  return needs;
+}
+
+// ─── الاعتماد ────────────────────────────────────────────────
+async function approve(bc, name, branch, btn){
+  const key = bc+"_"+branch;
+  const qty = edited[key] ?? null;
+  if (qty == null) return;
+  TRANSFERS.push({ barcode:bc, name, from:"المستودع", to:branch, qty:num(qty), date:Date.now() });
+  await save("baro_transfers_v2", TRANSFERS);
+  btn.closest(".br").classList.add("done");
+  btn.textContent = "✓ معتمد";
+  showToast("تم اعتماد "+fmtN(qty)+" لـ "+branch);
+  // نحدّث الإحصاء
+  renderStats();
+}
+
+// ─── إلغاء عملية (ترجع الكمية) ───────────────────────────────
+async function cancelTransferByDate(date, name){
+  if (!confirm(`إلغاء توزيع "${name}"؟\nالكمية سترجع للاحتياج.`)) return;
+  TRANSFERS = TRANSFERS.filter(t=>t.date !== date);
+  await save("baro_transfers_v2", TRANSFERS);
+  showToast("أُلغيت — رجعت الكمية");
+  renderApp();
+}
+
+// ─── الواجهة ─────────────────────────────────────────────────
+function renderStats(){
+  const el = document.getElementById("stats");
+  if (!el) return;
+  const now = Date.now();
+  const todayApproved = TRANSFERS.filter(t=>(now-t.date)<86400000).length;
+  const weekQty = TRANSFERS.filter(t=>(now-t.date)<RECENT_DAYS*86400000).reduce((s,t)=>s+num(t.qty),0);
+  el.innerHTML = `
+    <div class="stat"><div class="v" style="color:#7cb3e8">${currentNeeds.length}</div><div class="l">صنف يحتاج توزيع</div></div>
+    <div class="stat"><div class="v" style="color:#4ade80">${todayApproved}</div><div class="l">معتمد اليوم</div></div>
+    <div class="stat"><div class="v" style="color:#fbbf24">${fmtN(weekQty)}</div><div class="l">موزّع هذا الأسبوع</div></div>`;
+}
+
+let currentNeeds = [];
+let activeTab = "needs";
+
+function renderApp(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <h1>🏬 مدير المستودع</h1>
+    <div class="sub">توزيع النواقص · ALBAROO</div>
+    <div class="tabs">
+      <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
+      <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 سجل التوزيع</button>
+    </div>
+    <div id="stats" class="stats"></div>
+    <div id="content"></div>`;
+  renderStats();
+  renderContent();
+}
+
+function setTab(t){ activeTab=t; renderApp(); }
+
+function renderContent(){
+  const c = document.getElementById("content");
+  if (activeTab === "log"){
+    const sorted = [...TRANSFERS].sort((a,b)=>b.date-a.date).slice(0,100);
+    c.innerHTML = sorted.length ? sorted.map((t)=>{
+      const realIdx = [...TRANSFERS].sort((a,b)=>b.date-a.date).indexOf(t);
+      const d = new Date(t.date);
+      const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear()+" "+(d.getHours()+"").padStart(2,"0")+":"+(d.getMinutes()+"").padStart(2,"0");
+      const now = Date.now();
+      const isRecent = (now-t.date) < RECENT_DAYS*86400000;
+      return `<div class="log"><div class="top"><span>${t.name}</span><span>${fmtN(t.qty)} قطعة</span></div>
+        <div style="color:#9ab">→ ${t.to} ${isRecent?'<span style="color:#fbbf24;font-size:10px">· نشط (يُخصم)</span>':'<span style="color:#5b6b85;font-size:10px">· منتهي</span>'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+          <span class="dt">${ds}</span>
+          <button onclick="cancelTransferByDate(${t.date},'${(t.name||'').replace(/'/g,'')}')" style="background:rgba(239,68,68,0.15);color:#fca5a5;border:none;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer">🗑️ إلغاء</button>
+        </div></div>`;
+    }).join("") : `<div class="empty">لا توزيعات بعد</div>`;
+    return;
+  }
+  // النواقص
+  currentNeeds = computeNeeds();
+  renderStats();
+  if (currentNeeds.length === 0){ c.innerHTML = `<div class="empty">✅ لا نواقص حالياً — كل الفروع مكتملة</div>`; return; }
+  c.innerHTML = currentNeeds.map(n=>{
+    const img = IMAGES?.[n.p.barcode];
+    const brs = n.branches.map(b=>{
+      const suggest = toDozen(Math.max(7-b.remaining, b.sold));
+      const key = n.p.barcode+"_"+b.branch;
+      edited[key] = edited[key] ?? Math.min(suggest, n.closing);
+      const recentWarn = b.recent>0 ? `<div class="recent">⚠️ نُقل لهذا الفرع ${fmtN(b.recent)} قطعة خلال آخر أسبوع — تأكد قبل التوزيع</div>` : "";
+      return `${recentWarn}<div class="br">
+        <div class="bn">🏪 ${b.branch}
+          <div class="q3"><span class="s-sold">باع ${fmtN(b.sold)}</span><span class="s-given">أخذ ${fmtN(b.given)}</span><span class="s-left">باقي ${fmtN(b.remaining)}</span></div>
+        </div>
+        <input type="number" value="${edited[key]}" onchange="edited['${key}']=this.value" />
+        <button class="ok" onclick="approve('${n.p.barcode}','${(n.p.name||'').replace(/'/g,'')}','${b.branch.replace(/'/g,'')}',this)">اعتمد</button>
+      </div>`;
+    }).join("");
+    return `<div class="card">
+      <div class="ph">${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
+        <div><div class="nm">${n.p.name}</div><div class="bc">${n.p.barcode}</div>
+        <div style="font-size:11px;color:#4ade80;margin-top:2px">بالمخزون: ${fmtN(n.closing)}</div></div>
+      </div>
+      ${brs}
+      <div class="actions"><button class="print" onclick="printSlip('${n.p.barcode}')">🖨️ بوليصة</button></div>
+    </div>`;
+  }).join("");
+}
+
+function printSlip(bc){
+  const n = currentNeeds.find(x=>x.p.barcode===bc);
+  if (!n) return;
+  const d = new Date();
+  const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+  const img = IMAGES?.[bc];
+  const rows = n.branches.map(b=>{
+    const key = bc+"_"+b.branch;
+    return `<tr><td>${b.branch}</td><td>${fmtN(b.sold)}</td><td>${fmtN(b.given)}</td><td>${fmtN(b.remaining)}</td><td><b>${fmtN(edited[key]||0)}</b></td></tr>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>بوليصة</title>
+    <style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo';box-sizing:border-box;margin:0;padding:0}body{padding:16px;max-width:600px;margin:0 auto}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center}
+    .tb button{font-family:'Cairo';font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+    .pr{background:#2563eb;color:#fff}.bk{background:#334155;color:#fff}
+    .w{padding:60px 0 20px;text-align:center}
+    h2{font-size:22px;margin:8px 0}img{width:120px;height:120px;object-fit:contain;border:1px solid #ddd;border-radius:10px;margin:8px auto;display:block}
+    .bc{font-family:monospace;font-size:24px;font-weight:900;letter-spacing:2px;margin:6px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#0f172a;color:#fff;padding:10px;font-size:14px}
+    td{border:1px solid #ddd;padding:10px;text-align:center;font-size:16px}td b{font-size:20px;color:#2563eb}
+    @media print{.tb{display:none}.w{padding:0}}</style></head><body>
+    <div class="tb"><button class="bk" onclick="history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="w"><h2>🏬 بوليصة توزيع · ${ds}</h2>
+    ${img?`<img src="${img}"/>`:""}
+    <div style="font-weight:900;font-size:18px">${n.p.name}</div><div class="bc">${bc}</div>
+    <table><tr><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th><th>يُرسل</th></tr>${rows}</table>
+    </div></body></html>`;
+  const w = window.open("","_blank"); if(w){ w.document.write(html); w.document.close(); }
+}
+
+// ─── البوابة ─────────────────────────────────────────────────
+async function init(){
+  // نجيب البيانات
+  try {
+    const [prods, pers, sett, imgs, trans] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2")
+    ]);
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? [];
+  } catch(e){
+    document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
+    return;
+  }
+  // بوابة الرقم السري
+  const pin = SETTINGS?.warehousePin ?? "1234";
+  document.getElementById("app").innerHTML = `
+    <div class="gate">
+      <h1>🏬 مدير المستودع</h1>
+      <div class="sub" style="margin-top:6px">أدخل الرقم السري</div>
+      <input type="password" id="pin" inputmode="numeric" placeholder="••••" />
+      <button onclick="checkPin('${pin}')">دخول</button>
+    </div>`;
+  document.getElementById("pin").addEventListener("keydown",e=>{ if(e.key==="Enter") checkPin(pin); });
+}
+function checkPin(correct){
+  const v = document.getElementById("pin").value;
+  if (v === String(correct)){ renderApp(); }
+  else { showToast("رقم خاطئ"); }
+}
+init();
+</script>
+</body>
+</html>
