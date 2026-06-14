@@ -478,59 +478,89 @@ function renderPrintQueue(c){
     }).join("")}`;
 }
 
-// طباعة كل المعتمد غير المطبوع — ثم سؤال الترحيل
-function printAll(){
-  const unprinted = TRANSFERS.filter(t=>!t.printed);
-  if (unprinted.length === 0) return;
-  const byProd = {};
-  unprinted.forEach(t=>{
-    if (!byProd[t.barcode]) byProd[t.barcode] = [];
-    byProd[t.barcode].push(t);
-  });
-  const d = new Date();
-  const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
-  const slips = Object.entries(byProd).map(([bc, items])=>{
-    const prod = PRODUCTS.find(p=>p.barcode===bc) ?? { name:items[0].name, barcode:bc, container:"" };
-    const img = IMAGES?.[bc];
-    const rows = items.map((t,i)=>`<tr><td class="rn">${i+1}</td><td>${t.to}</td><td><b>${fmtN(t.qty)}</b></td></tr>`).join("");
-    return `<div class="slip">
+// يبني محتوى بوليصة واحدة (نفس تصميم النواقص) — يُستخدم في الإفرادي والمجمّع
+function buildSlipBody(bc, branchRows, info){
+  const img = IMAGES?.[bc];
+  return `<div class="slip">
       <div class="hd">
         ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
-        <div class="ti"><div class="brand">${SETTINGS?.brandName ?? "ALBAROO"}</div><div class="pnm">${prod.name}</div>
-        <div class="meta">🏭 ${getFactoryCode(bc)} · 📦 ${prod.container ?? ""} · 📅 ${ds}</div></div>
+        <div class="ti"><div class="brand">${SETTINGS?.brandName ?? "ALBAROO"}</div><div class="pnm">${info.name}</div>
+        <div class="meta">🏭 ${getFactoryCode(bc)} · 📦 ${info.container ?? ""} · 📅 ${info.ds}</div>
+        <div class="meta">المخزون: <b>${fmtN(info.closing)}</b> · مشترى: ${fmtN(info.bought)} · اتباع: ${fmtN(info.totalSold)}</div></div>
       </div>
       <div class="bcwrap"><svg class="bcsvg" data-code="${bc}"></svg><div class="bcn">${bc}</div></div>
-      <div class="needbar">🔴 فروع: <b>${items.length}</b></div>
-      <table><thead><tr><th>#</th><th>الفرع</th><th>يُرسل</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="needbar">🔴 فروع تحتاج توزيع: <b>${info.needyCount}</b></div>
+      <table><thead><tr><th>#</th><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th><th>يُرسل</th></tr></thead><tbody>${branchRows}</tbody></table>
     </div>`;
-  }).join("");
-  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>طباعة الكل</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
-    <style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+}
+
+function slipCSS(){
+  return `@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
     *{font-family:'Cairo';box-sizing:border-box;margin:0;padding:0}body{color:#1a1a1a;background:#ddd}
     .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:14px;display:flex;gap:12px;justify-content:center;z-index:99}
     .tb button{font-family:'Cairo';font-size:17px;font-weight:900;border:none;border-radius:12px;padding:14px 32px;cursor:pointer}
     .pr{background:#2563eb;color:#fff}.bk{background:#475569;color:#fff}
     .wrap{padding:90px 10px 30px}
-    .slip{width:100%;max-width:680px;background:#fff;margin:0 auto 14px;padding:18px;border-radius:10px;page-break-after:always;page-break-inside:avoid}
-    .hd{display:flex;gap:14px;align-items:center;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:12px}
-    .hd img{width:100px;height:100px;border-radius:10px;object-fit:contain;border:1px solid #ddd;background:#fafafa}
-    .hd .noimg{width:100px;height:100px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:40px}
-    .brand{font-size:20px;font-weight:900;color:#0f172a}
-    .pnm{font-size:18px;font-weight:900;margin:3px 0}.meta{font-size:12px;color:#666}
-    .bcwrap{text-align:center;margin:10px 0}.bcn{font-family:monospace;font-size:24px;font-weight:900;letter-spacing:3px;margin-top:4px}
-    .needbar{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:8px;text-align:center;font-weight:700;margin:10px 0}.needbar b{font-size:18px}
-    table{width:100%;border-collapse:collapse}th{background:#0f172a;color:#fff;padding:10px;font-size:14px}
-    td{border:1px solid #ddd;padding:10px;text-align:center;font-size:16px}td.rn{font-weight:900;color:#888;background:#f8fafc;width:34px}td b{font-size:20px;color:#2563eb}
-    @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{box-shadow:none;border-radius:0;margin:0 auto}}
-    </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length})</button></div>
+    .slip{width:100%;max-width:700px;background:#fff;margin:0 auto 14px;padding:18px;border-radius:10px;page-break-after:always;page-break-inside:avoid}
+    .hd{display:flex;gap:16px;align-items:center;border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:14px}
+    .hd img{width:120px;height:120px;border-radius:12px;object-fit:contain;border:1px solid #ddd;background:#fafafa}
+    .hd .noimg{width:120px;height:120px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:48px}
+    .hd .ti{flex:1}
+    .brand{font-size:24px;font-weight:900;color:#0f172a;letter-spacing:1px}
+    .pnm{font-size:20px;font-weight:900;color:#0f172a;margin:4px 0}
+    .meta{font-size:13px;color:#666}
+    .bcwrap{text-align:center;margin:14px 0}.bcwrap svg{max-width:90%}
+    .bcn{font-family:monospace;font-size:26px;font-weight:900;letter-spacing:3px;color:#0f172a;margin-top:4px}
+    .needbar{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:9px;text-align:center;font-weight:700;font-size:15px;margin:12px 0}
+    .needbar b{font-size:20px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th{background:#0f172a;color:#fff;padding:11px;font-size:15px}
+    td{border:1px solid #ddd;padding:11px;text-align:center;font-size:17px}
+    td.rn{font-weight:900;color:#888;background:#f8fafc;width:36px}
+    td b{font-size:22px;color:#2563eb}
+    tr:nth-child(even){background:#f8fafc}
+    @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{box-shadow:none;border-radius:0;margin:0 auto}}`;
+}
+
+// طباعة كل المعتمد غير المطبوع — نفس تصميم النواقص بالضبط
+function printAll(){
+  const unprinted = TRANSFERS.filter(t=>!t.printed);
+  if (unprinted.length === 0) return;
+  // نضمن حساب النواقص (للأرقام الصحيحة)
+  if (!SALES_MAP) SALES_MAP = buildSalesMap();
+  if (currentNeeds.length === 0) currentNeeds = computeNeeds();
+  const d = new Date();
+  const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+  // تجميع بالمنتج
+  const byProd = {};
+  unprinted.forEach(t=>{ if(!byProd[t.barcode]) byProd[t.barcode]=[]; byProd[t.barcode].push(t); });
+
+  const slips = Object.entries(byProd).map(([bc, items])=>{
+    const prod = PRODUCTS.find(p=>p.barcode===bc);
+    const bought = prod ? totalPurchases(prod) : 0;
+    const salesByBranch = SALES_MAP?.[bc] ?? {};
+    const totalSold = Object.values(salesByBranch).reduce((s,q)=>s+q,0);
+    const closing = Math.max(0, bought-totalSold);
+    // باع/أخذ/باقي لكل فرع — من المبيعات مباشرة (مو من النواقص المخصومة)
+    const rows = items.map((t,i)=>{
+      const sold = num(salesByBranch[t.to] ?? 0);
+      const given = toDozen(sold);
+      const remaining = given - sold;
+      return `<tr><td class="rn">${i+1}</td><td>${t.to}</td><td>${fmtN(sold)}</td><td>${fmtN(given)}</td><td>${fmtN(remaining)}</td><td><b>${fmtN(t.qty)}</b></td></tr>`;
+    }).join("");
+    const info = { name: items[0].name, container: prod?.container ?? "", ds, closing, bought, totalSold, needyCount: items.length };
+    return buildSlipBody(bc, rows, info);
+  }).join("");
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>طباعة الكل</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
+    <style>${slipCSS()}</style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة (${Object.keys(byProd).length})</button></div>
     <div class="wrap">${slips}</div>
-    <script>document.querySelectorAll('svg.bcsvg').forEach(function(el){try{JsBarcode(el,el.getAttribute('data-code'),{format:"CODE128",width:2,height:55,displayValue:false,margin:2});}catch(e){}});<\/script>
+    <script>document.querySelectorAll('svg.bcsvg').forEach(function(el){try{JsBarcode(el,el.getAttribute('data-code'),{format:"CODE128",width:2,height:60,displayValue:false,margin:2});}catch(e){}});<\/script>
     </body></html>`;
   const w = window.open("","_blank");
   if (w){ w.document.write(html); w.document.close(); }
-  // بعد فتح الطباعة، نسأل الترحيل
   setTimeout(()=>{
     if (confirm("بعد ما طبعت — أرحّل المطبوعات لسجل التوزيع؟")){
       TRANSFERS.forEach(t=>{ if(!t.printed) t.printed = true; });
@@ -538,6 +568,7 @@ function printAll(){
     }
   }, 800);
 }
+
 
 function printSlip(bc){
   const n = currentNeeds.find(x=>x.p.barcode===bc);
@@ -547,7 +578,10 @@ function printSlip(bc){
   const img = IMAGES?.[bc];
   const active = n.branches.filter(b=>!excluded[bc+"_"+b.branch]);
   const needyCount = active.length;
-  const rows = active.map((b,i)=>`<tr><td class="rn">${i+1}</td><td>${b.branch}</td><td>${fmtN(b.sold)}</td><td>${fmtN(b.given)}</td><td>${fmtN(b.remaining)}</td><td><b>${FIXED_QTY}</b></td></tr>`).join("");
+  const rows = active.map((b,i)=>{
+    const qv = qtyEdit[bc+"_"+b.branch] ?? FIXED_QTY;
+    return `<tr><td class="rn">${i+1}</td><td>${b.branch}</td><td>${fmtN(b.sold)}</td><td>${fmtN(b.given)}</td><td>${fmtN(b.remaining)}</td><td><b>${fmtN(qv)}</b></td></tr>`;
+  }).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>بوليصة توزيع</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
     <style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
