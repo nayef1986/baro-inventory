@@ -181,24 +181,27 @@ function printPolicies(items, periods, images, brandName, closedBranches = [], p
 
   if (slips.length === 0) { alert("لا توجد منتجات تحتاج توزيع"); return; }
 
-  const { greg, hijri } = dateEN({ month:"short", day:"numeric" });
+  const dnum = dateNum();
 
   const slipHtml = slips.map(s => {
     const img = images?.[s.p.barcode];
-    const rows = s.branches.map(b => `
+    const needyCount = s.branches.filter(b => b.remaining < 7).length;
+    const rows = s.branches.map((b, i) => `
       <tr class="${b.remaining < 7 ? 'need' : ''}">
+        <td class="rn">${i+1}</td>
         <td class="brc">${b.branch}</td><td class="qn">${b.sold}</td><td class="qn">${b.given}</td>
         <td class="qn">${b.remaining}${b.remaining < 7 ? ' ✅' : ''}</td></tr>`).join("");
     return `<div class="slip">
       <div class="hd">${brandName ?? "ALBAROO"}</div>
-      <div class="dt">📅 ${greg} · ${hijri}H</div>
+      <div class="dt">📅 ${dnum}</div>
       ${img ? `<img src="${img}" class="pimg"/>` : ''}
       <div class="pname">${s.p.name}</div>
       <svg class="bc" data-code="${s.p.barcode}"></svg>
       <div class="bcn">${s.p.barcode}</div>
       <div class="meta">🏭 ${getFactoryCode(s.p.barcode)} · 📦 ${s.p.container ?? ""}</div>
       <div class="stock">المتبقي بالمخزون / In Stock: <b>${fmtN(s.closing)}</b></div>
-      <table><tr><th>الفرع<br>Branch</th><th>باع<br>Sold</th><th>أخذ<br>Sent</th><th>باقي<br>Left</th></tr>${rows}</table>
+      <div class="needbar">🔴 فروع تحتاج توزيع / Branches need restock: <b>${needyCount}</b> من ${s.branches.length}</div>
+      <table><tr><th>#</th><th>الفرع<br>Branch</th><th>باع<br>Sold</th><th>أخذ<br>Sent</th><th>باقي<br>Left</th></tr>${rows}</table>
       <div class="note">✅ = يحتاج توزيع / Needs restock (< 7)</div>
     </div>`;
   }).join("");
@@ -215,7 +218,10 @@ function printPolicies(items, periods, images, brandName, closedBranches = [], p
       .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
       .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
       .wrap{padding:60px 10px 20px}
-      .slip{width:${slipW};background:#fff;margin:0 auto 8px;padding:${isA5?"16px 14px":"10px 8px"};page-break-after:always;page-break-inside:avoid;break-inside:avoid;text-align:center;border:1px dashed #999;${isA5?"max-height:200mm;overflow:hidden;":""}}
+      .slip{width:${slipW};background:#fff;margin:0 auto 8px;padding:${isA5?"16px 14px":"10px 8px"};page-break-after:always;page-break-inside:avoid;break-inside:avoid;text-align:center;border:1px dashed #999}
+      .needbar{font-size:${isA5?"13px":"11px"};color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:5px;margin:6px 0;font-weight:700}
+      .needbar b{font-size:${isA5?"18px":"15px"}}
+      td.rn{font-weight:900;color:#888;background:#f8fafc;width:28px}
       .hd{font-size:${isA5?"22px":"16px"};font-weight:900;color:#0f172a;letter-spacing:1px}
       .dt{font-size:${isA5?"12px":"10px"};color:#888;margin-bottom:6px}
       .pimg{width:${isA5?"180px":"130px"};height:auto;max-height:${isA5?"180px":"130px"};object-fit:contain;border-radius:8px;margin:4px auto;display:block;border:1px solid #ddd;background:#fafafa}
