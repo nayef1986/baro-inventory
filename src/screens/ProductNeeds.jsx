@@ -17,6 +17,15 @@ function dateEN(opts = { year:"numeric", month:"long", day:"numeric" }) {
   return { greg, hijri };
 }
 
+// تاريخ أرقام صرفة: يوم/شهر/سنة (13/06/2026)
+function dateNum() {
+  const now = new Date();
+  const d = (now.getDate()+"").padStart(2,"0");
+  const m = (now.getMonth()+1+"").padStart(2,"0");
+  const y = now.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+
 // استخراج المدينة من اسم الفرع (البارو-مول-مدينة-رقم)
 function cityOf(branch, overrides = {}) {
   if (overrides[branch]) return overrides[branch];
@@ -206,7 +215,7 @@ function printPolicies(items, periods, images, brandName, closedBranches = [], p
       .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
       .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
       .wrap{padding:60px 10px 20px}
-      .slip{width:${slipW};background:#fff;margin:0 auto 8px;padding:${isA5?"16px 14px":"10px 8px"};page-break-after:always;text-align:center;border:1px dashed #999}
+      .slip{width:${slipW};background:#fff;margin:0 auto 8px;padding:${isA5?"16px 14px":"10px 8px"};page-break-after:always;page-break-inside:avoid;break-inside:avoid;text-align:center;border:1px dashed #999;${isA5?"max-height:200mm;overflow:hidden;":""}}
       .hd{font-size:${isA5?"22px":"16px"};font-weight:900;color:#0f172a;letter-spacing:1px}
       .dt{font-size:${isA5?"12px":"10px"};color:#888;margin-bottom:6px}
       .pimg{width:${isA5?"180px":"130px"};height:auto;max-height:${isA5?"180px":"130px"};object-fit:contain;border-radius:8px;margin:4px auto;display:block;border:1px solid #ddd;background:#fafafa}
@@ -260,11 +269,14 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
     });
     const { transfers } = buildTransfers(branches, x.bought, cityOverrides);
     transfers.forEach(t => {
+      // تفاصيل فرع الوجهة (باع/أخذ/باقي)
+      const dest = branches.find(b => b.branch === t.to) ?? { sold:0, given:0, remaining:0 };
+      const detail = { toSold: dest.sold, toGiven: dest.given, toRemaining: dest.remaining };
       if (t.kind === "warehouse") {
-        fromWarehouse.push({ name: p.name, barcode: p.barcode, to: t.to, qty: t.qty });
+        fromWarehouse.push({ name: p.name, barcode: p.barcode, to: t.to, qty: t.qty, ...detail });
       } else {
         if (!bySource[t.from]) bySource[t.from] = [];
-        bySource[t.from].push({ name: p.name, barcode: p.barcode, to: t.to, qty: t.qty, sameCity: t.sameCity, toCity: t.toCity });
+        bySource[t.from].push({ name: p.name, barcode: p.barcode, to: t.to, qty: t.qty, sameCity: t.sameCity, toCity: t.toCity, ...detail });
       }
     });
   });
@@ -288,16 +300,16 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
   if (fromWarehouse.length) {
     whHtml = `<div class="sec">
       <div class="sech wh">🏬 التموين من المستودع الرئيسي <span class="cnt">${fromWarehouse.length} صنف</span></div>
-      <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>إلى فرع</th><th>الكمية</th></tr></thead><tbody>
-      ${fromWarehouse.map(m=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td class="to">${m.to}</td><td class="q">${fmtN(m.qty)}</td></tr>`).join("")}
+      <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>إلى فرع</th><th>باع</th><th>أخذ</th><th>باقي</th><th>الكمية</th></tr></thead><tbody>
+      ${fromWarehouse.map(m=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td class="to">${m.to}</td><td>${fmtN(m.toSold)}</td><td>${fmtN(m.toGiven)}</td><td>${fmtN(m.toRemaining)}</td><td class="q">${fmtN(m.qty)}</td></tr>`).join("")}
       </tbody></table></div>`;
   }
 
   const srcHtml = Object.entries(bySource).map(([src, moves]) => `
     <div class="sec">
       <div class="sech tr">🔀 نقل من فرع: ${src} <span class="cnt">${moves.length} صنف</span></div>
-      <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>إلى فرع</th><th>الكمية</th><th>المنطقة</th></tr></thead><tbody>
-      ${moves.map(m=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td class="to">${m.to}</td><td class="q">${fmtN(m.qty)}</td><td class="${m.sameCity?'same':'diff'}">${m.sameCity?'نفس المدينة ✓':m.toCity}</td></tr>`).join("")}
+      <table><thead><tr><th>✓</th><th>صورة</th><th>الصنف</th><th>الباركود</th><th>إلى فرع</th><th>باع</th><th>أخذ</th><th>باقي</th><th>الكمية</th><th>المنطقة</th></tr></thead><tbody>
+      ${moves.map(m=>`<tr><td class="chk">☐</td><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td class="to">${m.to}</td><td>${fmtN(m.toSold)}</td><td>${fmtN(m.toGiven)}</td><td>${fmtN(m.toRemaining)}</td><td class="q">${fmtN(m.qty)}</td><td class="${m.sameCity?'same':'diff'}">${m.sameCity?'نفس المدينة ✓':m.toCity}</td></tr>`).join("")}
       </tbody></table></div>`).join("");
 
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة التموين والنقل</title>
@@ -365,7 +377,7 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
 
 function printReport(items, title, brandName, images = {}) {
   const rows = buildRows(items);
-  const { greg, hijri } = dateEN();
+  const dnum = dateNum();
   const totReorder = rows.reduce((s,r)=>s+r.reorder,0);
   const totCost = rows.reduce((s,r)=>s+r.reorder*r.cost,0);
   const body = rows.map((r,i)=>{
@@ -405,7 +417,7 @@ function printReport(items, title, brandName, images = {}) {
     <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="w">
       <h1>${title}</h1>
-      <div class="date">📅 ${greg} — ${hijri} هـ · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
+      <div class="date">📅 ${dnum} · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
       <table><thead><tr>
         <th>#</th><th>صورة<br>Image</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
         <th>Qty In<br>جاء</th><th>Sold<br>اتباع</th><th>Balance<br>باقي</th><th>Reorder<br>الاحتياج</th>
@@ -599,7 +611,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
     const rows = printBranches.map((b, i) => `
       <tr><td class="num">${i+1}</td><td>${b.branch} ${b.remaining < 7 ? '<span class="chk">✅</span>' : ''}</td><td class="big">${b.sold}</td><td class="big">${b.given}</td><td class="big rem">${b.remaining}</td></tr>`).join("");
     const sortLabel = sortMode === "sold" ? "الأكثر مبيعاً" : "الأكثر احتياجاً";
-    const { greg, hijri } = dateEN();
+    const dnum = dateNum();
     const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${product.name}</title>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
       <style>
@@ -634,7 +646,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
       <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
       <div class="w">
         <div class="nm">${product.name}</div>
-        <div class="date">📅 ${greg} — ${hijri} هـ · ${settings?.brandName ?? "ALBAROO"}</div>
+        <div class="date">📅 ${dnum} · ${settings?.brandName ?? "ALBAROO"}</div>
         <div class="hd">
           ${img ? `<img src="${img}"/>` : `<div style="width:110px;height:110px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:40px">📦</div>`}
           <div class="bc"><svg id="bcsvg"></svg><div class="bcnum">${product.barcode}</div>
@@ -750,11 +762,13 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
 });
 
 // ─── منتجات المصنع ───────────────────────────────────────────
-const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, onSelect, onBack, title }) => {
+const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, onSelect, onBack, title, factoryCode, factoryName, onSaveFactoryName }) => {
   const [search, setSearch] = useState("");
   const [scan, setScan] = useState(false);
   const [viewImg, setViewImg] = useState(null);
   const [visible, setVisible] = useState(30);
+  const [editName, setEditName] = useState(false);
+  const [nameInput, setNameInput] = useState(factoryName ?? "");
 
   const filtered = useMemo(() => {
     if (!search) return items;
@@ -772,7 +786,29 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
       {scan && <BarcodeScanner onDetect={(code)=>{ setSearch(code); setScan(false); }} onClose={()=>setScan(false)} />}
       {viewImg && <ImageViewer src={viewImg.src} name={viewImg.name} onClose={()=>setViewImg(null)} />}
       <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع</button>
-      <div className="font-black text-slate-100">{title}</div>
+      {factoryCode ? (
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+          {editName ? (
+            <div className="flex gap-2 items-center">
+              <span className="text-slate-400 font-mono text-sm shrink-0">🏭 {factoryCode}</span>
+              <input value={nameInput} onChange={e=>setNameInput(e.target.value)} autoFocus placeholder="اسم المصنع…"
+                className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+              <button onClick={async()=>{ await onSaveFactoryName?.(factoryCode, nameInput.trim()); setEditName(false); }}
+                className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shrink-0">حفظ</button>
+              <button onClick={()=>{ setNameInput(factoryName??""); setEditName(false); }}
+                className="bg-slate-600 text-white px-2 py-1.5 rounded-lg text-sm shrink-0">✕</button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="font-black text-slate-100">🏭 {factoryCode}{factoryName?` · ${factoryName}`:""}</div>
+              <button onClick={()=>{ setNameInput(factoryName??""); setEditName(true); }}
+                className="text-blue-400 text-sm font-bold shrink-0">✏️ تعديل الاسم</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="font-black text-slate-100">{title}</div>
+      )}
 
       {/* بحث + كاميرا */}
       <div className="flex gap-2">
@@ -826,6 +862,7 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
+                  <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(x.p.barcode)}{(settings?.factories?.[getFactoryCode(x.p.barcode)])?` · ${settings.factories[getFactoryCode(x.p.barcode)]}`:""}</div>
                 </div>
                 <div style={{fontSize:"20px",fontWeight:"900",color:c.txt}} className="shrink-0">{fmtPct(x.soldPct)}</div>
               </div>
@@ -911,6 +948,76 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
   );
 });
 
+// ─── تقرير الأبطال المتكامل (بالصور + مقسّم بالكونتينر) ──────
+function printHeroesReport(groups, contNames, images, brandName) {
+  const d = new Date();
+  const dnum = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+  const total = contNames.reduce((s,c)=>s+groups[c].length,0);
+  if (total === 0) { alert("لا أبطال للطباعة"); return; }
+
+  const imgCell = (bc) => {
+    const im = images?.[bc];
+    return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`;
+  };
+
+  const sections = contNames.map(cont => {
+    const list = groups[cont];
+    const rows = list.map(h => `
+      <tr>
+        <td class="imgc">${imgCell(h.p.barcode)}</td>
+        <td class="nm">${h.p.name} ${h.winner?'🎉':''}${h.star?'⭐':''}</td>
+        <td class="bc">${h.p.barcode}</td>
+        <td>${fmtN(h.bought)}</td><td>${fmtN(h.sold)}</td><td>${fmtN(h.closing)}</td>
+        <td class="pct">${fmtPct(h.soldPct)}</td><td class="mrg">${Math.round(h.margin)}%</td>
+        <td>${fmtN(h.buyPrice)}</td><td>${fmtN(num(h.p.sellPrice))}</td>
+      </tr>`).join("");
+    return `<div class="sec">
+      <div class="sech">📦 ${cont} <span class="cnt">${list.length} بطل</span></div>
+      <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>شراء</th><th>بيع</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير الأبطال</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+      *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+      body{background:#f1f5f9;color:#1a1a1a}
+      .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+      .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+      .bk{background:#334155;color:#fff}.pr{background:#d4a853;color:#0a0804}
+      .page{max-width:900px;margin:70px auto 30px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+      .hd{display:flex;justify-content:space-between;border-bottom:3px solid #d4a853;padding-bottom:14px;margin-bottom:18px}
+      .brand{font-size:26px;font-weight:900;color:#0f172a;letter-spacing:2px}
+      .ttl{font-size:15px;color:#b8935a;margin-top:2px;font-weight:700}
+      .ref{text-align:left;font-size:13px;color:#64748b}
+      .sec{margin-bottom:22px;page-break-inside:avoid}
+      .sech{background:linear-gradient(135deg,#d4a853,#b8935a);color:#0a0804;padding:11px 16px;border-radius:10px 10px 0 0;font-weight:900;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+      .cnt{font-size:12px;background:rgba(10,8,4,0.15);padding:3px 10px;border-radius:100px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#e2e8f0;padding:8px 4px;font-size:11px;color:#334155}
+      td{border:1px solid #e2e8f0;padding:6px 4px;text-align:center;font-size:12px;vertical-align:middle}
+      td.imgc{width:50px;padding:3px}
+      .th{width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+      .noimg{width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
+      td.nm{text-align:right;font-weight:700;color:#0f172a;font-size:13px}
+      td.bc{font-family:monospace;font-size:10px;color:#64748b}
+      td.pct{color:#16a34a;font-weight:900;font-size:14px}
+      td.mrg{color:#7c3aed;font-weight:900}
+      tr:nth-child(even) td{background:#fafbfc}
+      @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+    </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="page">
+      <div class="hd">
+        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⭐ تقرير الأبطال — المنتجات الرابحة والمفضّلة</div></div>
+        <div class="ref">📅 ${dnum}<br><b>${total}</b> بطل · ${contNames.length} كونتينر</div>
+      </div>
+      ${sections}
+    </div></body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 // ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
 export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {}, onSaveSettings }) {
   const [container, setContainer] = useState(null);
@@ -919,6 +1026,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [redMax,    setRedMax]    = useState(30);
   const [greenMin,  setGreenMin]  = useState(60);
   const [showHeroes, setShowHeroes] = useState(false);
+  const [openHeroCont, setOpenHeroCont] = useState(null);
+  const [heroViewImg, setHeroViewImg] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScan, setSearchScan] = useState(false);
@@ -932,6 +1041,12 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   };
   // رابح تلقائي
   const isWinner = (soldPct, margin) => soldPct > 70 && margin > 20;
+
+  // حفظ اسم المصنع (في الإعدادات)
+  const saveFactoryName = async (code, name) => {
+    const factories = { ...(settings?.factories ?? {}), [code]: name };
+    if (onSaveSettings) await onSaveSettings({ ...settings, factories });
+  };
 
   // حساب منتج (نسبة + متبقي)
   const calcItem = (p) => {
@@ -982,6 +1097,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     const f = factories.find(x=>x.code===factory);
     return <ProductList items={factoryItems} images={images} periods={periods} settings={settings} redMax={redMax} greenMin={greenMin}
       onSelect={setSelected} onBack={()=>setFactory(null)}
+      factoryCode={f?.code} factoryName={f?.name} onSaveFactoryName={saveFactoryName}
       title={`🏭 ${f?.code}${f?.name?` · ${f.name}`:""}`} />;
   }
 
@@ -1038,43 +1154,89 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   if (showHeroes) {
     const heroes = products.map(p => {
       const x = calcItem(p);
-      const margin = x.p.buyPrice > 0 ? ((num(x.p.sellPrice) - num(x.p.purchases?.slice(-1)[0]?.buyPrice??0)) / num(x.p.purchases?.slice(-1)[0]?.buyPrice??1)) * 100 : 0;
       const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
       const m = buyPrice > 0 ? ((num(p.sellPrice)-buyPrice)/buyPrice)*100 : 0;
       const winner = isWinner(x.soldPct, m);
       const star = starred.includes(p.barcode);
-      return { ...x, margin:m, winner, star };
-    }).filter(h => h.winner || h.star)
-      .sort((a,b)=> (b.winner?1:0)-(a.winner?1:0) || b.soldPct-a.soldPct);
+      return { ...x, margin:m, buyPrice, winner, star };
+    }).filter(h => h.winner || h.star);
+
+    // تجميع حسب الكونتينر
+    const groups = {};
+    heroes.forEach(h => {
+      const cont = h.p.container || "بدون كونتينر";
+      if (!groups[cont]) groups[cont] = [];
+      groups[cont].push(h);
+    });
+    Object.values(groups).forEach(g => g.sort((a,b)=> (b.winner?1:0)-(a.winner?1:0) || b.soldPct-a.soldPct));
+    const contNames = Object.keys(groups).sort();
 
     return (
       <div className="space-y-3">
+        {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
         <button onClick={()=>setShowHeroes(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">⭐ الأبطال ({heroes.length})</div>
-        <div className="text-xs text-slate-500">المنتجات الرابحة 🎉 والمفضّلة ⭐</div>
+        <div className="text-xs text-slate-500">المنتجات الرابحة 🎉 والمفضّلة ⭐ — مقسّمة بالكونتينر</div>
+
+        {heroes.length > 0 && (
+          <button onClick={()=>printHeroesReport(groups, contNames, images, settings?.brandName ?? "ALBAROO")}
+            className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 text-white py-3 rounded-xl font-bold text-sm">
+            🖨️ تقرير الأبطال المتكامل (بالصور)
+          </button>
+        )}
+
+        {heroes.length === 0 && <div className="text-center text-slate-500 py-12">لا أبطال بعد — نجّم منتجاتك المفضّلة ⭐</div>}
+
         <div className="space-y-2">
-          {heroes.map(h => (
-            <div key={h.p.barcode} style={{background:"rgba(212,168,83,0.08)",border:"1.5px solid rgba(212,168,83,0.3)",borderRadius:"14px",padding:"12px",position:"relative"}}>
-              {h.winner && <div style={{position:"absolute",top:"-9px",left:"10px",background:"linear-gradient(135deg,#d4a853,#b8935a)",color:"#0a0804",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>🎉 مبروك رابح</div>}
-              <div className="flex items-start gap-3">
-                {images?.[h.p.barcode]
-                  ? <img src={images[h.p.barcode]} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
-                  : <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
-                  <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
-                  <div className="flex gap-1.5 flex-wrap mt-1.5">
-                    <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/30 text-emerald-300">باع {fmtPct(h.soldPct)}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-lg bg-purple-900/30 text-purple-300">هامش {Math.round(h.margin)}%</span>
+          {contNames.map(cont => {
+            const list = groups[cont];
+            const open = openHeroCont === cont;
+            return (
+              <div key={cont} className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+                {/* رأس الكونتينر + العدد */}
+                <div onClick={()=>setOpenHeroCont(open?null:cont)} className="flex items-center justify-between p-3.5 cursor-pointer">
+                  <div className="font-black text-slate-100">📦 {cont}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold bg-amber-600 text-white px-2.5 py-1 rounded-full">{list.length} بطل</span>
+                    <span className="text-slate-500">{open?"▲":"▼"}</span>
                   </div>
                 </div>
-                <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
-                  {h.star ? "⭐" : "☆"}
-                </button>
+                {/* المنتجات داخل الكونتينر */}
+                {open && (
+                  <div className="px-2.5 pb-2.5 space-y-2">
+                    {list.map(h => (
+                      <div key={h.p.barcode} style={{background:"rgba(212,168,83,0.08)",border:"1.5px solid rgba(212,168,83,0.3)",borderRadius:"14px",padding:"12px",position:"relative"}}>
+                        {h.winner && <div style={{position:"absolute",top:"-9px",left:"10px",background:"linear-gradient(135deg,#d4a853,#b8935a)",color:"#0a0804",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>🎉 مبروك رابح</div>}
+                        <div className="flex items-start gap-3">
+                          {images?.[h.p.barcode]
+                            ? <img src={images[h.p.barcode]} alt="" onClick={()=>setHeroViewImg({src:images[h.p.barcode],name:h.p.name})} className="w-16 h-16 rounded-lg object-cover shrink-0 cursor-pointer" />
+                            : <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center text-2xl shrink-0">📦</div>}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
+                            <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
+                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                          </div>
+                          <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
+                            {h.star ? "⭐" : "☆"}
+                          </button>
+                        </div>
+                        {/* كل المعلومات */}
+                        <div className="flex gap-1.5 flex-wrap mt-2">
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(h.bought)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(h.sold)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(h.closing)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/30 text-emerald-300">نسبة {fmtPct(h.soldPct)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-purple-900/30 text-purple-300">هامش {Math.round(h.margin)}%</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/20 text-red-300">شراء {fmtN(h.buyPrice)}﷼</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/20 text-emerald-300">بيع {fmtN(num(h.p.sellPrice))}﷼</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-          {heroes.length === 0 && <div className="text-center text-slate-500 py-12">لا أبطال بعد — نجّم منتجاتك المفضّلة ⭐</div>}
+            );
+          })}
         </div>
       </div>
     );
