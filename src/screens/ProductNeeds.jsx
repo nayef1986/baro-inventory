@@ -489,6 +489,27 @@ const CopyBarcode = memo(({ barcode }) => {
   );
 });
 
+// ─── كميات الكونتينرات (كم وصل من كل كونتينر) ────────────────
+const ContainerQtys = memo(({ product }) => {
+  const conts = (product.purchases ?? [])
+    .map(pu => ({ container: pu.container ?? product.container ?? "—", qty: num(pu.qty) }))
+    .filter(c => c.qty > 0);
+  if (conts.length === 0) return null;
+  // نجمّع نفس الكونتينر لو تكرر
+  const map = {};
+  conts.forEach(c => { map[c.container] = (map[c.container] ?? 0) + c.qty; });
+  const list = Object.entries(map);
+  return (
+    <div className="flex gap-1 flex-wrap mt-1">
+      {list.map(([cont, qty]) => (
+        <span key={cont} className="text-xs px-2 py-0.5 rounded-lg bg-indigo-900/30 text-indigo-300">
+          📦 {cont}: {fmtN(qty)}
+        </span>
+      ))}
+    </div>
+  );
+});
+
 // ─── ماسح الباركود بالكاميرا ─────────────────────────────────
 const BarcodeScanner = memo(({ onDetect, onClose }) => {
   const [err, setErr] = useState("");
@@ -869,6 +890,7 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
                   <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(x.p.barcode)}{(settings?.factories?.[getFactoryCode(x.p.barcode)])?` · ${settings.factories[getFactoryCode(x.p.barcode)]}`:""}</div>
+                  <ContainerQtys product={x.p} />
                 </div>
                 <div style={{fontSize:"20px",fontWeight:"900",color:c.txt}} className="shrink-0">{fmtPct(x.soldPct)}</div>
               </div>
@@ -1141,6 +1163,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
                   <div className="text-xs text-slate-400 font-mono">{p.barcode}</div>
+                  <ContainerQtys product={p} />
                   <div className="flex gap-1.5 mt-1">
                     <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
                     <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(x.closing)}</span>
@@ -1221,6 +1244,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                             <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
                             <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
                             <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                            <ContainerQtys product={h.p} />
                           </div>
                           <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
                             {h.star ? "⭐" : "☆"}
