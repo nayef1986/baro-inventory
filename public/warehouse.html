@@ -203,6 +203,17 @@ async function cancelTransferByDate(date, name){
   renderContent();
 }
 
+// حذف كل توزيعات منتج
+async function deleteProduct(bc, name){
+  if (!confirm(`حذف كل توزيعات "${name}"؟\nكل الكميات سترجع.`)) return;
+  TRANSFERS = TRANSFERS.filter(t=>t.barcode !== bc);
+  await save("baro_transfers_v2", TRANSFERS);
+  SALES_MAP = null;
+  openLog = null;
+  showToast("حُذف المنتج — رجعت الكميات");
+  renderContent();
+}
+
 function toggleExclude(bc, branch){
   const key = bc+"_"+branch;
   excluded[key] = !excluded[key];
@@ -354,7 +365,8 @@ function renderLog(c){
       <div class="logh" onclick="toggleLog('${pr.barcode.replace(/'/g,'')}')">
         ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
         <div class="info"><div class="lnm">${pr.name}</div><div class="lqt">${pr.items.length} فرع · ${fmtN(totalQty)} قطعة</div></div>
-        <span style="color:#5b6b85">${isOpen?'▲':'▼'}</span>
+        <button onclick="event.stopPropagation();deleteProduct('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer">🗑️ حذف الكل</button>
+        <span style="color:#5b6b85;margin-right:4px">${isOpen?'▲':'▼'}</span>
       </div>
       ${body}
     </div>`;
@@ -398,7 +410,7 @@ function printSlip(bc){
     tr:nth-child(even){background:#f8fafc}
     @media print{.tb{display:none}.w{padding:0}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="history.back()">← رجوع للصفحة</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="w">
       <div class="hd">
         ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
