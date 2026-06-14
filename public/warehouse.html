@@ -100,27 +100,39 @@ function recentTransfer(bc, branch){
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 
 // ─── حساب النواقص: فروع تحتاج توزيع ──────────────────────────
-function computeNeeds(){
+// نبني خريطة المبيعات مرة وحدة (باركود → فرع → كمية) — سريع
+let SALES_MAP = null;
+function buildSalesMap(){
   const closed = SETTINGS?.closedBranches ?? [];
+  const map = {};
+  PERIODS.forEach(per=>{
+    Object.entries(per.sales??{}).forEach(([branch,d])=>{
+      if (closed.includes(branch)) return;
+      Object.entries(d).forEach(([bc,v])=>{
+        const q = num(v?.qty??0);
+        if (q<=0) return;
+        if (!map[bc]) map[bc] = {};
+        map[bc][branch] = (map[bc][branch]??0) + q;
+      });
+    });
+  });
+  return map;
+}
+
+function computeNeeds(){
+  if (!SALES_MAP) SALES_MAP = buildSalesMap();
   const needs = [];
   PRODUCTS.forEach(p=>{
     const bought = totalPurchases(p);
-    const sold = soldAll(p.barcode);
-    const closing = Math.max(0, bought-sold);
+    const branchSales = SALES_MAP[p.barcode];
+    if (!branchSales) return; // ما انباع بأي فرع
+    const totalSold = Object.values(branchSales).reduce((s,q)=>s+q,0);
+    const closing = Math.max(0, bought-totalSold);
     if (closing <= 0) return; // ما عنده مخزون يوزّع
-    // فروعه
-    const bs = {};
-    PERIODS.forEach(per=>{
-      Object.entries(per.sales??{}).forEach(([branch,d])=>{
-        if (closed.includes(branch)) return;
-        const q = num(d[p.barcode]?.qty??0);
-        if (q>0) bs[branch]=(bs[branch]??0)+q;
-      });
-    });
-    const branches = Object.entries(bs).map(([branch,bsold])=>{
+    const branches = Object.entries(branchSales).map(([branch,bsold])=>{
       const given = toDozen(bsold);
       const recent = recentTransfer(p.barcode, branch);
-      const remaining = given - bsold + recent; // الخصم الذكي: نضيف المنقول حديثاً
+      const remaining = given - bsold + recent;
       return { branch, sold:bsold, given, remaining, recent };
     }).filter(b=> b.remaining < 7).sort((a,b)=>a.remaining-b.remaining);
     if (branches.length === 0) return;
@@ -204,11 +216,16 @@ function renderContent(){
     }).join("") : `<div class="empty">لا توزيعات بعد</div>`;
     return;
   }
-  // النواقص
-  currentNeeds = computeNeeds();
-  renderStats();
-  if (currentNeeds.length === 0){ c.innerHTML = `<div class="empty">✅ لا نواقص حالياً — كل الفروع مكتملة</div>`; return; }
-  c.innerHTML = currentNeeds.map(n=>{
+  // النواقص — نعرض تحميل أول، ثم نحسب (يمنع التجمّد)
+  c.innerHTML = `<div class="loading"><span class="spin">⏳</span><div style="margin-top:10px;font-size:13px">جاري حساب النواقص…</div></div>`;
+  setTimeout(()=>{
+    currentNeeds = computeNeeds();
+    renderStats();
+    if (currentNeeds.length === 0){ c.innerHTML = `<div class="empty">✅ لا نواقص حالياً — كل الفروع مكتملة</div>`; return; }
+    // نعرض أول 60 (الأكثر حاجة) — يمنع تجمّد العرض
+    const show = currentNeeds.slice(0, 60);
+    const moreCount = currentNeeds.length - show.length;
+    c.innerHTML = show.map(n=>{
     const img = IMAGES?.[n.p.barcode];
     const brs = n.branches.map(b=>{
       const suggest = toDozen(Math.max(7-b.remaining, b.sold));
@@ -231,7 +248,8 @@ function renderContent(){
       ${brs}
       <div class="actions"><button class="print" onclick="printSlip('${n.p.barcode}')">🖨️ بوليصة</button></div>
     </div>`;
-  }).join("");
+    }).join("") + (moreCount>0 ? `<div class="empty" style="padding:20px">+ ${moreCount} صنف إضافي · عالج الظاهر أولاً ثم حدّث</div>` : "");
+  }, 50);
 }
 
 function printSlip(bc){
