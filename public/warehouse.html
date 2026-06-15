@@ -199,12 +199,13 @@ function computeNeeds(){
     const closing = Math.max(0, bought-totalSold);
     if (closing <= 0) return;
     const unit = unitOf(p.barcode);
+    const threshold = Math.ceil(unit/2); // العتبة = نص الوحدة (12→6, 24→12, 36→18)
     const branches = Object.entries(branchSales).map(([branch,bsold])=>{
       const given = toUnit(bsold, unit);
       const recent = recentTransfer(p.barcode, branch);
       const remaining = given - bsold + recent;
       return { branch, sold:bsold, given, remaining, recent };
-    }).filter(b=> b.remaining < 7).sort((a,b)=>a.remaining-b.remaining);
+    }).filter(b=> b.remaining < threshold).sort((a,b)=>a.remaining-b.remaining);
     if (branches.length === 0) return;
     needs.push({ p, bought, totalSold, closing, branches });
   });
