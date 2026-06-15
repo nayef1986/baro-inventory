@@ -507,7 +507,7 @@ function buildSlipBody(bc, branchRows, info){
   const nameLine = info.enName ? `${info.name} — ${info.enName}` : info.name;
   return `<div class="slip">
       <div class="imgtop">${img?`<img src="${img}" class="img"/>`:`<div class="img">📦</div>`}</div>
-      <div class="logo">${SETTINGS?.brandName ?? "ALBAROO"}</div>
+      <div class="logo">ALBAROO</div>
       <div class="pname">${nameLine}</div>
       <div class="bcwrap"><svg class="bcsvg" data-code="${bc}"></svg><div class="bcn">${bc}</div></div>
       <div class="infoline">
@@ -563,7 +563,7 @@ function slipCSS(){
     th .en{font-size:9px;font-weight:400;opacity:0.8;display:block}
     td{border:1px solid #cbd5e1;padding:5px 2px;text-align:center;font-size:16px;font-weight:900}
     td.rn{font-size:12px;width:26px;padding:5px 1px}
-    td.brn{font-size:11px;font-weight:700;text-align:right;padding-right:6px;line-height:1.25;word-break:break-word}
+    td.brn{font-size:12px;font-weight:700;color:#000;text-align:right;padding:6px 8px;line-height:1.3;white-space:normal;overflow:visible;width:auto}
     td.num{width:40px}
     td.rem{color:#dc2626;width:40px}
     td.send{color:#16a34a;width:40px}
@@ -590,7 +590,8 @@ function printAll(){
       const sold = num(t.sold ?? salesByBranch[t.to] ?? 0);
       const given = num(t.given ?? toDozen(sold));
       const remaining = num(t.remaining ?? (given - sold));
-      return `<tr><td class="rn">${i+1}</td><td class="brn">${t.to}</td><td class="num">${fmtN(sold)}</td><td class="num">${fmtN(given)}</td><td class="rem">${fmtN(remaining)}</td><td class="send">${fmtN(t.qty)}</td></tr>`;
+      const brName = (t.to && String(t.to).trim()) ? t.to : "—";
+      return `<tr><td class="rn">${i+1}</td><td class="brn">${brName}</td><td class="num">${fmtN(sold)}</td><td class="num">${fmtN(given)}</td><td class="rem">${fmtN(remaining)}</td><td class="send">${fmtN(t.qty)}</td></tr>`;
     }).join("");
     const info = { name: items[0].name, enName: prod?.nameEn ?? prod?.englishName ?? "", container: prod?.container ?? "", ds, lastSupply: prod?lastSupplyDate(prod):"", closing, bought, totalSold, needyCount: items.length };
     return buildSlipBody(bc, rows, info);
