@@ -502,6 +502,23 @@ function renderPrintQueue(c){
 }
 
 // يبني محتوى بوليصة واحدة (نفس تصميم النواقص) — يُستخدم في الإفرادي والمجمّع
+// يحسب فروع المنتج (باع/أخذ/باقي) من periods مباشرة — نفس منطق فاتورة الاحتياج (مضمون)
+function branchesForPrint(bc){
+  const closed = SETTINGS?.closedBranches ?? [];
+  const branchSales = {};
+  PERIODS.forEach(per => {
+    Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
+      if (closed.includes(branch)) return;
+      const q = num(d[bc]?.qty ?? 0);
+      if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
+    });
+  });
+  return Object.entries(branchSales).map(([branch, sold]) => {
+    const given = toDozen(sold);
+    return { branch, sold, given, remaining: given - sold };
+  }).sort((a,b)=>a.remaining-b.remaining);
+}
+
 function buildSlipBody(bc, branchRows, info){
   const img = IMAGES?.[bc];
   const nameLine = info.enName ? `${info.name} — ${info.enName}` : info.name;
@@ -558,15 +575,15 @@ function slipCSS(){
     .boxes .l-en{font-size:8px;color:#555}
     .boxes .b-need{border-color:#dc2626}
     .boxes .b-need .v{color:#dc2626}
-    table{width:100%;border-collapse:collapse}
-    th{background:#3b82f6;color:#fff;padding:7px 2px;font-size:12px;font-weight:700;border:1px solid #93c5fd}
-    th .en{font-size:9px;font-weight:400;opacity:0.8;display:block}
-    td{border:1px solid #cbd5e1;padding:5px 2px;text-align:center;font-size:16px;font-weight:900}
-    td.rn{font-size:12px;width:26px;padding:5px 1px}
-    td.brn{font-size:12px;font-weight:700;color:#000;text-align:right;padding:6px 8px;line-height:1.3;white-space:normal;overflow:visible;width:auto}
-    td.num{width:40px}
-    td.rem{color:#dc2626;width:40px}
-    td.send{color:#16a34a;width:40px}
+    table{width:100%;border-collapse:collapse;table-layout:auto;direction:rtl}
+    thead th{background:#3b82f6;color:#fff;padding:7px 3px;font-size:12px;font-weight:700;border:1px solid #93c5fd;text-align:center}
+    thead th .en{font-size:9px;font-weight:400;opacity:0.85;display:block}
+    tbody td{border:1px solid #cbd5e1;padding:6px 3px;text-align:center;font-size:16px;font-weight:900;color:#000;vertical-align:middle}
+    tbody td.rn{font-size:13px;color:#555;background:#f8fafc;width:34px}
+    tbody td.brn{font-size:13px;font-weight:700;color:#000;text-align:right;padding:6px 8px;line-height:1.3}
+    tbody td.num{color:#000;width:46px}
+    tbody td.rem{color:#dc2626;width:46px}
+    tbody td.send{color:#16a34a;width:46px}
     @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{border:none;border-radius:0;margin:0 auto;max-width:100%;padding:6px}}`;
 }
 
@@ -583,17 +600,18 @@ function printAll(){
   const slips = Object.entries(byProd).map(([bc, items])=>{
     const prod = PRODUCTS.find(p=>p.barcode===bc);
     const bought = prod ? totalPurchases(prod) : 0;
-    const salesByBranch = SALES_MAP?.[bc] ?? {};
-    const totalSold = Object.values(salesByBranch).reduce((s,q)=>s+q,0);
+    // فروع المنتج محسوبة من periods مباشرة (مضمون — زي الاحتياج)
+    const allBranches = branchesForPrint(bc);
+    const totalSold = allBranches.reduce((s,b)=>s+b.sold,0);
     const closing = Math.max(0, bought-totalSold);
-    const rows = items.filter(t=>t.to && String(t.to).trim()).map((t,i)=>{
-      const sold = num(t.sold ?? salesByBranch[t.to] ?? 0);
-      const given = num(t.given ?? toDozen(sold));
-      const remaining = num(t.remaining ?? (given - sold));
-      const brName = (t.to && String(t.to).trim()) ? t.to : "—";
-      return `<tr><td class="rn">${i+1}</td><td class="brn">${brName}</td><td class="num">${fmtN(sold)}</td><td class="num">${fmtN(given)}</td><td class="rem">${fmtN(remaining)}</td><td class="send">${fmtN(t.qty)}</td></tr>`;
-    }).join("");
-    const info = { name: items[0].name, enName: prod?.nameEn ?? prod?.englishName ?? "", container: prod?.container ?? "", ds, lastSupply: prod?lastSupplyDate(prod):"", closing, bought, totalSold, needyCount: items.length };
+    // الفروع المعتمدة (في التوزيع) فقط
+    const approvedNames = new Set(items.map(t=>t.to));
+    const qtyByBranch = {}; items.forEach(t=>{ qtyByBranch[t.to] = num(t.qty); });
+    const printBranches = allBranches.filter(b=>approvedNames.has(b.branch));
+    const rows = printBranches.map((b,i)=>
+      `<tr><td class="rn">${i+1}</td><td class="brn">${b.branch}</td><td class="num">${fmtN(b.sold)}</td><td class="num">${fmtN(b.given)}</td><td class="rem">${fmtN(b.remaining)}</td><td class="send">${fmtN(qtyByBranch[b.branch] ?? 12)}</td></tr>`
+    ).join("");
+    const info = { name: prod?.name ?? items[0].name, enName: prod?.nameEn ?? prod?.englishName ?? "", container: prod?.container ?? "", ds, lastSupply: prod?lastSupplyDate(prod):"", closing, bought, totalSold, needyCount: printBranches.length };
     return buildSlipBody(bc, rows, info);
   }).join("");
 
