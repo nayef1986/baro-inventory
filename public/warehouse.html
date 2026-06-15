@@ -124,6 +124,17 @@ async function save(key, value) {
 
 function getFactoryCode(bc){ const m=String(bc).match(/^(\d+)B/); return m?m[1]:""; }
 function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
+// تاريخ آخر توريد (آخر عملية شراء)
+function lastSupplyDate(p){
+  const ps = p.purchases ?? [];
+  if (ps.length === 0) return "";
+  const last = ps[ps.length-1];
+  const d = last.date || last.invoiceDate || last.day;
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return String(d);
+  return (dt.getDate()+"").padStart(2,"0")+"/"+(dt.getMonth()+1+"").padStart(2,"0")+"/"+dt.getFullYear();
+}
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 
 function recentTransfer(bc, branch){
@@ -486,46 +497,60 @@ function renderPrintQueue(c){
 // يبني محتوى بوليصة واحدة (نفس تصميم النواقص) — يُستخدم في الإفرادي والمجمّع
 function buildSlipBody(bc, branchRows, info){
   const img = IMAGES?.[bc];
+  const enName = info.enName ? `<div class="pen">${info.enName}</div>` : "";
   return `<div class="slip">
       <div class="hd">
-        ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
-        <div class="ti"><div class="brand">${SETTINGS?.brandName ?? "ALBAROO"}</div><div class="pnm">${info.name}</div>
-        <div class="meta">🏭 ${getFactoryCode(bc)} · 📦 ${info.container ?? ""} · 📅 ${info.ds}</div>
-        <div class="meta">المخزون: <b>${fmtN(info.closing)}</b> · مشترى: ${fmtN(info.bought)} · اتباع: ${fmtN(info.totalSold)}</div></div>
+        <div class="ti">
+          <div class="brand">${SETTINGS?.brandName ?? "ALBAROO"}</div>
+          <div class="pnm">${info.name}</div>
+          ${enName}
+          <div class="meta">🏭 <b>${getFactoryCode(bc)}</b> · 📦 ${info.container ?? ""}<br>📅 آخر توريد: <b>${info.lastSupply || info.ds}</b></div>
+        </div>
+        ${img?`<img src="${img}" class="img"/>`:`<div class="img noimg">📦</div>`}
+      </div>
+      <div class="stockrow">
+        <div><div class="v">${fmtN(info.closing)}</div><div class="l">المخزون</div></div>
+        <div><div class="v">${fmtN(info.bought)}</div><div class="l">المشتريات</div></div>
+        <div><div class="v">${fmtN(info.totalSold)}</div><div class="l">المبيعات</div></div>
       </div>
       <div class="bcwrap"><svg class="bcsvg" data-code="${bc}"></svg><div class="bcn">${bc}</div></div>
       <div class="needbar">🔴 فروع تحتاج توزيع: <b>${info.needyCount}</b></div>
-      <table><thead><tr><th>#</th><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th><th>يُرسل</th></tr></thead><tbody>${branchRows}</tbody></table>
+      <table><thead><tr><th>#</th><th>الفرع</th><th>باع</th><th>أخذ</th><th>باقي</th><th>نرسل</th></tr></thead><tbody>${branchRows}</tbody></table>
     </div>`;
 }
 
 function slipCSS(){
   return `@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
     *{font-family:'Cairo';box-sizing:border-box;margin:0;padding:0}body{color:#1a1a1a;background:#ddd}
-    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:14px;display:flex;gap:12px;justify-content:center;z-index:99}
-    .tb button{font-family:'Cairo';font-size:17px;font-weight:900;border:none;border-radius:12px;padding:14px 32px;cursor:pointer}
-    .pr{background:#2563eb;color:#fff}.bk{background:#475569;color:#fff}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:14px;display:flex;gap:10px;justify-content:center;z-index:99;flex-wrap:wrap}
+    .tb button{font-family:'Cairo';font-size:15px;font-weight:900;border:none;border-radius:12px;padding:13px 26px;cursor:pointer}
+    .pr{background:#2563eb;color:#fff}.bk{background:#475569;color:#fff}.im{background:#16a34a;color:#fff}
     .wrap{padding:90px 10px 30px}
-    .slip{width:100%;max-width:700px;background:#fff;margin:0 auto 14px;padding:18px;border-radius:10px;page-break-after:always;page-break-inside:avoid}
-    .hd{display:flex;gap:16px;align-items:center;border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:14px}
-    .hd img{width:120px;height:120px;border-radius:12px;object-fit:contain;border:1px solid #ddd;background:#fafafa}
-    .hd .noimg{width:120px;height:120px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:48px}
+    .slip{width:100%;max-width:760px;background:#fff;margin:0 auto 16px;padding:26px;border-radius:12px;page-break-after:always;page-break-inside:avoid}
+    .hd{display:flex;gap:18px;align-items:center;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:16px}
+    .hd .img{width:130px;height:130px;border-radius:12px;object-fit:contain;border:1px solid #e2e8f0;background:#fafafa;flex-shrink:0}
+    .hd .noimg{display:flex;align-items:center;justify-content:center;font-size:54px}
     .hd .ti{flex:1}
-    .brand{font-size:24px;font-weight:900;color:#0f172a;letter-spacing:1px}
-    .pnm{font-size:20px;font-weight:900;color:#0f172a;margin:4px 0}
-    .meta{font-size:13px;color:#666}
-    .bcwrap{text-align:center;margin:14px 0}.bcwrap svg{max-width:90%}
-    .bcn{font-family:monospace;font-size:26px;font-weight:900;letter-spacing:3px;color:#0f172a;margin-top:4px}
-    .needbar{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:9px;text-align:center;font-weight:700;font-size:15px;margin:12px 0}
-    .needbar b{font-size:20px}
-    table{width:100%;border-collapse:collapse;margin-top:10px}
-    th{background:#0f172a;color:#fff;padding:11px;font-size:15px}
-    td{border:1px solid #ddd;padding:11px;text-align:center;font-size:17px}
-    td.rn{font-weight:900;color:#888;background:#f8fafc;width:36px}
-    td.brn{font-weight:700;color:#0f172a;font-size:16px}
+    .brand{font-size:26px;font-weight:900;color:#0f172a;letter-spacing:1px}
+    .pnm{font-size:21px;font-weight:900;color:#0f172a;margin:5px 0 2px}
+    .pen{font-size:14px;color:#64748b;font-style:italic;margin-bottom:6px}
+    .meta{font-size:13.5px;color:#475569;line-height:1.9}.meta b{color:#0f172a}
+    .stockrow{display:flex;gap:10px;margin:14px 0}
+    .stockrow div{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:11px;text-align:center}
+    .stockrow .v{font-size:24px;font-weight:900;color:#0f172a}
+    .stockrow .l{font-size:11px;color:#64748b;margin-top:2px}
+    .bcwrap{text-align:center;margin:18px 0;padding:14px;background:#fff;border:1px solid #e2e8f0;border-radius:12px}.bcwrap svg{max-width:92%}
+    .bcn{font-family:monospace;font-size:28px;font-weight:900;letter-spacing:4px;color:#0f172a;margin-top:6px}
+    .needbar{background:#fef2f2;border:1.5px solid #fecaca;color:#b91c1c;border-radius:10px;padding:11px;text-align:center;font-weight:700;font-size:16px;margin:14px 0}
+    .needbar b{font-size:22px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th{background:#0f172a;color:#fff;padding:12px 6px;font-size:14px}
+    td{border:1px solid #e2e8f0;padding:11px 6px;text-align:center;font-size:17px}
+    td.rn{font-weight:900;color:#94a3b8;background:#f8fafc;width:40px}
+    td.brn{font-weight:700;color:#0f172a;font-size:16px;text-align:right;padding-right:12px}
     td b{font-size:22px;color:#2563eb}
-    tr:nth-child(even){background:#f8fafc}
-    @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{box-shadow:none;border-radius:0;margin:0 auto}}`;
+    tr:nth-child(even) td{background:#f8fafc}
+    @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{box-shadow:none;border-radius:0;margin:0 auto;max-width:100%;padding:10px}}`;
 }
 
 // طباعة كل المعتمد غير المطبوع — نفس تصميم النواقص بالضبط
@@ -550,7 +575,7 @@ function printAll(){
       const remaining = given - sold;
       return `<tr><td class="rn">${i+1}</td><td class="brn">${t.to}</td><td>${fmtN(sold)}</td><td>${fmtN(given)}</td><td>${fmtN(remaining)}</td><td><b>${fmtN(t.qty)}</b></td></tr>`;
     }).join("");
-    const info = { name: items[0].name, container: prod?.container ?? "", ds, closing, bought, totalSold, needyCount: items.length };
+    const info = { name: items[0].name, enName: prod?.nameEn ?? prod?.englishName ?? "", container: prod?.container ?? "", ds, lastSupply: prod?lastSupplyDate(prod):"", closing, bought, totalSold, needyCount: items.length };
     return buildSlipBody(bc, rows, info);
   }).join("");
 
@@ -563,7 +588,7 @@ function printAll(){
     <style>${slipCSS()}</style>
     <div class="tb" style="position:sticky">
       <button class="bk" onclick="closePrintOverlay()">✕ إغلاق</button>
-      <button class="pr" onclick="doPrintOverlay()">🖨️ طباعة (${count})</button>
+      <button class="pr" onclick="doPrintOverlay('بوليصات_${ds.replace(/\//g,'-')}')">🖨️ طباعة (${count})</button>
     </div>
     <div class="wrap" id="printSlips">${slips}</div>`;
   document.body.appendChild(ov);
@@ -572,7 +597,12 @@ function printAll(){
   ov.querySelectorAll('svg.bcsvg').forEach(function(el){ try{ JsBarcode(el, el.getAttribute('data-code'), {format:"CODE128",width:2,height:60,displayValue:false,margin:2}); }catch(e){} });
 }
 
-function doPrintOverlay(){ window.print(); }
+function doPrintOverlay(titleName){
+  const old = document.title;
+  if (titleName) document.title = titleName;
+  window.print();
+  setTimeout(()=>{ document.title = old; }, 1000);
+}
 
 function closePrintOverlay(){
   const ov = document.getElementById("printOverlay");
@@ -597,7 +627,7 @@ function printSlip(bc){
     const qv = qtyEdit[bc+"_"+b.branch] ?? FIXED_QTY;
     return `<tr><td class="rn">${i+1}</td><td class="brn">${b.branch}</td><td>${fmtN(b.sold)}</td><td>${fmtN(b.given)}</td><td>${fmtN(b.remaining)}</td><td><b>${fmtN(qv)}</b></td></tr>`;
   }).join("");
-  const info = { name:n.p.name, container:n.p.container ?? "", ds, closing:n.closing, bought:n.bought, totalSold:n.totalSold, needyCount:active.length };
+  const info = { name:n.p.name, enName:n.p.nameEn ?? n.p.englishName ?? "", container:n.p.container ?? "", ds, lastSupply:lastSupplyDate(n.p), closing:n.closing, bought:n.bought, totalSold:n.totalSold, needyCount:active.length };
   const slips = buildSlipBody(bc, rows, info);
   const ov = document.createElement("div");
   ov.id = "printOverlay";
@@ -606,7 +636,8 @@ function printSlip(bc){
     <style>${slipCSS()}</style>
     <div class="tb" style="position:sticky">
       <button class="bk" onclick="closePrintSingle()">✕ إغلاق</button>
-      <button class="pr" onclick="doPrintOverlay()">🖨️ طباعة</button>
+      <button class="pr" onclick="doPrintOverlay('${bc}_${ds.replace(/\//g,'-')}')">🖨️ طباعة</button>
+      <button class="im" onclick="saveSlipImage('${bc}')">🖼️ حفظ صورة</button>
     </div>
     <div class="wrap">${slips}</div>`;
   document.body.appendChild(ov);
@@ -618,6 +649,30 @@ function closePrintSingle(){
   const ov = document.getElementById("printOverlay");
   if (ov) ov.remove();
   document.body.style.overflow = "";
+}
+
+async function saveSlipImage(bc){
+  showToast("جاري إنشاء الصورة…");
+  try {
+    if (!window.html2canvas){
+      await new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    }
+    const slip = document.querySelector("#printOverlay .slip");
+    if (!slip) return;
+    const canvas = await window.html2canvas(slip, { scale:2, backgroundColor:"#fff", useCORS:true });
+    canvas.toBlob(async (blob)=>{
+      const dd = new Date();
+      const dstr = (dd.getDate()+"").padStart(2,"0")+"-"+(dd.getMonth()+1+"").padStart(2,"0")+"-"+dd.getFullYear();
+      const fn = bc+"_"+dstr+".png";
+      if (navigator.canShare){
+        const file = new File([blob], fn, {type:"image/png"});
+        if (navigator.canShare({files:[file]})){ await navigator.share({files:[file]}); return; }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href=url; a.download=fn; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }, "image/png");
+  } catch(e){ alert("تعذّر حفظ الصورة — استخدم الطباعة بدلاً"); }
 }
 
 // ─── البوابة ─────────────────────────────────────────────────
