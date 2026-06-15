@@ -124,7 +124,7 @@ async function save(key, value) {
   });
 }
 
-function getFactoryCode(bc){ const m=String(bc).match(/^(\d+)B/); return m?m[1]:""; }
+function getFactoryCode(bc){ const s=String(bc??"").trim(); return s.length<5?s:s.slice(0,5); }
 function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
 // تاريخ آخر توريد (آخر عملية شراء)
 function lastSupplyDate(p){
