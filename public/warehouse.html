@@ -75,6 +75,11 @@
   .logbr{display:flex;justify-content:space-between;align-items:center;background:#0f1626;border-radius:8px;padding:8px 10px;margin-top:6px;font-size:12px}
   .logbr .ldt{color:#5b6b85;font-size:10px}
   .logbr button{background:rgba(239,68,68,0.15);color:#fca5a5;border:none;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer}
+  .unitbar{display:flex;align-items:center;gap:6px;background:#0f1626;border:1px solid #2d3a52;border-radius:10px;padding:8px 10px;margin-bottom:10px;flex-wrap:wrap}
+  .unitbar .ul{font-size:12px;color:#94a3b8;font-weight:700;margin-left:4px}
+  .unitbar .ub{background:#1a2236;border:1px solid #2d3a52;color:#cbd5e1;border-radius:8px;padding:6px 14px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer}
+  .unitbar .ub.on{background:#3b82f6;border-color:#3b82f6;color:#fff}
+  .unitbar .uinput{width:60px;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:8px;padding:6px;font-size:14px;font-weight:900;text-align:center;font-family:'Cairo'}
   @media print {
     body > #app, body > .toast { display: none !important; }
     #printOverlay { position: static !important; overflow: visible !important; background:#fff !important; }
@@ -91,6 +96,26 @@ const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
 const TABLE = "baro_store";
 const MIN = 12, RECENT_DAYS = 7;
+// كمية الوحدة (البوكس/الدزينة) لكل منتج — افتراضي 12، يعدّلها موظف المستودع
+function unitOf(bc){
+  const p = PRODUCTS.find(x=>x.barcode===bc);
+  const u = num(p?.unitQty ?? 0);
+  return u >= 1 ? u : MIN;
+}
+function toUnit(sold, unit){ const u = unit||MIN; return Math.ceil(sold/u)*u; }
+async function saveUnitQty(bc, qty){
+  const u = Math.max(1, num(qty));
+  const p = PRODUCTS.find(x=>x.barcode===bc);
+  if (!p) return;
+  p.unitQty = u;
+  await save("baro_products_v2", PRODUCTS);
+  SALES_MAP = null; currentNeeds = [];
+  showToast(`كمية ${bc}: ${u} ✓`);
+  const y = window.scrollY;
+  currentNeeds = computeNeeds();
+  if (selectedCont) drawContPage(document.getElementById("content"));
+  requestAnimationFrame(()=>window.scrollTo(0,y));
+}
 const FIXED_QTY = 12; // كمية الاعتماد دائماً 12
 const toDozen = n => Math.ceil(n/MIN)*MIN;
 const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
@@ -173,8 +198,9 @@ function computeNeeds(){
     const totalSold = Object.values(branchSales).reduce((s,q)=>s+q,0);
     const closing = Math.max(0, bought-totalSold);
     if (closing <= 0) return;
+    const unit = unitOf(p.barcode);
     const branches = Object.entries(branchSales).map(([branch,bsold])=>{
-      const given = toDozen(bsold);
+      const given = toUnit(bsold, unit);
       const recent = recentTransfer(p.barcode, branch);
       const remaining = given - bsold + recent;
       return { branch, sold:bsold, given, remaining, recent };
@@ -204,7 +230,7 @@ async function saveProduct(bc){
   n.branches.forEach(b=>{
     const key = bc+"_"+b.branch;
     if (excluded[key]) return;
-    const qty = num(qtyEdit[key] ?? FIXED_QTY);
+    const qty = num(qtyEdit[key] ?? unitOf(bc));
     TRANSFERS.push({ barcode:bc, name:n.p.name, from:"المستودع", to:b.branch, qty, sold:b.sold, given:b.given, remaining:b.remaining, date:Date.now(), printed:false });
     added.push(b.branch);
   });
@@ -269,8 +295,10 @@ function renderStats(){
 function renderApp(){
   const unprinted = TRANSFERS.filter(t=>!t.printed).length;
   document.getElementById("app").innerHTML = `
-    <h1>🏬 مدير المستودع</h1>
-    <div class="sub">توزيع النواقص · ALBAROO</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div><h1 style="margin:0">🏬 مدير المستودع</h1><div class="sub">توزيع النواقص · ALBAROO</div></div>
+      <button onclick="refreshAll()" style="background:#1a2236;border:1px solid #2d3a52;color:#3b82f6;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer;white-space:nowrap">🔄 تحديث</button>
+    </div>
     <div class="tabs">
       <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
       <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
@@ -283,6 +311,18 @@ function renderApp(){
   renderContent();
 }
 let searchTerm = "";
+async function refreshAll(){
+  showToast("جاري التحديث…");
+  SALES_MAP = null; currentNeeds = []; approvedNow = {};
+  try {
+    const [prods, pers, sett, imgs, trans] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2")
+    ]);
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? [];
+    showToast("تم التحديث ✓");
+  } catch(e){ showToast("تعذّر التحديث"); }
+  renderApp();
+}
 function onSearch(v){ searchTerm = v; drawNeeds(document.getElementById("content")); }
 function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; selectedCont=null; searchTerm=""; renderApp(); }
 
@@ -353,7 +393,7 @@ function renderProd(n){
     const brs = n.branches.map(b=>{
       const key = bc+"_"+b.branch;
       const ex = excluded[key];
-      const qv = qtyEdit[key] ?? FIXED_QTY;
+      const qv = qtyEdit[key] ?? unitOf(bc);
       const recentWarn = b.recent>0 ? `<div class="recent">⚠️ نُقل ${fmtN(b.recent)} قطعة خلال أسبوع — تأكد</div>` : "";
       return `${recentWarn}<div class="br${ex?' excluded':''}" id="br_${key}">
         <span class="chk" id="chk_${key}" onclick="toggleExclude('${safeBc}','${b.branch.replace(/'/g,'')}')">${ex?'☐':'✅'}</span>
@@ -372,7 +412,14 @@ function renderProd(n){
     const saveBtn = ap
       ? `<button class="save" style="background:#334155" disabled>✓ تم الاعتماد (${ap} فرع)</button>`
       : `<button class="save" onclick="saveProduct('${safeBc}')">✅ اعتمد التوزيع (${n.branches.length} فرع)</button>`;
+    const curUnit = unitOf(bc);
+    const unitBar = `<div class="unitbar">
+      <span class="ul">📦 كمية البوكس/الدزينة:</span>
+      ${[12,24,36].map(u=>`<button class="ub${curUnit===u?' on':''}" onclick="saveUnitQty('${safeBc}',${u})">${u}</button>`).join("")}
+      <input class="uinput" type="number" min="1" value="${curUnit}" onchange="saveUnitQty('${safeBc}',this.value)" title="كمية مخصصة" />
+    </div>`;
     body = `<div class="prodbody">
+      ${unitBar}
       ${brs}
       <div class="saverow">
         ${saveBtn}
@@ -513,8 +560,9 @@ function branchesForPrint(bc){
       if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
     });
   });
+  const unit = unitOf(bc);
   return Object.entries(branchSales).map(([branch, sold]) => {
-    const given = toDozen(sold);
+    const given = toUnit(sold, unit);
     return { branch, sold, given, remaining: given - sold };
   }).sort((a,b)=>a.remaining-b.remaining);
 }
@@ -660,7 +708,7 @@ function printSlip(bc){
   const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
   const active = n.branches.filter(b=> b.branch && String(b.branch).trim() && !excluded[bc+"_"+b.branch]);
   const rows = active.map((b,i)=>{
-    const qv = qtyEdit[bc+"_"+b.branch] ?? FIXED_QTY;
+    const qv = qtyEdit[bc+"_"+b.branch] ?? unitOf(bc);
     return `<tr><td class="rn">${i+1}</td><td class="brn">${b.branch}</td><td class="num">${fmtN(b.sold)}</td><td class="num">${fmtN(b.given)}</td><td class="rem">${fmtN(b.remaining)}</td><td class="send">${fmtN(qv)}</td></tr>`;
   }).join("");
   const info = { name:n.p.name, enName:n.p.nameEn ?? n.p.englishName ?? "", container:n.p.container ?? "", ds, lastSupply:lastSupplyDate(n.p), closing:n.closing, bought:n.bought, totalSold:n.totalSold, needyCount:active.length };
@@ -722,19 +770,7 @@ async function init(){
     document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
     return;
   }
-  const pin = SETTINGS?.warehousePin ?? "1234";
-  document.getElementById("app").innerHTML = `
-    <div class="gate">
-      <h1>🏬 مدير المستودع</h1>
-      <div class="sub" style="margin-top:6px">أدخل الرقم السري</div>
-      <input type="password" id="pin" inputmode="numeric" placeholder="••••" />
-      <button onclick="checkPin('${pin}')">دخول</button>
-    </div>`;
-  document.getElementById("pin").addEventListener("keydown",e=>{ if(e.key==="Enter") checkPin(pin); });
-}
-function checkPin(correct){
-  const v = document.getElementById("pin").value;
-  if (v === String(correct)){ renderApp(); } else { showToast("رقم خاطئ"); }
+  renderApp();
 }
 init();
 </script>
