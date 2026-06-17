@@ -208,8 +208,6 @@ const FactoryReportView = memo(({ products, periods, settings, images, onSaveIma
   );
 });
 
-// ─── تقرير الترند ────────────────────────────────────────────
-
 // ─── التنبيهات الذكية ────────────────────────────────────────
 
 const SmartAlertsView = memo(({ products, periods, onBack }) => {
@@ -414,13 +412,14 @@ const ReorderView = memo(({ products, periods, onBack }) => {
   );
 });
 
-const TrendReportView = memo(({ products, periods, settings, onBack }) => {
+const TrendReportView = memo(({ products, periods, settings, images, onSaveImage, onRemoveImage, onBack }) => {
   const [trendF,  setTrendF]  = useState("all");
   const [sortBy,  setSortBy]  = useState("diff");
   const [search,  setSearch]  = useState("");
   const [view,    setView]    = useState("compare"); // compare | multi
   const [selA,    setSelA]    = useState("");
   const [selB,    setSelB]    = useState("");
+  const [viewImg, setViewImg] = useState(null); // صورة مكبّرة {src, name}
   const { show, ToastContainer } = useToast();
 
   // نرتب الفترات من الأقدم للأحدث
@@ -471,9 +470,23 @@ const TrendReportView = memo(({ products, periods, settings, onBack }) => {
     }).filter(Boolean).sort((a,b) => Math.abs(b.growth)-Math.abs(a.growth)).slice(0,30);
   }, [products, sorted]);
 
+  // معاينة الصورة المكبّرة
+  const imgModal = viewImg ? (
+    <div onClick={()=>setViewImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:1000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <img src={viewImg.src} alt="" style={{maxWidth:"90%",maxHeight:"70vh",borderRadius:"12px",objectFit:"contain"}} />
+      <div style={{color:"#fff",fontSize:"14px",fontWeight:700,marginTop:"12px",textAlign:"center"}}>{viewImg.name}</div>
+      <div style={{display:"flex",gap:"10px",marginTop:"14px"}}>
+        <a href={viewImg.src} download={`${viewImg.name||"صورة"}.jpg`} onClick={e=>e.stopPropagation()}
+          style={{background:"#16a34a",color:"#fff",borderRadius:"10px",padding:"11px 22px",fontSize:"14px",fontWeight:900,textDecoration:"none",fontFamily:"Cairo"}}>💾 حفظ الصورة</a>
+        <button onClick={()=>setViewImg(null)} style={{background:"#475569",color:"#fff",border:"none",borderRadius:"10px",padding:"11px 22px",fontSize:"14px",fontWeight:900,fontFamily:"Cairo",cursor:"pointer"}}>✕ إغلاق</button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-4">
       <ToastContainer />
+      {imgModal}
       <BackBtn onClick={onBack} />
 
       {/* تبويب نوع العرض */}
@@ -551,10 +564,14 @@ const TrendReportView = memo(({ products, periods, settings, onBack }) => {
           <SearchBar value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث…" />
 
           <div className="space-y-2">
-            {filtered.map(r => (
+            {filtered.map(r => {
+              const img = images?.[r.barcode];
+              return (
               <Card key={r.barcode} className="!p-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{TREND_ICON[r.trend]}</span>
+                  {img
+                    ? <img src={img} alt="" onClick={()=>setViewImg({src:img,name:r.name})} style={{width:"44px",height:"44px",borderRadius:"8px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
+                    : <span className="text-lg">{TREND_ICON[r.trend]}</span>}
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-slate-100 text-sm truncate">{r.name}</div>
                     <div className="text-xs text-slate-500 font-mono">{r.barcode}</div>
@@ -570,7 +587,8 @@ const TrendReportView = memo(({ products, periods, settings, onBack }) => {
                     color={r.diff>0?"text-emerald-400":r.diff<0?"text-red-400":"text-slate-400"} />
                 </div>
               </Card>
-            ))}
+              );
+            })}
             {filtered.length === 0 && <EmptyState icon="📊" title="لا توجد بيانات" subtitle="ارفع فترتين على الأقل" />}
           </div>
         </>
@@ -583,9 +601,13 @@ const TrendReportView = memo(({ products, periods, settings, onBack }) => {
             const max = Math.max(...p.monthly.map(m=>m.qty), 1);
             const isRising = p.growth > 20;
             const isFalling = p.growth < -20;
+            const img = images?.[p.barcode];
             return (
               <Card key={p.barcode} className="!p-3">
-                <div className="flex items-start justify-between mb-2">
+                <div className="flex items-start gap-3 mb-2">
+                  {img
+                    ? <img src={img} alt="" onClick={()=>setViewImg({src:img,name:p.name})} style={{width:"48px",height:"48px",borderRadius:"8px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
+                    : <div style={{width:"48px",height:"48px",borderRadius:"8px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}}>📦</div>}
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
                     <div className="text-xs text-slate-500 font-mono">{p.barcode}</div>
@@ -657,7 +679,8 @@ export default function ReportsScreen({ products, periods, settings, images, onS
   }
 
   if (view === "trend") {
-    return <TrendReportView products={products} periods={periods} settings={settings} onBack={() => setView(null)} />;
+    return <TrendReportView products={products} periods={periods} settings={settings}
+      images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} onBack={() => setView(null)} />;
   }
   if (view === "factory") {
     return <FactoryReportView products={products} periods={periods} settings={settings}
