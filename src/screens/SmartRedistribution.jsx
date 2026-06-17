@@ -37,17 +37,33 @@ function analyze(products, periods, settings) {
     const stale = brs.filter(b=>b.sold < avg*0.5).sort((a,b)=>a.vsAvg-b.vsAvg);
     const hot   = brs.filter(b=>b.sold > avg).sort((a,b)=>b.vsAvg-a.vsAvg);
     if (stale.length===0 || hot.length===0) return;
-    out.push({ ...fac, totalSold, avg, stale, hot, brCount: brs.length });
+    // كونتينر المصنع (أول منتج له كونتينر)
+    let container = "";
+    products.forEach(p => { if(getFactoryCode(p.barcode)===fac.code && p.container && !container) container = p.container; });
+    out.push({ ...fac, container: container || "بدون كونتينر", totalSold, avg, stale, hot, brCount: brs.length });
   });
   return out.sort((a,b)=>b.stale.length-a.stale.length);
 }
 
-export default function SmartRedistribution({ products=[], periods=[], settings={}, images={} }) {
+export default function SmartRedistribution({ products=[], periods=[], settings={}, images={}, onSaveSettings }) {
+  const [cont, setCont] = useState(null);    // الكونتينر المختار
   const [sel, setSel] = useState(null);      // المصنع المختار
   const [edits, setEdits] = useState({});    // {barcode: qty معدّلة}
   const [removed, setRemoved] = useState({}); // {barcode: true} مستثنى
+  const [viewImg, setViewImg] = useState(null); // صورة مكبّرة {src, name}
 
   const analysis = useMemo(()=>analyze(products, periods, settings), [products, periods, settings]);
+
+  // تجميع بالكونتينر
+  const byContainer = useMemo(()=>{
+    const map = {};
+    analysis.forEach(f => {
+      const c = f.container || "بدون كونتينر";
+      if (!map[c]) map[c] = { name: c, factories: [] };
+      map[c].factories.push(f);
+    });
+    return Object.values(map).sort((a,b)=>b.factories.length-a.factories.length);
+  }, [analysis]);
 
   // منتجات النقل المقترحة للمصنع المختار
   const plan = useMemo(()=>{
@@ -74,6 +90,29 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
   }, [sel, analysis, products, periods, settings]);
 
   // طباعة خطة النقل
+  // اعتمد + احفظ + اطبع
+  const approveAndPrint = async () => {
+    if (!plan) return;
+    const items = plan.items.filter(it=>!removed[it.barcode]);
+    if (items.length === 0) return;
+    // نحفظ النقل في settings.transfers (نفس آلية النقل اليدوي)
+    const existing = settings?.transfers ?? [];
+    const newTransfers = items.map(it => ({
+      barcode: it.barcode,
+      name: it.name,
+      from: plan.source.branch,
+      to: plan.dest.branch,
+      qty: edits[it.barcode] ?? it.suggest,
+      factory: plan.fac.code,
+      smart: true,
+      ts: Date.now(),
+    }));
+    if (onSaveSettings) {
+      try { await onSaveSettings({ ...settings, transfers: [...existing, ...newTransfers] }); } catch(e){}
+    }
+    printPlan();
+  };
+
   const printPlan = () => {
     if (!plan) return;
     const items = plan.items.filter(it=>!removed[it.barcode]);
@@ -112,11 +151,25 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     if (w){ w.document.write(html); w.document.close(); }
   };
 
+  // ─── معاينة الصورة المكبّرة (مشتركة) ───
+  const imgModal = viewImg ? (
+    <div onClick={()=>setViewImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:1000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <img src={viewImg.src} alt="" style={{maxWidth:"90%",maxHeight:"70vh",borderRadius:"12px",objectFit:"contain"}} />
+      <div style={{color:"#fff",fontSize:"14px",fontWeight:700,marginTop:"12px",textAlign:"center"}}>{viewImg.name}</div>
+      <div style={{display:"flex",gap:"10px",marginTop:"14px"}}>
+        <a href={viewImg.src} download={`${viewImg.name||"صورة"}.jpg`} onClick={e=>e.stopPropagation()}
+          style={{background:"#16a34a",color:"#fff",borderRadius:"10px",padding:"11px 22px",fontSize:"14px",fontWeight:900,textDecoration:"none",fontFamily:"Cairo"}}>💾 حفظ الصورة</a>
+        <button onClick={()=>setViewImg(null)} style={{background:"#475569",color:"#fff",border:"none",borderRadius:"10px",padding:"11px 22px",fontSize:"14px",fontWeight:900,fontFamily:"Cairo",cursor:"pointer"}}>✕ إغلاق</button>
+      </div>
+    </div>
+  ) : null;
+
   // ─── شاشة تفاصيل المصنع ───
   if (sel && plan) {
     const items = plan.items.filter(it=>!removed[it.barcode]);
     return (
       <div className="space-y-3">
+        {imgModal}
         <button onClick={()=>{setSel(null);setEdits({});setRemoved({});}} className="text-blue-400 font-bold text-sm">← رجوع للمصانع</button>
         <div style={{background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"14px",padding:"14px"}}>
           <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"15px",marginBottom:"8px"}}>🏭 {plan.fac.code}{plan.fac.name?` · ${plan.fac.name}`:""}</div>
@@ -125,8 +178,15 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
             <span style={{color:"#64748b"}}>←</span>
             <span style={{color:"#4ade80"}}>📥 {plan.dest.branch}</span>
           </div>
-          <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"6px"}}>
-            الراكد باع {plan.source.sold} ({plan.source.vsAvg.toFixed(0)}% من المعدّل) · السريع باع {plan.dest.sold} ({plan.dest.vsAvg.toFixed(0)}%)
+          <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
+            <div style={{flex:1,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"10px",padding:"8px",textAlign:"center"}}>
+              <div style={{fontSize:"20px",fontWeight:900,color:"#f87171"}}>{plan.source.sold}</div>
+              <div style={{fontSize:"10px",color:"#94a3b8"}}>باع الراكد ({plan.source.vsAvg.toFixed(0)}%)</div>
+            </div>
+            <div style={{flex:1,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"10px",padding:"8px",textAlign:"center"}}>
+              <div style={{fontSize:"20px",fontWeight:900,color:"#4ade80"}}>{plan.dest.sold}</div>
+              <div style={{fontSize:"10px",color:"#94a3b8"}}>باع السريع ({plan.dest.vsAvg.toFixed(0)}%)</div>
+            </div>
           </div>
         </div>
 
@@ -140,7 +200,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
               return (
                 <div key={it.barcode} style={{background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"12px",padding:"10px",display:"flex",alignItems:"center",gap:"10px"}}>
                   {images?.[it.barcode]
-                    ? <img src={images[it.barcode]} alt="" style={{width:"48px",height:"48px",borderRadius:"8px",objectFit:"cover",border:"1px solid #2d3a52",flexShrink:0}} />
+                    ? <img src={images[it.barcode]} alt="" onClick={()=>setViewImg({src:images[it.barcode],name:it.name})} style={{width:"48px",height:"48px",borderRadius:"8px",objectFit:"cover",border:"1px solid #2d3a52",flexShrink:0,cursor:"pointer"}} />
                     : <div style={{width:"48px",height:"48px",borderRadius:"8px",background:"#1a2236",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}}>📦</div>}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:700,color:"#f0e6d0",fontSize:"13px"}}>{it.name}</div>
@@ -155,9 +215,9 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                 </div>
               );
             })}
-            <button onClick={printPlan}
-              style={{width:"100%",background:"#2563eb",color:"#fff",border:"none",borderRadius:"12px",padding:"13px",fontSize:"15px",fontWeight:900,cursor:"pointer",fontFamily:"Cairo",marginTop:"6px"}}>
-              🖨️ اطبع خطة النقل
+            <button onClick={approveAndPrint}
+              style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:"12px",padding:"13px",fontSize:"15px",fontWeight:900,cursor:"pointer",fontFamily:"Cairo",marginTop:"6px"}}>
+              ✅ اعتمد + احفظ + اطبع
             </button>
           </>
         )}
@@ -165,27 +225,50 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     );
   }
 
-  // ─── شاشة قائمة المصانع (الفرص) ───
-  return (
-    <div className="space-y-3">
-      <div style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:"12px",padding:"12px",fontSize:"12px",color:"#93c5fd"}}>
-        💡 النظام حلّل مبيعاتك عبر كل الفترات، واكتشف مصانع فيها <b>بضاعة راكدة بفرع</b> + <b>طلب بفرع ثاني</b>. اختر مصنع لترى خطة النقل.
-      </div>
-      {analysis.length===0 ? (
-        <div style={{textAlign:"center",padding:"40px",color:"#64748b"}}>
-          <div style={{fontSize:"32px",marginBottom:"8px"}}>✓</div>
-          ما فيه فرص نقل واضحة حالياً<br/><span style={{fontSize:"11px"}}>التوزيع متوازن بين الفروع</span>
-        </div>
-      ) : (
-        analysis.map(f => (
+  // ─── شاشة المصانع داخل كونتينر مختار ───
+  if (cont && !sel) {
+    const c = byContainer.find(x=>x.name===cont);
+    return (
+      <div className="space-y-3">
+        {imgModal}
+        <button onClick={()=>setCont(null)} className="text-blue-400 font-bold text-sm">← رجوع للكونتينرات</button>
+        <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"15px"}}>📦 {cont}</div>
+        {(c?.factories ?? []).map(f => (
           <button key={f.code} onClick={()=>setSel(f.code)}
             style={{width:"100%",background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"14px",padding:"14px",textAlign:"right",cursor:"pointer",fontFamily:"Cairo"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"14px"}}>🏭 {f.code}{f.name?` · ${f.name}`:""}</div>
-                <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px"}}>
-                  📤 {f.stale.length} فرع راكد · 📥 {f.hot.length} فرع يطلب
-                </div>
+                <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px"}}>📤 {f.stale.length} فرع راكد · 📥 {f.hot.length} فرع يطلب</div>
+              </div>
+              <div style={{color:"#3b82f6",fontWeight:900,fontSize:"18px"}}>←</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // ─── شاشة الكونتينرات (الفرص) ───
+  return (
+    <div className="space-y-3">
+      {imgModal}
+      <div style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:"12px",padding:"12px",fontSize:"12px",color:"#93c5fd"}}>
+        💡 النظام حلّل مبيعاتك عبر كل الفترات، واكتشف بضاعة <b>راكدة بفرع</b> + <b>طلب بفرع ثاني</b>. اختر كونتينر ثم مصنع لترى خطة النقل.
+      </div>
+      {byContainer.length===0 ? (
+        <div style={{textAlign:"center",padding:"40px",color:"#64748b"}}>
+          <div style={{fontSize:"32px",marginBottom:"8px"}}>✓</div>
+          ما فيه فرص نقل واضحة حالياً<br/><span style={{fontSize:"11px"}}>التوزيع متوازن بين الفروع</span>
+        </div>
+      ) : (
+        byContainer.map(c => (
+          <button key={c.name} onClick={()=>setCont(c.name)}
+            style={{width:"100%",background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"14px",padding:"14px",textAlign:"right",cursor:"pointer",fontFamily:"Cairo"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"14px"}}>📦 {c.name}</div>
+                <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px"}}>{c.factories.length} مصنع فيه فرصة نقل</div>
               </div>
               <div style={{color:"#3b82f6",fontWeight:900,fontSize:"18px"}}>←</div>
             </div>
