@@ -81,7 +81,9 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     const ds = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
     const rows = items.map((it,i)=>{
       const qty = edits[it.barcode] ?? it.suggest;
-      return `<tr><td class="rn">${i+1}</td><td class="bc">${it.barcode}</td><td class="nm">${it.name}</td><td class="q">${qty}</td></tr>`;
+      const img = images?.[it.barcode];
+      const imgCell = img ? `<img src="${img}" class="pimg"/>` : `<div class="pnoimg">📦</div>`;
+      return `<tr><td class="rn">${i+1}</td><td class="im">${imgCell}</td><td class="bc">${it.barcode}</td><td class="nm">${it.name}</td><td class="q">${qty}</td></tr>`;
     }).join("");
     const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>نقل_${plan.source.branch}_${ds.replace(/\//g,"-")}</title>
       <style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -93,6 +95,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
       .meta{text-align:center;font-size:12px;color:#555;margin-bottom:12px}
       table{width:100%;border-collapse:collapse}th{background:#3b82f6;color:#fff;padding:8px;font-size:13px;border:1px solid #93c5fd}
       td{border:1px solid #cbd5e1;padding:8px;text-align:center;font-size:14px}td.nm{text-align:right;font-weight:700}td.bc{font-family:monospace;font-size:12px}td.q{font-size:18px;font-weight:900;color:#16a34a}td.rn{color:#888;width:30px}
+      td.im{width:54px;padding:4px}.pimg{width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1}.pnoimg{width:46px;height:46px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto}
       .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:12px;display:flex;gap:8px;justify-content:center}
       .tb button{font-family:'Cairo';font-weight:900;border:none;border-radius:10px;padding:11px 24px;cursor:pointer;font-size:14px}
       .pr{background:#2563eb;color:#fff}.bk{background:#475569;color:#fff}
@@ -103,7 +106,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
         <div class="h"><div class="lg">ALBAROO</div><div class="t">📋 خطة نقل بضاعة</div></div>
         <div class="route"><span class="from">📤 ${plan.source.branch}</span><span class="ar">←</span><span class="to">📥 ${plan.dest.branch}</span></div>
         <div class="meta">🏭 مصنع ${plan.fac.code}${plan.fac.name?` · ${plan.fac.name}`:""} · 📅 ${ds} · ${items.length} منتج</div>
-        <table><thead><tr><th>#</th><th>الباركود</th><th>المنتج</th><th>الكمية</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>#</th><th>صورة</th><th>الباركود</th><th>المنتج</th><th>الكمية</th></tr></thead><tbody>${rows}</tbody></table>
       </div></body></html>`;
     const w = window.open("","_blank");
     if (w){ w.document.write(html); w.document.close(); }
@@ -136,6 +139,9 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
               const qty = edits[it.barcode] ?? it.suggest;
               return (
                 <div key={it.barcode} style={{background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"12px",padding:"10px",display:"flex",alignItems:"center",gap:"10px"}}>
+                  {images?.[it.barcode]
+                    ? <img src={images[it.barcode]} alt="" style={{width:"48px",height:"48px",borderRadius:"8px",objectFit:"cover",border:"1px solid #2d3a52",flexShrink:0}} />
+                    : <div style={{width:"48px",height:"48px",borderRadius:"8px",background:"#1a2236",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}}>📦</div>}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:700,color:"#f0e6d0",fontSize:"13px"}}>{it.name}</div>
                     <div style={{fontFamily:"monospace",fontSize:"11px",color:"#64748b"}}>{it.barcode}</div>
