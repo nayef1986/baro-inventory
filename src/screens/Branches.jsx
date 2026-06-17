@@ -925,7 +925,7 @@ export default function BranchesScreen({ products, periods, settings, images, on
         ))}
       </div>
       {mainTab === "list" && <BranchSelector branches={branches} periods={periods} products={products} settings={settings} onSelect={setSelected} branchSummary={branchSummary} />}
-      {mainTab === "redist" && <SmartRedistribution products={products} periods={periods} settings={settings} images={images} />}
+      {mainTab === "redist" && <SmartRedistribution products={products} periods={periods} settings={settings} images={images} onSaveSettings={onSaveSettings} />}
     </div>
   );
 }
