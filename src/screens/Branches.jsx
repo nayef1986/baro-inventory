@@ -18,6 +18,7 @@ import {
   exportBranchNeedReport, printBranchNeedReport,
   exportGeneric, printTrendReport,
 } from "../lib/exporters.js";
+import SmartRedistribution from "./SmartRedistribution.jsx";
 
 // ─── قائمة فلترة مجمّعة (كونتينر ← مصانع) ──────────────────
 
@@ -902,6 +903,7 @@ const BranchSelector = memo(({ branches, periods, products, settings, onSelect, 
 
 export default function BranchesScreen({ products, periods, settings, images, onSaveImage, onRemoveImage, branchSummary, onSaveSettings }) {
   const [selected, setSelected] = useState(null);
+  const [mainTab, setMainTab] = useState("list");
   const branches = useMemo(() => allBranches(periods), [periods]);
 
   if (selected) {
@@ -913,8 +915,17 @@ export default function BranchesScreen({ products, periods, settings, images, on
 
   return (
     <div className="space-y-3">
-      <SectionHeader icon="🏪" title="الفروع" subtitle="اضغط فرع للتفاصيل" />
-      <BranchSelector branches={branches} periods={periods} products={products} settings={settings} onSelect={setSelected} branchSummary={branchSummary} />
+      <SectionHeader icon="🏪" title="الفروع" subtitle={mainTab==="list"?"اضغط فرع للتفاصيل":"نقل ذكي بين الفروع"} />
+      <div className="flex bg-slate-800 border border-slate-700 rounded-2xl p-1 gap-1">
+        {[["list","🏪 قائمة الفروع"],["redist","🔄 نقل ذكي"]].map(([k,l]) => (
+          <button key={k} onClick={() => setMainTab(k)}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${mainTab===k?"bg-blue-600 text-white":"text-slate-400 hover:text-slate-200"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {mainTab === "list" && <BranchSelector branches={branches} periods={periods} products={products} settings={settings} onSelect={setSelected} branchSummary={branchSummary} />}
+      {mainTab === "redist" && <SmartRedistribution products={products} periods={periods} settings={settings} images={images} />}
     </div>
   );
 }
