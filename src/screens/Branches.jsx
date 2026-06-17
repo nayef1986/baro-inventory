@@ -266,37 +266,39 @@ function SmartSearch({ products, periods, settings, images, onSaveImage, onRemov
 // ─── شاشة الاحتياج ───────────────────────────────────────────
 
 const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings }) => {
-  const [periodId, setPeriodId] = useState(periods[periods.length-1]?.id ?? "");
   const [filterVal, setFilterVal] = useState("");
   const [minStock, setMinStock] = useState(settings?.minStock ?? 12);
   const [ready, setReady] = useState(false);
   const { show, ToastContainer } = useToast();
-  const period = periods.find(p => p.id === periodId) ?? null;
   const [barcodeSearch, setBarcodeSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
   const [remMin, setRemMin] = useState(0);
   const [remMax, setRemMax] = useState(6);
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     setReady(false); setVisibleCount(10);
     const t = setTimeout(() => setReady(true), 0);
     return () => clearTimeout(t);
-  }, [branch, periodId]);
+  }, [branch]);
 
   const allNeedItems = useMemo(() => {
-    if (!period) return [];
-    const branchData = period.sales?.[branch] ?? {};
+    if (!periods.length) return [];
+    // مبيعات الفرع من كل الفترات + مبيعات كل منتج كلياً
+    const branchData = {};
     const soldAllIndex = {};
     periods.forEach(per => {
+      const bd = per.sales?.[branch] ?? {};
+      Object.keys(bd).forEach(bc => { branchData[bc] = (branchData[bc] ?? 0) + num(bd[bc]?.qty ?? 0); });
       Object.values(per.sales ?? {}).forEach(d => {
         Object.keys(d).forEach(bc => { soldAllIndex[bc] = (soldAllIndex[bc] ?? 0) + num(d[bc]?.qty ?? 0); });
       });
     });
     return products
-      .filter(p => (branchData[p.barcode]?.qty ?? 0) > 0)
-      .slice(0, 100)
+      .filter(p => (branchData[p.barcode] ?? 0) > 0)
+      .slice(0, 200)
       .map(p => {
-        const sold = num(branchData[p.barcode]?.qty ?? 0);
+        const sold = num(branchData[p.barcode] ?? 0);
         const dozens = Math.ceil(sold / minStock);
         const given = dozens * minStock;
         const remaining = Math.max(0, given - sold);
@@ -306,7 +308,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const closingAll = Math.max(0, bought - allSold);
         return { ...p, sold, given, remaining, needQty, closingAll, bought, totalSoldAll: allSold, buyPrice: num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0), sellPrice: num(p.sellPrice) };
       });
-  }, [products, period, branch, minStock, periods]);
+  }, [products, branch, minStock, periods]);
 
   const filtered = useMemo(() => {
     let list = allNeedItems;
@@ -326,36 +328,45 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
   const filterLabel = !filterVal ? "الكل" : filterVal.split(":")[1];
   const totalNeed = filtered.reduce((s,i) => s + i.needQty, 0);
   const totalCost = filtered.reduce((s,i) => s + i.needQty * i.buyPrice, 0);
+  const activeFilters = (filterVal?1:0) + (remMin!==0||remMax!==6?1:0) + (minStock!==12?1:0);
 
   return (
     <div className="space-y-3">
       <ToastContainer />
-      <select value={periodId} onChange={e => setPeriodId(e.target.value)}
-        className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none">
-        {[...periods].reverse().map(p => <option key={p.id} value={p.id}>{p.label} · {p.uploadDate}</option>)}
-      </select>
-      <div className="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2.5">
-        <span className="text-xs text-slate-400 font-bold">الحد الأدنى للفرع:</span>
-        <input type="number" value={minStock} min={1} max={100} onChange={e => setMinStock(Math.max(1, Number(e.target.value) || 12))}
-          className="w-16 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-blue-500" />
-        <span className="text-xs text-slate-400">قطعة</span>
-      </div>
-      <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2.5">
-        <span className="text-xs text-amber-300 font-bold whitespace-nowrap">يظهر إذا المتبقي من</span>
-        <input type="number" value={remMin} min={0} max={999} onChange={e => setRemMin(Math.max(0, Number(e.target.value) || 0))}
-          className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
-        <span className="text-xs text-amber-300 font-bold">إلى</span>
-        <input type="number" value={remMax} min={0} max={999} onChange={e => setRemMax(Math.max(0, Number(e.target.value) || 0))}
-          className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
-        <span className="text-xs text-amber-300/70">قطعة</span>
-      </div>
+      {/* البحث — دائم الظهور */}
       <div className="relative">
         <input value={barcodeSearch} onChange={e => setBarcodeSearch(e.target.value)} placeholder="🔍 بحث بالباركود أو اسم المنتج…"
           className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500" />
         {barcodeSearch && <button onClick={() => setBarcodeSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 text-sm">✕</button>}
       </div>
-      <GroupedFilter products={products} settings={settings} value={filterVal} onChange={setFilterVal} />
-      {period && (
+      {/* زر الفلاتر */}
+      <button onClick={() => setShowFilters(v=>!v)}
+        className="w-full flex items-center justify-between bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-300">
+        <span>⚙️ فلترة وخيارات{activeFilters>0?` (${activeFilters})`:""}</span>
+        <span className={`transition-transform ${showFilters?"rotate-180":""}`}>▾</span>
+      </button>
+      {/* الفلاتر — قابلة للطي */}
+      {showFilters && (
+        <div className="space-y-3 bg-slate-800/50 border border-slate-700 rounded-xl p-3">
+          <div className="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2.5">
+            <span className="text-xs text-slate-400 font-bold">الحد الأدنى للفرع:</span>
+            <input type="number" value={minStock} min={1} max={100} onChange={e => setMinStock(Math.max(1, Number(e.target.value) || 12))}
+              className="w-16 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-blue-500" />
+            <span className="text-xs text-slate-400">قطعة</span>
+          </div>
+          <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2.5">
+            <span className="text-xs text-amber-300 font-bold whitespace-nowrap">يظهر إذا المتبقي من</span>
+            <input type="number" value={remMin} min={0} max={999} onChange={e => setRemMin(Math.max(0, Number(e.target.value) || 0))}
+              className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
+            <span className="text-xs text-amber-300 font-bold">إلى</span>
+            <input type="number" value={remMax} min={0} max={999} onChange={e => setRemMax(Math.max(0, Number(e.target.value) || 0))}
+              className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
+            <span className="text-xs text-amber-300/70">قطعة</span>
+          </div>
+          <GroupedFilter products={products} settings={settings} value={filterVal} onChange={setFilterVal} />
+        </div>
+      )}
+      {periods.length > 0 && (
         <Card>
           <div className="grid grid-cols-3 gap-2 mb-3">
             <StatPill label="المنتجات" value={fmtN(filtered.length)} color="text-blue-400" />
@@ -375,7 +386,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         </Card>
       )}
       <div className="space-y-3">
-        {!ready && period && <div className="py-10 text-center text-slate-400 text-sm animate-pulse">⏳ تحميل المنتجات…</div>}
+        {!ready && <div className="py-10 text-center text-slate-400 text-sm animate-pulse">⏳ تحميل المنتجات…</div>}
         {ready && filtered.slice(0, visibleCount).map(item => (
           <NeedProductCard key={item.barcode} item={item} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} closingAll={item.closingAll ?? 0} />
         ))}
@@ -384,8 +395,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
             عرض المزيد ({filtered.length - visibleCount} منتج)
           </button>
         )}
-        {filtered.length === 0 && period && <EmptyState icon="✅" title="لا يوجد احتياج" />}
-        {!period && <EmptyState icon="📅" title="اختر فترة" />}
+        {ready && filtered.length === 0 && <EmptyState icon="✅" title="لا يوجد احتياج" />}
       </div>
     </div>
   );
