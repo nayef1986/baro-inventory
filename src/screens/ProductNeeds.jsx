@@ -4,6 +4,7 @@ import {
   totalPurchases, soldAllPeriods, getFactoryCode,
   arabicIncludes, num, allContainers, fmtN, fmtM, fmtPct,
 } from "../lib/calc.js";
+import OfferBuilder from "./OfferBuilder.jsx";
 
 const MIN = 12;
 const toDozen = n => Math.ceil(n / MIN) * MIN;
@@ -12,12 +13,10 @@ const toDozen = n => Math.ceil(n / MIN) * MIN;
 function dateEN(opts = { year:"numeric", month:"long", day:"numeric" }) {
   const now = new Date();
   const greg = now.toLocaleDateString("en-GB", opts);
-  // الهجري بأرقام لاتينية
   const hijri = now.toLocaleDateString("en-GB-u-ca-islamic", opts);
   return { greg, hijri };
 }
 
-// تاريخ أرقام صرفة: يوم/شهر/سنة (13/06/2026)
 function dateNum() {
   const now = new Date();
   const d = (now.getDate()+"").padStart(2,"0");
@@ -26,27 +25,25 @@ function dateNum() {
   return `${d}/${m}/${y}`;
 }
 
-// استخراج المدينة من اسم الفرع (البارو-مول-مدينة-رقم)
 function cityOf(branch, overrides = {}) {
   if (overrides[branch]) return overrides[branch];
   const parts = String(branch).split("-").map(p=>p.trim());
-  // الصيغة: البارو - مول - مدينة - رقم → المدينة الجزء قبل الأخير
   if (parts.length >= 3) return parts[parts.length - 2];
   return "";
 }
 
-// حساب اقتراحات النقل لمنتج (من فروعه)
-function buildTransfers(branches, bought, cityOverrides = {}) {
-  const NEED_MAX = 7;   // متبقي أقل = محتاج
-  const SURPLUS_MIN = 12; // متبقي أكثر = فائض
-  const SURPLUS_PCT = 40; // باع أقل = فائض
+function buildTransfers(branches, bought, cityOverrides = {}, newBranches = []) {
+  const NEED_MAX = 7;
+  const SURPLUS_MIN = 12;
+  const SURPLUS_PCT = 40;
 
   const totalGiven = branches.reduce((s,b)=>s+b.given, 0);
-  const warehouse = Math.max(0, bought - totalGiven); // المستودع = المشترى - الموزّع
+  const warehouse = Math.max(0, bought - totalGiven);
 
   const needy = branches.filter(b => b.remaining < NEED_MAX && b.sold > 0)
     .sort((a,b)=>a.remaining-b.remaining);
   const surplus = branches.filter(b => {
+    if (newBranches.includes(b.branch)) return false;  // الفرع الجديد ما يُسحب منه
     const pct = b.given>0 ? (b.sold/b.given)*100 : 0;
     return b.remaining >= SURPLUS_MIN && pct < SURPLUS_PCT;
   }).sort((a,b)=>b.remaining-a.remaining);
@@ -55,8 +52,7 @@ function buildTransfers(branches, bought, cityOverrides = {}) {
   const usedSurplus = {};
 
   needy.forEach(n => {
-    const needQty = toDozen(Math.max(NEED_MAX - n.remaining, n.sold)); // كم يحتاج
-    // 1) المستودع أول
+    const needQty = toDozen(Math.max(NEED_MAX - n.remaining, n.sold));
     if (warehouse >= MIN) {
       transfers.push({
         kind: "warehouse", to: n.branch, qty: Math.min(warehouse, needQty),
@@ -64,12 +60,11 @@ function buildTransfers(branches, bought, cityOverrides = {}) {
       });
       return;
     }
-    // 2) نقل من فرع — نفس المدينة أولوية
     const nCity = cityOf(n.branch, cityOverrides);
     const pool = surplus.filter(s => (usedSurplus[s.branch]??0) < s.remaining && s.branch !== n.branch);
-    let from = pool.find(s => cityOf(s.branch, cityOverrides) === nCity); // نفس المدينة
+    let from = pool.find(s => cityOf(s.branch, cityOverrides) === nCity);
     const sameCity = !!from;
-    if (!from) from = pool[0]; // أي فائض
+    if (!from) from = pool[0];
     if (from) {
       const moveQty = Math.min(from.remaining - (usedSurplus[from.branch]??0), needQty);
       if (moveQty >= MIN/2) {
@@ -85,28 +80,20 @@ function buildTransfers(branches, bought, cityOverrides = {}) {
   return { transfers, warehouse };
 }
 
-
-// الاحتياج = المباع (مقرّب للدزينة)، بحد أقصى المشتريات
 const reorderQty = (sold, bought) => Math.min(toDozen(sold), bought);
 
-// بناء صفوف التقرير المختصر (للطلب)
 function buildRows(items) {
   return items.map(x => {
     const cost = num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
     return {
-      barcode: x.p.barcode,
-      name: x.p.name ?? "",
-      qtyIn: Math.round(x.bought),
-      sold: Math.round(x.sold),
-      balance: Math.round(x.closing),
-      reorder: Math.round(reorderQty(x.sold, x.bought)),
-      cost: cost,
-      price: num(x.p.sellPrice),
+      barcode: x.p.barcode, name: x.p.name ?? "",
+      qtyIn: Math.round(x.bought), sold: Math.round(x.sold),
+      balance: Math.round(x.closing), reorder: Math.round(reorderQty(x.sold, x.bought)),
+      cost: cost, price: num(x.p.sellPrice),
     };
   });
 }
 
-// بناء صفوف التقرير الكامل (تفاصيل دقيقة)
 function buildFullRows(items) {
   return items.map(x => {
     const cost = num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
@@ -118,15 +105,13 @@ function buildFullRows(items) {
     return {
       barcode: x.p.barcode, name: x.p.name ?? "",
       qtyIn: Math.round(x.bought), sold: Math.round(x.sold), balance: Math.round(x.closing),
-      reorder: Math.round(reorderQty(x.sold, x.bought)),
-      cost, price,
+      reorder: Math.round(reorderQty(x.sold, x.bought)), cost, price,
       soldPct: x.bought>0 ? Math.round((x.sold/x.bought)*100) : 0,
       frozenQty, frozenVal, revenue, profit,
     };
   });
 }
 
-// تصدير Excel — مختصر
 function exportExcel(items, title) {
   const rows = buildRows(items);
   const header = ["Barcode / الباركود","Description / الصنف","Qty In / جاء","Sold / اتباع","Balance / باقي","Reorder / الاحتياج","Cost / التكلفة","Price ﷼ / السعر"];
@@ -136,7 +121,6 @@ function exportExcel(items, title) {
   downloadCsv(csv, title);
 }
 
-// تصدير Excel — كامل
 function exportExcelFull(items, title) {
   const rows = buildFullRows(items);
   const header = ["Barcode / الباركود","Description / الصنف","Qty In / جاء","Sold / اتباع","Balance / باقي","Reorder / الاحتياج","Cost / التكلفة","Price ﷼ / السعر","Sold% / نسبة البيع","Frozen Qty / المجمّد","Frozen ﷼ / قيمة المجمّد","Revenue ﷼ / الإيراد","Profit ﷼ / الربح"];
@@ -154,18 +138,16 @@ function downloadCsv(csv, title) {
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
-// طباعة تقرير
 // ─── بوليصات التوزيع (كاشير 80mm) ────────────────────────────
 function printPolicies(items, periods, images, brandName, closedBranches = [], paperSize = "80mm") {
-  // لكل منتج: نحسب فروعه، ونطلّع بوليصة فقط لو عنده مخزون + فرع ناقص
   const slips = [];
   items.forEach(x => {
     const p = x.p;
-    if (x.closing <= 0) return; // نافذ — ما عنده شي يوزّع
+    if (x.closing <= 0) return;
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
-        if (closedBranches.includes(branch)) return; // استبعاد المغلقة
+        if (closedBranches.includes(branch)) return;
         const q = num(d[p.barcode]?.qty ?? 0);
         if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
       });
@@ -175,14 +157,12 @@ function printPolicies(items, periods, images, brandName, closedBranches = [], p
       return { branch, sold, given, remaining: given - sold };
     }).sort((a,b)=>a.remaining-b.remaining);
     const hasNeed = branches.some(b => b.remaining < 7);
-    if (!hasNeed) return; // ما فيه فرع ناقص — لا حاجة لبوليصة
+    if (!hasNeed) return;
     slips.push({ p, closing: x.closing, branches });
   });
 
   if (slips.length === 0) { alert("لا توجد منتجات تحتاج توزيع"); return; }
-
   const dnum = dateNum();
-
   const slipHtml = slips.map(s => {
     const img = images?.[s.p.barcode];
     const needyCount = s.branches.filter(b => b.remaining < 7).length;
@@ -253,18 +233,16 @@ function printPolicies(items, periods, images, brandName, closedBranches = [], p
   if (w) { w.document.write(html); w.document.close(); }
 }
 
-// ─── خطة النقل المجمّعة (كل المنتجات) ────────────────────────
 // ─── خطة النقل/التموين الاحترافية (كل المنتجات) ──────────────
-function printTransferPlan(items, periods, title, brandName, images = {}, cityOverrides = {}, closedBranches = []) {
+function printTransferPlan(items, periods, title, brandName, images = {}, cityOverrides = {}, closedBranches = [], newBranches = []) {
   const bySource = {};
   const fromWarehouse = [];
-
   items.forEach(x => {
     const p = x.p;
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
-        if (closedBranches.includes(branch)) return; // استبعاد المغلقة
+        if (closedBranches.includes(branch)) return;
         const q = num(d[p.barcode]?.qty ?? 0);
         if (q > 0) branchSales[branch] = (branchSales[branch] ?? 0) + q;
       });
@@ -273,9 +251,8 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
       const given = toDozen(sold);
       return { branch, sold, given, remaining: given - sold };
     });
-    const { transfers } = buildTransfers(branches, x.bought, cityOverrides);
+    const { transfers } = buildTransfers(branches, x.bought, cityOverrides, newBranches);
     transfers.forEach(t => {
-      // تفاصيل فرع الوجهة (باع/أخذ/باقي)
       const dest = branches.find(b => b.branch === t.to) ?? { sold:0, given:0, remaining:0 };
       const detail = { toSold: dest.sold, toGiven: dest.given, toRemaining: dest.remaining };
       if (t.kind === "warehouse") {
@@ -293,10 +270,8 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
   const now = new Date();
   const { greg, hijri } = dateEN();
   const refNo = "TR-" + now.getFullYear() + (now.getMonth()+1+"").padStart(2,"0") + (now.getDate()+"").padStart(2,"0") + "-" + (now.getHours()+"").padStart(2,"0")+(now.getMinutes()+"").padStart(2,"0");
-
   const whQty = fromWarehouse.reduce((s,m)=>s+m.qty,0);
   const trQty = Object.values(bySource).flat().reduce((s,m)=>s+m.qty,0);
-
   const imgCell = (bc) => {
     const im = images?.[bc];
     return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`;
@@ -442,16 +417,12 @@ function printReport(items, title, brandName, images = {}) {
 const ImageViewer = memo(({ src, name, onClose }) => {
   const save = async () => {
     try {
-      // نجيب الصورة كـ blob ونحفظها (متوافق آيفون عبر المشاركة)
       const res = await fetch(src);
       const blob = await res.blob();
       const fileName = (name || "image").replace(/[^\w\u0600-\u06FF]/g,"_") + ".jpg";
       if (navigator.canShare) {
         const file = new File([blob], fileName, { type: blob.type });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file] });
-          return;
-        }
+        if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -489,13 +460,12 @@ const CopyBarcode = memo(({ barcode }) => {
   );
 });
 
-// ─── كميات الكونتينرات (كم وصل من كل كونتينر) ────────────────
+// ─── كميات الكونتينرات ───────────────────────────────────────
 const ContainerQtys = memo(({ product }) => {
   const conts = (product.purchases ?? [])
     .map(pu => ({ container: pu.container ?? product.container ?? "—", qty: num(pu.qty) }))
     .filter(c => c.qty > 0);
   if (conts.length === 0) return null;
-  // نجمّع نفس الكونتينر لو تكرر
   const map = {};
   conts.forEach(c => { map[c.container] = (map[c.container] ?? 0) + c.qty; });
   const list = Object.entries(map);
@@ -522,8 +492,6 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
     const containerId = "bc-reader-" + Math.random().toString(36).slice(2,8);
     const el = document.getElementById("bc-scanner-mount");
     if (el) el.id = containerId;
-
-    // نحمّل مكتبة html5-qrcode من CDN (تقرأ Code128/EAN زي السكانر، تشتغل بآيفون)
     const startScanner = async () => {
       try {
         if (!window.Html5Qrcode) {
@@ -537,12 +505,9 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = window;
         scanner = new Html5Qrcode(containerId, {
           formats: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
             Html5QrcodeSupportedFormats.QR_CODE,
           ],
           verbose: false,
@@ -558,7 +523,7 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
             scanner.stop().then(()=>scanner.clear()).catch(()=>{});
             onDetect(decodedText);
           },
-          () => {} // تجاهل أخطاء كل فريم
+          () => {}
         );
         setLoading(false);
       } catch (e) {
@@ -567,7 +532,6 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
       }
     };
     startScanner();
-
     return () => {
       doneRef.current = true;
       const sc = scannerRef.current;
@@ -609,10 +573,8 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
     const bought  = totalPurchases(product);
     const sold    = soldAllPeriods(product.barcode, periods);
     const closing = Math.max(0, bought - sold);
-    // تفصيل الكونتينرات (كل عملية شراء: كمية + كونتينر)
     const conts = (product.purchases ?? []).map(pu => ({
-      container: pu.container ?? product.container ?? "—",
-      qty: num(pu.qty),
+      container: pu.container ?? product.container ?? "—", qty: num(pu.qty),
     })).filter(c => c.qty > 0);
     return { branches, bought, sold, closing, conts };
   }, [product, periods]);
@@ -621,9 +583,8 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const factory = getFactoryCode(product.barcode);
   const facName = settings?.factories?.[factory] ?? "";
 
-  // اقتراحات النقل
   const { transfers, warehouse } = useMemo(
-    () => buildTransfers(data.branches, data.bought, settings?.cityOverrides ?? {}),
+    () => buildTransfers(data.branches, data.bought, settings?.cityOverrides ?? {}, settings?.newBranches ?? []),
     [data.branches, data.bought, settings]
   );
 
@@ -713,8 +674,6 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
           <div className="bg-amber-900/20 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-amber-400">{fmtN(data.sold)}</div><div className="text-xs text-slate-500">باع</div></div>
           <div className="bg-slate-700/50 rounded-xl p-2.5 text-center"><div className="text-xl font-black text-slate-300">{fmtN(data.closing)}</div><div className="text-xs text-slate-500">باقي</div></div>
         </div>
-
-        {/* تفصيل الكونتينرات */}
         <div className="mt-3 bg-slate-900/50 rounded-xl p-3">
           <div className="text-xs text-slate-400 font-bold mb-2">
             {data.conts.length > 1 ? `📦📦 جاء في ${data.conts.length} كونتينرات:` : "📦 جاء في كونتينر واحد:"}
@@ -751,7 +710,6 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         ))}
       </div>
 
-      {/* اقتراحات النقل */}
       {transfers.length > 0 && (
         <div className="space-y-2 mt-3">
           <div className="text-sm font-bold text-slate-300">🔀 اقتراحات التموين ({transfers.length})</div>
@@ -788,7 +746,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   );
 });
 
-// ─── منتجات المصنع ───────────────────────────────────────────
+// ─── منتجات المصنع (مع اختيار للعرض) ─────────────────────────
 const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, onSelect, onBack, title, factoryCode, factoryName, onSaveFactoryName }) => {
   const [search, setSearch] = useState("");
   const [scan, setScan] = useState(false);
@@ -796,17 +754,39 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
   const [visible, setVisible] = useState(30);
   const [editName, setEditName] = useState(false);
   const [nameInput, setNameInput] = useState(factoryName ?? "");
+  const [picked, setPicked] = useState([]);          // باركودات مختارة للعرض
+  const [showOffer, setShowOffer] = useState(false);  // شاشة منشئ العرض
+  const togglePick = (bc) => setPicked(s => s.includes(bc) ? s.filter(x=>x!==bc) : [...s, bc]);
 
   const filtered = useMemo(() => {
     if (!search) return items;
     return items.filter(x => arabicIncludes(x.p.name, search) || x.p.barcode.includes(search));
   }, [items, search]);
 
+  // المنتجات المختارة بكامل معلوماتها للعرض
+  const pickedItems = useMemo(
+    () => picked.map(bc => {
+      const x = items.find(i => i.p.barcode === bc);
+      if (!x) return null;
+      return {
+        barcode: x.p.barcode, name: x.p.name, container: x.p.container,
+        sellPrice: num(x.p.sellPrice), buyPrice: num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0),
+        bought: x.bought, sold: x.sold, closing: x.closing, soldPct: x.soldPct,
+      };
+    }).filter(Boolean),
+    [picked, items]
+  );
+
   const colorOf = (soldPct) => {
     if (soldPct < redMax)   return { border:"#ef4444", txt:"#ef4444", bg:"rgba(239,68,68,0.08)" };
     if (soldPct < greenMin) return { border:"#f59e0b", txt:"#f59e0b", bg:"rgba(245,158,11,0.08)" };
     return { border:"#22c55e", txt:"#22c55e", bg:"rgba(34,197,94,0.08)" };
   };
+
+  // شاشة منشئ العرض
+  if (showOffer) {
+    return <OfferBuilder items={pickedItems} images={images} settings={settings} onClose={()=>setShowOffer(false)} />;
+  }
 
   return (
     <div className="space-y-3">
@@ -837,14 +817,12 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
         <div className="font-black text-slate-100">{title}</div>
       )}
 
-      {/* بحث + كاميرا */}
       <div className="flex gap-2">
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث بالاسم أو الباركود…"
           className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
         <button onClick={()=>setScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
       </div>
 
-      {/* تصدير وطباعة */}
       <div className="grid grid-cols-3 gap-2">
         <button onClick={()=>exportExcel(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
         <button onClick={()=>exportExcelFull(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
@@ -854,8 +832,8 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
         <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO", settings?.closedBranches ?? [], "80mm")} className="bg-purple-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ بوليصات 80mm</button>
         <button onClick={()=>printPolicies(filtered, periods, images, "ALBAROO", settings?.closedBranches ?? [], "A5")} className="bg-purple-700 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ بوليصات A5</button>
       </div>
-      <button onClick={()=>printTransferPlan(filtered, periods, title, "ALBAROO", images, settings?.cityOverrides ?? {}, settings?.closedBranches ?? [])} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🔀 خطة النقل بين الفروع</button>
-      <div className="text-xs text-slate-500">{filtered.length} منتج</div>
+      <button onClick={()=>printTransferPlan(filtered, periods, title, "ALBAROO", images, settings?.cityOverrides ?? {}, settings?.closedBranches ?? [], settings?.newBranches ?? [])} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold mt-2">🔀 خطة النقل بين الفروع</button>
+      <div className="text-xs text-slate-500">{filtered.length} منتج · اضغط ✓ لاختيار منتجات للعرض</div>
 
       <div className="space-y-2">
         {filtered.slice(0, visible).map(x => {
@@ -865,36 +843,35 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
             : colorOf(x.soldPct);
           const conts = [...new Set((x.p.purchases ?? []).map(pu => pu.container ?? x.p.container).filter(Boolean))];
           const isDup = conts.length > 1;
+          const isPicked = picked.includes(x.p.barcode);
           return (
-            <div key={x.p.barcode} onClick={()=>onSelect(x.p)} style={{
+            <div key={x.p.barcode} style={{
               background:c.bg,
-              border: soldOut ? "1.5px solid #64748b" : isDup ? "2px solid #a855f7" : `1.5px solid ${c.border}`,
-              borderRadius:"14px",padding:"12px",cursor:"pointer",position:"relative",
+              border: isPicked ? "2px solid #d4a853" : soldOut ? "1.5px solid #64748b" : isDup ? "2px solid #a855f7" : `1.5px solid ${c.border}`,
+              borderRadius:"14px",padding:"12px",position:"relative",
               opacity: soldOut ? 0.7 : 1
             }}>
               {soldOut && (
-                <div style={{position:"absolute",top:"-9px",left:"10px",background:"#64748b",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>
-                  SOLD OUT
-                </div>
+                <div style={{position:"absolute",top:"-9px",left:"10px",background:"#64748b",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>SOLD OUT</div>
               )}
               {!soldOut && isDup && (
-                <div style={{position:"absolute",top:"-9px",left:"10px",background:"#a855f7",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>
-                  🔁 مكرر · {conts.length} كونتينر
-                </div>
+                <div style={{position:"absolute",top:"-9px",left:"10px",background:"#a855f7",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>🔁 مكرر · {conts.length} كونتينر</div>
               )}
               <div className="flex items-start gap-3">
+                {/* زر اختيار للعرض */}
+                <button onClick={(e)=>{e.stopPropagation(); togglePick(x.p.barcode);}} className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center font-black mt-1"
+                  style={{background:isPicked?"#d4a853":"rgba(255,255,255,0.08)",color:isPicked?"#0a0804":"transparent",fontSize:"16px",border:"none",cursor:"pointer"}}>✓</button>
                 {images?.[x.p.barcode]
                   ? <img src={images[x.p.barcode]} alt="" onClick={(e)=>{e.stopPropagation(); setViewImg({src:images[x.p.barcode], name:x.p.name});}} className="w-14 h-14 rounded-lg object-cover shrink-0" style={{filter:soldOut?"grayscale(1)":"none"}} />
                   : <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0" onClick={()=>onSelect(x.p)} style={{cursor:"pointer"}}>
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
                   <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(x.p.barcode)}{(settings?.factories?.[getFactoryCode(x.p.barcode)])?` · ${settings.factories[getFactoryCode(x.p.barcode)]}`:""}</div>
                   <ContainerQtys product={x.p} />
                 </div>
-                <div style={{fontSize:"20px",fontWeight:"900",color:c.txt}} className="shrink-0">{fmtPct(x.soldPct)}</div>
+                <div onClick={()=>onSelect(x.p)} style={{fontSize:"20px",fontWeight:"900",color:c.txt,cursor:"pointer"}} className="shrink-0">{fmtPct(x.soldPct)}</div>
               </div>
-              {/* شارات منظّمة زي المصنع */}
               <div className="flex gap-1.5 flex-wrap mt-2">
                 <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(x.bought)}</span>
                 <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
@@ -908,6 +885,20 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
       </div>
       {visible < filtered.length && (
         <button onClick={()=>setVisible(v=>v+30)} className="w-full bg-slate-700 text-slate-300 py-3 rounded-xl text-sm font-bold">عرض المزيد ({filtered.length - visible})</button>
+      )}
+
+      {/* شريط أنشئ عرض */}
+      {picked.length > 0 && (
+        <div className="fixed bottom-20 left-0 right-0 px-4 z-40" style={{maxWidth:"480px",margin:"0 auto"}}>
+          <div className="flex gap-2">
+            <button onClick={()=>setPicked([])} className="px-4 py-3.5 rounded-2xl bg-slate-700 text-slate-300 text-sm font-bold border border-slate-600">✕</button>
+            <button onClick={()=>setShowOffer(true)}
+              className="flex-1 py-3.5 rounded-2xl border-none text-black font-black text-base"
+              style={{background:"linear-gradient(135deg,#d4a853,#b8935a)",boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+              🏷️ أنشئ عرض ({picked.length})
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -928,19 +919,16 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
       <div className="font-black text-slate-100 text-lg">📦 {container}</div>
       <div className="text-xs text-slate-500">{factories.length} مصنع · الأضعف أولاً</div>
 
-      {/* بحث بالمصنع */}
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث برقم المصنع أو اسمه…"
         className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
 
-      {/* تصدير كل الكونتينر */}
       <div className="grid grid-cols-3 gap-2">
         <button onClick={()=>exportExcel(allItems, container)} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
         <button onClick={()=>exportExcelFull(allItems, container)} className="bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold">📊 كامل</button>
         <button onClick={()=>printReport(allItems, `كونتينر ${container}`, "ALBAROO", images)} className="bg-slate-700 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-xs font-bold">🖨️ تقرير</button>
       </div>
-      <button onClick={()=>printTransferPlan(allItems, periods, `كونتينر ${container}`, "ALBAROO", images, settings?.cityOverrides ?? {}, settings?.closedBranches ?? [])} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold">🔀 خطة النقل بين الفروع</button>
+      <button onClick={()=>printTransferPlan(allItems, periods, `كونتينر ${container}`, "ALBAROO", images, settings?.cityOverrides ?? {}, settings?.closedBranches ?? [], settings?.newBranches ?? [])} className="w-full bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold">🔀 خطة النقل بين الفروع</button>
 
-      {/* حدود التلوين */}
       <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-2 flex-wrap">
         <span className="text-xs text-slate-400 font-bold">تلوين:</span>
         <span className="text-xs text-red-400">🔴 أقل</span>
@@ -976,18 +964,16 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
   );
 });
 
-// ─── تقرير الأبطال المتكامل (بالصور + مقسّم بالكونتينر) ──────
+// ─── تقرير الأبطال المتكامل ──────────────────────────────────
 function printHeroesReport(groups, contNames, images, brandName) {
   const d = new Date();
   const dnum = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
   const total = contNames.reduce((s,c)=>s+groups[c].length,0);
   if (total === 0) { alert("لا أبطال للطباعة"); return; }
-
   const imgCell = (bc) => {
     const im = images?.[bc];
     return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`;
   };
-
   const sections = contNames.map(cont => {
     const list = groups[cont];
     const rows = list.map(h => `
@@ -1004,7 +990,6 @@ function printHeroesReport(groups, contNames, images, brandName) {
       <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>شراء</th><th>بيع</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }).join("");
-
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير الأبطال</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -1061,22 +1046,18 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [searchScan, setSearchScan] = useState(false);
   const [starred, setStarred] = useState(settings?.starred ?? []);
 
-  // نجمة يدوية (toggle) — تُحفظ في الإعدادات (خفيف)
   const toggleStar = async (barcode) => {
     const next = starred.includes(barcode) ? starred.filter(b=>b!==barcode) : [...starred, barcode];
     setStarred(next);
     if (onSaveSettings) await onSaveSettings({ ...settings, starred: next });
   };
-  // رابح تلقائي
   const isWinner = (soldPct, margin) => soldPct > 70 && margin > 20;
 
-  // حفظ اسم المصنع (في الإعدادات)
   const saveFactoryName = async (code, name) => {
     const factories = { ...(settings?.factories ?? {}), [code]: name };
     if (onSaveSettings) await onSaveSettings({ ...settings, factories });
   };
 
-  // حساب منتج (نسبة + متبقي)
   const calcItem = (p) => {
     const bought  = totalPurchases(p);
     const sold    = soldAllPeriods(p.barcode, periods);
@@ -1085,10 +1066,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     return { p, bought, sold, closing, soldPct };
   };
 
-  // الكونتينرات
   const containers = useMemo(() => allContainers(products), [products]);
 
-  // مصانع الكونتينر المختار + تنبيهاتها
   const factories = useMemo(() => {
     if (!container) return [];
     const prods = products.filter(p => p.container === container);
@@ -1108,19 +1087,16 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     }).sort((a,b)=>a.soldPct-b.soldPct);
   }, [container, products, periods, settings, redMax]);
 
-  // منتجات المصنع المختار (مرتّبة بالمتبقي)
   const factoryItems = useMemo(() => {
     if (!factory) return [];
     const f = factories.find(x=>x.code===factory);
     return f ? [...f.items].sort((a,b)=>b.closing-a.closing) : [];
   }, [factory, factories]);
 
-  // عرض: تفاصيل منتج
   if (selected) {
     return <ProductDetail product={selected} periods={periods} images={images} settings={settings} onBack={()=>setSelected(null)} />;
   }
 
-  // عرض: منتجات المصنع
   if (factory) {
     const f = factories.find(x=>x.code===factory);
     return <ProductList items={factoryItems} images={images} periods={periods} settings={settings} redMax={redMax} greenMin={greenMin}
@@ -1129,13 +1105,11 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       title={`🏭 ${f?.code}${f?.name?` · ${f.name}`:""}`} />;
   }
 
-  // عرض: مصانع الكونتينر
   if (container) {
     return <FactoriesView container={container} factories={factories} allItems={factories.flatMap(f=>f.items)} images={images} periods={periods} settings={settings} redMax={redMax} greenMin={greenMin}
       setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
   }
 
-  // عرض: البحث بالباركود (في كل المنتجات)
   if (showSearch) {
     const q = searchQuery.trim().toLowerCase();
     const results = q
@@ -1179,7 +1153,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     );
   }
 
-  // عرض: الأبطال (الرابحون + المنجّمون)
   if (showHeroes) {
     const heroes = products.map(p => {
       const x = calcItem(p);
@@ -1190,7 +1163,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       return { ...x, margin:m, buyPrice, winner, star };
     }).filter(h => h.winner || h.star);
 
-    // تجميع حسب الكونتينر
     const groups = {};
     heroes.forEach(h => {
       const cont = h.p.container || "بدون كونتينر";
@@ -1222,7 +1194,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             const open = openHeroCont === cont;
             return (
               <div key={cont} className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-                {/* رأس الكونتينر + العدد */}
                 <div onClick={()=>setOpenHeroCont(open?null:cont)} className="flex items-center justify-between p-3.5 cursor-pointer">
                   <div className="font-black text-slate-100">📦 {cont}</div>
                   <div className="flex items-center gap-2">
@@ -1230,7 +1201,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                     <span className="text-slate-500">{open?"▲":"▼"}</span>
                   </div>
                 </div>
-                {/* المنتجات داخل الكونتينر */}
                 {open && (
                   <div className="px-2.5 pb-2.5 space-y-2">
                     {list.map(h => (
@@ -1250,7 +1220,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                             {h.star ? "⭐" : "☆"}
                           </button>
                         </div>
-                        {/* كل المعلومات */}
                         <div className="flex gap-1.5 flex-wrap mt-2">
                           <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(h.bought)}</span>
                           <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(h.sold)}</span>
@@ -1272,7 +1241,6 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     );
   }
 
-  // عرض: الكونتينرات
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
