@@ -178,7 +178,7 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const [minStock,  setMinStock]  = useState(settings?.minStock ?? 12);
   const [localFac,  setLocalFac]  = useState({ ...settings?.factories ?? {} });
   const [closedBranches, setClosedBranches] = useState(settings?.closedBranches ?? []);
-  const [whPin, setWhPin] = useState(settings?.warehousePin ?? "1234");
+  const [newBranches, setNewBranches] = useState(settings?.newBranches ?? []);
   // حذف منتج محمي برقم سري
   const [delSearch, setDelSearch]   = useState("");
   const [delPin,    setDelPin]      = useState("");
@@ -203,19 +203,16 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   }, [products]);
 
   const handleSave = async () => {
-    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches });
+    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, newBranches });
     if (ok) show("تم الحفظ ✓"); else show("فشل الحفظ", "error");
-  };
-
-  const saveWhPin = async () => {
-    if (!whPin || whPin.length < 4) { show("الرقم 4 خانات على الأقل", "error"); return; }
-    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, warehousePin: whPin });
-    if (ok) show("تم حفظ رقم المستودع ✓"); else show("فشل الحفظ", "error");
   };
 
   const branches = useMemo(() => allBranches(periods), [periods]);
   const toggleBranch = (b) => {
     setClosedBranches(prev => prev.includes(b) ? prev.filter(x=>x!==b) : [...prev, b]);
+  };
+  const toggleNewBranch = (b) => {
+    setNewBranches(prev => prev.includes(b) ? prev.filter(x=>x!==b) : [...prev, b]);
   };
 
   // نتائج بحث الحذف
@@ -246,7 +243,7 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const changePin = async () => {
     if (delPin !== SECRET) { show("الرقم الحالي غير صحيح", "error"); return; }
     if (!newPin || newPin.length < 4) { show("الرقم الجديد 4 خانات على الأقل", "error"); return; }
-    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, deletePin: newPin });
+    const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, newBranches, deletePin: newPin });
     if (ok) { show("تم تغيير الرقم السري ✓"); setNewPin(""); setDelPin(newPin); }
   };
 
@@ -338,6 +335,31 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         </Card>
       )}
 
+      {/* الفروع الجديدة — تُستثنى من الراكد والسحب في النقل */}
+      {branches.length > 0 && (
+        <Card>
+          <SectionHeader icon="🆕" title="الفروع الجديدة" subtitle="الفرع الجديد لا يُحسب راكداً ولا يُسحب منه — يستقبل فقط" />
+          <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3">
+            🆕 الفرع الجديد مبيعاته قليلة طبيعياً (لسه بادئ). فعّله هنا حتى لا يظهر "راكد" ولا يسحب منه النقل الذكي — بس يستقبل البضاعة ويتعبّى.
+          </div>
+          <div className="space-y-2">
+            {branches.map(b => {
+              const isNew = newBranches.includes(b);
+              return (
+                <div key={b} className="flex items-center justify-between bg-slate-700/40 rounded-xl px-3 py-2.5">
+                  <span className={`text-sm font-bold ${isNew ? "text-amber-300" : "text-slate-100"}`}>{isNew ? "🆕 " : ""}{b}</span>
+                  <button onClick={()=>{ toggleNewBranch(b); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isNew ? "bg-amber-900/40 text-amber-300" : "bg-slate-600/40 text-slate-400"}`}>
+                    {isNew ? "🆕 جديد" : "عادي"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <Btn color="green" onClick={handleSave} className="w-full mt-3">💾 حفظ الفروع الجديدة</Btn>
+        </Card>
+      )}
+
       {/* أداة استخراج الصور من Excel */}
       <Card>
         <SectionHeader icon="📷" title="استخراج صور من Excel" subtitle="ترفع ملف الفاتورة بالصور · تربط تلقائياً" />
@@ -347,27 +369,6 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         <a href="https://baro-inventory-qmpp.vercel.app/image-extractor.html" target="_blank" rel="noopener noreferrer"
           className="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl font-bold text-sm">
           📷 افتح أداة استخراج الصور
-        </a>
-      </Card>
-
-      {/* صفحة مدير المستودع */}
-      <Card>
-        <SectionHeader icon="🏬" title="صفحة مدير المستودع" subtitle="توزيع النواقص · اعتماد · يفتحها المدير برقم سري" />
-        <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3 space-y-1">
-          <div>🏬 صفحة مستقلة لمدير المستودع — يشوف النواقص، يطبع البوليصة، يعتمد التوزيع</div>
-          <div className="text-slate-600">يفتحها كمبيوتر أو جوال · محمية برقم سري</div>
-        </div>
-        <div className="mb-3">
-          <label className="text-xs text-slate-400 block mb-1">الرقم السري لمدير المستودع</label>
-          <div className="flex gap-2">
-            <input type="text" value={whPin} onChange={e=>setWhPin(e.target.value)} placeholder="مثال: 1234"
-              className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:border-blue-500" />
-            <button onClick={saveWhPin} className="bg-blue-600 text-white px-4 rounded-xl text-sm font-bold">حفظ</button>
-          </div>
-        </div>
-        <a href="https://baro-inventory-qmpp.vercel.app/warehouse.html" target="_blank" rel="noopener noreferrer"
-          className="block w-full text-center bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold text-sm">
-          🏬 افتح صفحة مدير المستودع
         </a>
       </Card>
 
