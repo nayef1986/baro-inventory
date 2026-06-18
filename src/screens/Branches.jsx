@@ -274,6 +274,9 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
   const [minStock, setMinStock] = useState(settings?.minStock ?? 12);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("weak");  // weak | strong | hero
+  const [critical, setCritical] = useState(false);  // النواقص الحرجة فقط
+  const [critSold, setCritSold] = useState(12);     // مبيعات عالية ≥
+  const [critRem, setCritRem] = useState(6);        // مخزون أقل من
   const [openCont, setOpenCont] = useState({});
   const [openFac, setOpenFac] = useState({});
   const [picked, setPicked] = useState([]);
@@ -318,14 +321,21 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
 
   // بحث (باركود/اسم/مصنع)
   const searched = useMemo(() => {
-    if (!search) return allItems;
-    const s = search.toLowerCase();
-    return allItems.filter(i =>
-      i.barcode.toLowerCase().includes(s) ||
-      (i.name ?? "").toLowerCase().includes(s) ||
-      getFactoryCode(i.barcode).includes(s)
-    );
-  }, [allItems, search]);
+    let list = allItems;
+    // النواقص الحرجة: مبيعات عالية + مخزون قليل
+    if (critical) {
+      list = list.filter(i => i.sold >= critSold && i.remaining < critRem);
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(i =>
+        i.barcode.toLowerCase().includes(s) ||
+        (i.name ?? "").toLowerCase().includes(s) ||
+        getFactoryCode(i.barcode).includes(s)
+      );
+    }
+    return list;
+  }, [allItems, search, critical, critSold, critRem]);
 
   // ترتيب المنتجات داخل المصنع
   const sortItems = (arr) => {
@@ -371,6 +381,59 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
 
   const colorOf = (pct) => pct < 30 ? "#ef4444" : pct < 60 ? "#f59e0b" : "#22c55e";
 
+  // طباعة تقرير احتياج بالصور (لمصنع أو منتج)
+  const printNeeds = (list, ttl) => {
+    if (!list || list.length === 0) { show("لا منتجات للطباعة", "error"); return; }
+    const d = new Date();
+    const dnum = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+    const totNeed = list.reduce((s,x)=>s+(x.needQty||0),0);
+    const rows = list.map((x,i)=>{
+      const img = images?.[x.barcode];
+      const imgCell = img ? `<img src="${img}" class="thumb"/>` : `<div class="noimg">📦</div>`;
+      const need = x.needQty > 0;
+      return `<tr class="${need?'need':''}">
+        <td class="num">${i+1}</td><td class="imgc">${imgCell}</td>
+        <td class="bc">${x.barcode}</td><td class="nm">${x.name}</td>
+        <td class="big">${fmtN(x.sold)}</td><td class="big">${fmtN(x.given)}</td>
+        <td class="big rem">${fmtN(x.remaining)}</td><td class="ro">${fmtN(x.needQty)}${need?' ✅':''}</td></tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${ttl}</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+        *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+        body{background:#fff;color:#1a1a1a}
+        .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+        .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+        .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+        .w{max-width:850px;margin:0 auto;padding:70px 16px 40px}
+        h1{text-align:center;color:#0f172a;margin-bottom:4px;font-size:22px}
+        .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th{background:#0f172a;color:#fff;padding:9px 6px;font-size:12px;line-height:1.4}
+        td{border:1px solid #e2e8f0;padding:7px 6px;text-align:center}
+        td.num{background:#f1f5f9;font-weight:900;color:#888}
+        td.imgc{padding:3px;width:54px}
+        .thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0}
+        .noimg{width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f1f5f9;border-radius:6px;margin:0 auto}
+        td.nm{text-align:right;font-weight:700;font-size:13px}
+        td.bc{font-family:monospace;font-size:11px;color:#64748b}
+        td.big{font-size:16px;font-weight:900}td.rem{color:#16a34a}
+        td.ro{color:#dc2626;font-weight:900;font-size:15px}
+        tr.need td{background:#fef2f2}
+        tr:nth-child(even) td{background:#fafbfc}
+        @media print{.tb{display:none}.w{padding:16px}}
+      </style></head><body>
+      <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+      <div class="w">
+        <h1>${ttl}</h1>
+        <div class="date">📅 ${dnum} · ${settings?.brandName ?? "ALBAROO"} · 🏪 ${branch} · ${list.length} منتج · احتياج ${fmtN(totNeed)}</div>
+        <table><thead><tr><th>#</th><th>صورة</th><th>الباركود</th><th>المنتج</th><th>باع</th><th>أخذ</th><th>باقي</th><th>الاحتياج</th></tr></thead><tbody>${rows}</tbody></table>
+      </div></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+
   // بطاقة منتج
   const ProductRow = (x) => {
     const isPicked = picked.includes(x.barcode);
@@ -404,6 +467,10 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
           <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/30 text-emerald-300">باقي {fmtN(x.remaining)}</span>
           <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">بيع {fmtN(x.sellPrice)}﷼</span>
         </div>
+        <button onClick={()=>printNeeds([x], `احتياج · ${x.name}`)}
+          className="w-full mt-2 bg-slate-700/60 border border-slate-600 text-slate-300 py-1.5 rounded-lg text-xs font-bold">
+          🖨️ طباعة تقرير هذا المنتج
+        </button>
       </div>
     );
   };
@@ -461,13 +528,32 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         <span className="text-xs text-slate-400">قطعة (دزينة)</span>
       </div>
 
+      {/* النواقص الحرجة */}
+      <div className="bg-slate-800 border rounded-xl p-3" style={{borderColor: critical ? "#ef4444" : "rgba(148,163,184,0.2)"}}>
+        <button onClick={()=>setCritical(v=>!v)} className="w-full flex items-center justify-between">
+          <span className="text-sm font-black" style={{color: critical ? "#ef4444" : "#94a3b8"}}>🔴 النواقص الحرجة فقط</span>
+          <span className="text-xs px-2.5 py-1 rounded-full font-bold" style={{background: critical ? "#ef4444" : "rgba(148,163,184,0.15)", color: critical ? "#fff" : "#94a3b8"}}>{critical ? "مفعّل ✓" : "معطّل"}</span>
+        </button>
+        {critical && (
+          <div className="flex items-center gap-2 mt-3 flex-wrap text-xs">
+            <span className="text-slate-400 font-bold">باع ≥</span>
+            <input type="number" value={critSold} min={0} onChange={e=>setCritSold(Math.max(0,Number(e.target.value)||0))}
+              className="w-14 bg-slate-700 border border-slate-600 text-amber-300 rounded-lg px-2 py-1.5 font-black text-center focus:outline-none focus:border-amber-500" />
+            <span className="text-slate-400 font-bold">والمتبقي أقل من</span>
+            <input type="number" value={critRem} min={0} onChange={e=>setCritRem(Math.max(0,Number(e.target.value)||0))}
+              className="w-14 bg-slate-700 border border-slate-600 text-red-300 rounded-lg px-2 py-1.5 font-black text-center focus:outline-none focus:border-red-500" />
+            <span className="text-slate-500">= يبيع بقوة وقربت تخلص</span>
+          </div>
+        )}
+      </div>
+
       {/* تصدير + طباعة */}
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => { const r = exportBranchNeedReport(branch, searched, products); if (r && !r.ok) show(r.error, "error"); else show("تم التصدير ✓"); }}
           className="flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold transition-colors">
           📊 تصدير Excel
         </button>
-        <button onClick={() => { const r = printBranchNeedReport(branch, searched, settings?.brandName); if (r && !r.ok) show(r.error, "error"); }}
+        <button onClick={() => printNeeds(searched, critical ? `النواقص الحرجة · ${branch}` : `احتياج · ${branch}`)}
           className="flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-bold transition-colors">
           🖨️ طباعة تقرير
         </button>
@@ -504,6 +590,10 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
                     </div>
                     {facOpen && (
                       <div className="p-2.5 space-y-2">
+                        <button onClick={()=>printNeeds(items, `احتياج مصنع ${fac}${facName?` · ${facName}`:""}`)}
+                          className="w-full bg-slate-700 border border-slate-600 text-slate-200 py-2 rounded-xl text-xs font-bold">
+                          🖨️ طباعة احتياج هذا المصنع بالصور
+                        </button>
                         {items.map(x => ProductRow(x))}
                       </div>
                     )}
