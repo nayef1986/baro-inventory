@@ -8,6 +8,7 @@ const toDozen = (n, u) => Math.ceil(n / (u||12)) * (u||12);
 // محرّك التحليل: لكل مصنع، من راكد ومن سريع
 function analyze(products, periods, settings) {
   const closed = settings?.closedBranches ?? [];
+  const fresh = settings?.newBranches ?? [];   // الفروع الجديدة — لا تُحسب راكدة
   const branchSet = new Set();
   periods.forEach(per => Object.keys(per.sales ?? {}).forEach(b => { if(!closed.includes(b)) branchSet.add(b); }));
   const nP = periods.length || 1;
@@ -34,7 +35,7 @@ function analyze(products, periods, settings) {
     const totalSold = brs.reduce((s,b)=>s+b.sold,0);
     const avg = totalSold / brs.length;
     brs.forEach(b => { b.vsAvg = avg>0?(b.sold/avg)*100:0; });
-    const stale = brs.filter(b=>b.sold < avg*0.5).sort((a,b)=>a.vsAvg-b.vsAvg);
+    const stale = brs.filter(b=>b.sold < avg*0.5 && !fresh.includes(b.branch)).sort((a,b)=>a.vsAvg-b.vsAvg);
     const hot   = brs.filter(b=>b.sold > avg).sort((a,b)=>b.vsAvg-a.vsAvg);
     if (stale.length===0 || hot.length===0) return;
     // كونتينر المصنع (أول منتج له كونتينر)
