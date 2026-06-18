@@ -19,6 +19,7 @@ import {
   exportGeneric, printTrendReport,
 } from "../lib/exporters.js";
 import SmartRedistribution from "./SmartRedistribution.jsx";
+import OfferBuilder from "./OfferBuilder.jsx";
 
 // ─── قائمة فلترة مجمّعة (كونتينر ← مصانع) ──────────────────
 
@@ -68,10 +69,14 @@ function GroupedFilter({ products, settings, value, onChange }) {
 
 // ─── كرت المنتج المفصل في الاحتياج ──────────────────────────
 
-function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, closingAll }) {
+function NeedProductCard({ item, images, onSaveImage, onRemoveImage, settings, closingAll, picked, onTogglePick }) {
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="flex items-center gap-3 p-3 border-b border-slate-700">
+        {onTogglePick && (
+          <button onClick={onTogglePick} className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center font-black transition-colors"
+            style={{background:picked?"#d4a853":"rgba(255,255,255,0.08)", color:picked?"#0a0804":"transparent", fontSize:"16px"}}>✓</button>
+        )}
         <ProductImage barcode={item.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="sm" name={item.name} />
         <div className="flex-1 min-w-0">
           <div className="font-black text-slate-100 text-sm leading-tight">{item.name}</div>
@@ -266,25 +271,22 @@ function SmartSearch({ products, periods, settings, images, onSaveImage, onRemov
 // ─── شاشة الاحتياج ───────────────────────────────────────────
 
 const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings }) => {
-  const [filterVal, setFilterVal] = useState("");
   const [minStock, setMinStock] = useState(settings?.minStock ?? 12);
-  const [ready, setReady] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("weak");  // weak | strong | hero
+  const [openCont, setOpenCont] = useState({});
+  const [openFac, setOpenFac] = useState({});
+  const [picked, setPicked] = useState([]);
+  const [showOffer, setShowOffer] = useState(false);
+  const [viewImg, setViewImg] = useState(null);
   const { show, ToastContainer } = useToast();
-  const [barcodeSearch, setBarcodeSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(10);
-  const [remMin, setRemMin] = useState(0);
-  const [remMax, setRemMax] = useState(6);
-  const [showFilters, setShowFilters] = useState(false);
+  const togglePick = (bc) => setPicked(s => s.includes(bc) ? s.filter(x=>x!==bc) : [...s, bc]);
 
-  useEffect(() => {
-    setReady(false); setVisibleCount(10);
-    const t = setTimeout(() => setReady(true), 0);
-    return () => clearTimeout(t);
-  }, [branch]);
+  const starred = settings?.starred ?? [];
 
-  const allNeedItems = useMemo(() => {
+  // احتياج الفرع: كل منتج باعه الفرع (باع/أخذ/باقي) + بياناته
+  const allItems = useMemo(() => {
     if (!periods.length) return [];
-    // مبيعات الفرع من كل الفترات + مبيعات كل منتج كلياً
     const branchData = {};
     const soldAllIndex = {};
     periods.forEach(per => {
@@ -296,7 +298,6 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
     });
     return products
       .filter(p => (branchData[p.barcode] ?? 0) > 0)
-      .slice(0, 200)
       .map(p => {
         const sold = num(branchData[p.barcode] ?? 0);
         const dozens = Math.ceil(sold / minStock);
@@ -306,97 +307,228 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const bought = totalPurchases(p);
         const allSold = soldAllIndex[p.barcode] ?? 0;
         const closingAll = Math.max(0, bought - allSold);
-        return { ...p, sold, given, remaining, needQty, closingAll, bought, totalSoldAll: allSold, buyPrice: num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0), sellPrice: num(p.sellPrice) };
+        const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+        const sellPrice = num(p.sellPrice);
+        const soldPct = bought > 0 ? (allSold/bought)*100 : 0;
+        const margin = buyPrice > 0 ? ((sellPrice-buyPrice)/buyPrice)*100 : 0;
+        const isHero = (soldPct > 70 && margin > 20) || starred.includes(p.barcode);
+        return { ...p, sold, given, remaining, needQty, closingAll, bought, totalSoldAll: allSold, buyPrice, sellPrice, soldPct, margin, isHero };
       });
-  }, [products, branch, minStock, periods]);
+  }, [products, branch, minStock, periods, starred]);
 
-  const filtered = useMemo(() => {
-    let list = allNeedItems;
-    list = list.filter(i => i.remaining >= remMin && i.remaining <= remMax);
-    if (filterVal) {
-      const [type, val] = filterVal.split(":");
-      if (type === "container") list = list.filter(i => i.container === val);
-      if (type === "factory") list = list.filter(i => getFactoryCode(i.barcode) === val);
-    }
-    if (barcodeSearch) {
-      const s = barcodeSearch.toLowerCase();
-      list = list.filter(i => i.barcode.toLowerCase().includes(s) || i.name.toLowerCase().includes(s));
-    }
-    return list;
-  }, [allNeedItems, filterVal, barcodeSearch, remMin, remMax]);
+  // بحث (باركود/اسم/مصنع)
+  const searched = useMemo(() => {
+    if (!search) return allItems;
+    const s = search.toLowerCase();
+    return allItems.filter(i =>
+      i.barcode.toLowerCase().includes(s) ||
+      (i.name ?? "").toLowerCase().includes(s) ||
+      getFactoryCode(i.barcode).includes(s)
+    );
+  }, [allItems, search]);
 
-  const filterLabel = !filterVal ? "الكل" : filterVal.split(":")[1];
-  const totalNeed = filtered.reduce((s,i) => s + i.needQty, 0);
-  const totalCost = filtered.reduce((s,i) => s + i.needQty * i.buyPrice, 0);
-  const activeFilters = (filterVal?1:0) + (remMin!==0||remMax!==6?1:0) + (minStock!==12?1:0);
+  // ترتيب المنتجات داخل المصنع
+  const sortItems = (arr) => {
+    if (sortBy === "hero") return [...arr].sort((a,b)=>(b.isHero?1:0)-(a.isHero?1:0) || b.soldPct-a.soldPct);
+    if (sortBy === "strong") return [...arr].sort((a,b)=>b.soldPct-a.soldPct);
+    return [...arr].sort((a,b)=>a.soldPct-b.soldPct); // weak
+  };
+
+  // تجميع هرمي: كونتينر ← مصنع ← منتجات
+  const grouped = useMemo(() => {
+    const map = {};
+    searched.forEach(i => {
+      const cont = i.container ?? "بدون كونتينر";
+      const fac = getFactoryCode(i.barcode) || "—";
+      if (!map[cont]) map[cont] = {};
+      if (!map[cont][fac]) map[cont][fac] = [];
+      map[cont][fac].push(i);
+    });
+    const conts = Object.entries(map).map(([cont, facs]) => {
+      const factories = Object.entries(facs).map(([fac, items]) => {
+        const sold = items.reduce((s,x)=>s+x.totalSoldAll,0);
+        const bought = items.reduce((s,x)=>s+x.bought,0);
+        const soldPct = bought>0 ? (sold/bought)*100 : 0;
+        return { fac, items: sortItems(items), soldPct, count: items.length };
+      });
+      // ترتيب المصانع
+      factories.sort((a,b)=> sortBy==="strong" ? b.soldPct-a.soldPct : sortBy==="hero" ? b.soldPct-a.soldPct : a.soldPct-b.soldPct);
+      const count = factories.reduce((s,f)=>s+f.count,0);
+      return { cont, factories, count };
+    });
+    return conts.sort((a,b)=>b.count-a.count);
+  }, [searched, sortBy, minStock]);
+
+  // المنتجات المختارة للعرض
+  const pickedItems = useMemo(
+    () => picked.map(bc => allItems.find(i => i.barcode === bc)).filter(Boolean),
+    [picked, allItems]
+  );
+
+  if (showOffer) {
+    return <OfferBuilder items={pickedItems} images={images} settings={settings} onClose={()=>setShowOffer(false)} />;
+  }
+
+  const colorOf = (pct) => pct < 30 ? "#ef4444" : pct < 60 ? "#f59e0b" : "#22c55e";
+
+  // بطاقة منتج
+  const ProductRow = (x) => {
+    const isPicked = picked.includes(x.barcode);
+    const c = colorOf(x.soldPct);
+    const img = images?.[x.barcode];
+    return (
+      <div key={x.barcode} style={{
+        background: isPicked ? "rgba(212,168,83,0.12)" : "rgba(255,255,255,0.03)",
+        border: isPicked ? "2px solid #d4a853" : `1px solid ${c}40`,
+        borderRadius:"12px", padding:"10px",
+      }}>
+        <div className="flex items-center gap-2.5">
+          <button onClick={()=>togglePick(x.barcode)} className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center font-black"
+            style={{background:isPicked?"#d4a853":"rgba(255,255,255,0.08)",color:isPicked?"#0a0804":"transparent",fontSize:"15px",border:"none",cursor:"pointer"}}>✓</button>
+          {img
+            ? <img src={img} alt="" onClick={()=>setViewImg({src:img,name:x.name})} className="w-14 h-14 rounded-lg object-cover shrink-0 cursor-pointer" />
+            : <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center text-xl shrink-0">📦</div>}
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-slate-100 text-sm leading-tight flex items-center gap-1">
+              {x.isHero && <span>⭐</span>}{x.name}
+            </div>
+            <div className="text-xs text-slate-500 font-mono mt-0.5">{x.barcode}</div>
+          </div>
+          <div className="text-left shrink-0">
+            <div style={{fontSize:"17px",fontWeight:"900",color:c}}>{Math.round(x.soldPct)}%</div>
+          </div>
+        </div>
+        <div className="flex gap-1.5 flex-wrap mt-2">
+          <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
+          <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">أخذ {fmtN(x.given)}</span>
+          <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/30 text-emerald-300">باقي {fmtN(x.remaining)}</span>
+          <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">بيع {fmtN(x.sellPrice)}﷼</span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-3">
       <ToastContainer />
-      {/* البحث — دائم الظهور */}
-      <div className="relative">
-        <input value={barcodeSearch} onChange={e => setBarcodeSearch(e.target.value)} placeholder="🔍 بحث بالباركود أو اسم المنتج…"
-          className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500" />
-        {barcodeSearch && <button onClick={() => setBarcodeSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 text-sm">✕</button>}
-      </div>
-      {/* زر الفلاتر */}
-      <button onClick={() => setShowFilters(v=>!v)}
-        className="w-full flex items-center justify-between bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-300">
-        <span>⚙️ فلترة وخيارات{activeFilters>0?` (${activeFilters})`:""}</span>
-        <span className={`transition-transform ${showFilters?"rotate-180":""}`}>▾</span>
-      </button>
-      {/* الفلاتر — قابلة للطي */}
-      {showFilters && (
-        <div className="space-y-3 bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-          <div className="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2.5">
-            <span className="text-xs text-slate-400 font-bold">الحد الأدنى للفرع:</span>
-            <input type="number" value={minStock} min={1} max={100} onChange={e => setMinStock(Math.max(1, Number(e.target.value) || 12))}
-              className="w-16 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-blue-500" />
-            <span className="text-xs text-slate-400">قطعة</span>
+      {viewImg && (
+        <div onClick={()=>setViewImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+          <img src={viewImg.src} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:"14px",objectFit:"contain"}} />
+          {viewImg.name && <div style={{color:"#fff",fontWeight:"700",marginTop:"12px",textAlign:"center"}}>{viewImg.name}</div>}
+          <div style={{display:"flex",gap:"10px",marginTop:"16px"}} onClick={e=>e.stopPropagation()}>
+            <button onClick={async()=>{
+              try {
+                const res = await fetch(viewImg.src); const blob = await res.blob();
+                const fn = (viewImg.name||"image").replace(/[^\w\u0600-\u06FF]/g,"_")+".jpg";
+                if (navigator.canShare) {
+                  const file = new File([blob], fn, {type:blob.type});
+                  if (navigator.canShare({files:[file]})) { await navigator.share({files:[file]}); return; }
+                }
+                const url = URL.createObjectURL(blob); const a = document.createElement("a");
+                a.href = url; a.download = fn; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+              } catch { alert("اضغط مطوّل على الصورة لحفظها"); }
+            }} style={{padding:"11px 22px",borderRadius:"100px",border:"none",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>💾 حفظ الصورة</button>
+            <button onClick={()=>setViewImg(null)} style={{padding:"11px 22px",borderRadius:"100px",border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"#fff",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>إغلاق</button>
           </div>
-          <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2.5">
-            <span className="text-xs text-amber-300 font-bold whitespace-nowrap">يظهر إذا المتبقي من</span>
-            <input type="number" value={remMin} min={0} max={999} onChange={e => setRemMin(Math.max(0, Number(e.target.value) || 0))}
-              className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
-            <span className="text-xs text-amber-300 font-bold">إلى</span>
-            <input type="number" value={remMax} min={0} max={999} onChange={e => setRemMax(Math.max(0, Number(e.target.value) || 0))}
-              className="w-14 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-amber-500" />
-            <span className="text-xs text-amber-300/70">قطعة</span>
-          </div>
-          <GroupedFilter products={products} settings={settings} value={filterVal} onChange={setFilterVal} />
         </div>
       )}
-      {periods.length > 0 && (
-        <Card>
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <StatPill label="المنتجات" value={fmtN(filtered.length)} color="text-blue-400" />
-            <StatPill label="إجمالي الوحدات" value={fmtN(totalNeed)} color="text-red-400" />
-            <StatPill label="التكلفة" value={fmtM(totalCost)} color="text-amber-400" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => { const r = exportBranchNeedReport(branch, filtered, settings?.brandName, filterLabel); if (!r.ok) show(r.error, "error"); else show("تم التصدير ✓"); }}
-              className="flex flex-col items-center gap-1 bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-2xl font-black transition-colors">
-              <span className="text-2xl">📊</span><span className="text-sm">Excel</span>
-            </button>
-            <button onClick={() => { const r = printBranchNeedReport(branch, filtered, settings?.brandName, filterLabel, images); if (!r.ok) show(r.error, "error"); }}
-              className="flex flex-col items-center gap-1 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 py-3 rounded-2xl font-black transition-colors">
-              <span className="text-2xl">🖨️</span><span className="text-sm">طباعة</span>
-            </button>
-          </div>
-        </Card>
-      )}
-      <div className="space-y-3">
-        {!ready && <div className="py-10 text-center text-slate-400 text-sm animate-pulse">⏳ تحميل المنتجات…</div>}
-        {ready && filtered.slice(0, visibleCount).map(item => (
-          <NeedProductCard key={item.barcode} item={item} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} closingAll={item.closingAll ?? 0} />
-        ))}
-        {filtered.length > visibleCount && (
-          <button onClick={() => setVisibleCount(p => p + 20)} className="w-full py-3 rounded-xl border border-slate-600 bg-slate-800 text-slate-300 text-sm font-bold">
-            عرض المزيد ({filtered.length - visibleCount} منتج)
-          </button>
-        )}
-        {ready && filtered.length === 0 && <EmptyState icon="✅" title="لا يوجد احتياج" />}
+
+      {/* بحث */}
+      <div className="relative">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالباركود أو الاسم أو المصنع…"
+          className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500" />
+        {search && <button onClick={() => setSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 text-sm">✕</button>}
       </div>
+
+      {/* ترتيب */}
+      <div className="flex gap-1.5">
+        {[["weak","🔴 الأضعف"],["strong","🟢 الأقوى"],["hero","⭐ البطل"]].map(([k,l]) => (
+          <button key={k} onClick={()=>setSortBy(k)}
+            className="flex-1 py-2 rounded-xl text-xs font-bold transition-colors"
+            style={{
+              background: sortBy===k ? "rgba(212,168,83,0.2)" : "rgba(255,255,255,0.05)",
+              color: sortBy===k ? "#d4a853" : "rgba(255,255,255,0.4)",
+              border: sortBy===k ? "1px solid rgba(212,168,83,0.4)" : "1px solid rgba(255,255,255,0.08)",
+            }}>{l}</button>
+        ))}
+      </div>
+
+      {/* الحد الأدنى */}
+      <div className="flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5">
+        <span className="text-xs text-slate-400 font-bold">الحد الأدنى للفرع:</span>
+        <input type="number" value={minStock} min={1} max={100} onChange={e => setMinStock(Math.max(1, Number(e.target.value) || 12))}
+          className="w-16 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-1.5 text-sm font-black text-center focus:outline-none focus:border-blue-500" />
+        <span className="text-xs text-slate-400">قطعة (دزينة)</span>
+      </div>
+
+      {/* تصدير + طباعة */}
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => { const r = exportBranchNeedReport(branch, searched, products); if (r && !r.ok) show(r.error, "error"); else show("تم التصدير ✓"); }}
+          className="flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold transition-colors">
+          📊 تصدير Excel
+        </button>
+        <button onClick={() => { const r = printBranchNeedReport(branch, searched, settings?.brandName); if (r && !r.ok) show(r.error, "error"); }}
+          className="flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-bold transition-colors">
+          🖨️ طباعة تقرير
+        </button>
+      </div>
+
+      <div className="text-xs text-slate-500">{searched.length} منتج · {grouped.length} كونتينر · اضغط ✓ لعرض</div>
+
+      {/* الكونتينرات الهرمية */}
+      <div className="space-y-2" style={{marginBottom: picked.length>0 ? "80px" : "0"}}>
+        {grouped.map(({cont, factories, count}) => {
+          const contOpen = openCont[cont];
+          return (
+            <div key={cont} className="bg-slate-800/40 border border-slate-700 rounded-2xl overflow-hidden">
+              <div onClick={()=>setOpenCont(o=>({...o,[cont]:!o[cont]}))} className="flex items-center justify-between p-3.5 cursor-pointer">
+                <div className="font-black text-slate-100">📦 {cont}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">{count} منتج</span>
+                  <span className="text-slate-500">{contOpen?"▲":"▼"}</span>
+                </div>
+              </div>
+              {contOpen && factories.map(({fac, items, soldPct, count:fc}) => {
+                const facKey = cont+"_"+fac;
+                const facOpen = openFac[facKey];
+                const fcColor = colorOf(soldPct);
+                const facName = settings?.factories?.[fac] ?? "";
+                return (
+                  <div key={facKey} className="border-t border-slate-700/50">
+                    <div onClick={()=>setOpenFac(o=>({...o,[facKey]:!o[facKey]}))} className="flex items-center justify-between py-2.5 px-4 cursor-pointer" style={{background:"rgba(0,0,0,0.2)",paddingRight:"24px"}}>
+                      <div className="text-sm font-bold" style={{color:fcColor}}>🏭 {fac}{facName?` · ${facName}`:""}</div>
+                      <div className="flex items-center gap-2">
+                        <span style={{fontSize:"13px",fontWeight:"900",color:fcColor}}>{Math.round(soldPct)}%</span>
+                        <span className="text-xs text-slate-500">{fc} {facOpen?"▲":"▼"}</span>
+                      </div>
+                    </div>
+                    {facOpen && (
+                      <div className="p-2.5 space-y-2">
+                        {items.map(x => ProductRow(x))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+        {searched.length === 0 && <EmptyState icon="✅" title="لا يوجد احتياج" />}
+      </div>
+
+      {/* شريط أنشئ عرض */}
+      {picked.length > 0 && (
+        <div className="fixed bottom-20 left-0 right-0 px-4 z-40" style={{maxWidth:"480px",margin:"0 auto"}}>
+          <div className="flex gap-2">
+            <button onClick={()=>setPicked([])} className="px-4 py-3.5 rounded-2xl bg-slate-700 text-slate-300 text-sm font-bold border border-slate-600">✕</button>
+            <button onClick={()=>setShowOffer(true)}
+              className="flex-1 py-3.5 rounded-2xl border-none text-black font-black text-base"
+              style={{background:"linear-gradient(135deg,#d4a853,#b8935a)",boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+              🏷️ أنشئ عرض ({picked.length})
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
