@@ -59,6 +59,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
   const cityOverrides = settings?.cityOverrides ?? {};
   const newBranches = settings?.newBranches ?? [];
   const closed = settings?.closedBranches ?? [];
+  const overrides = settings?.stockOverrides ?? {};
   const tCity = cityOf(targetBranch, cityOverrides);
 
   // مبيعات كل فرع لكل منتج (عبر الفترات)
@@ -85,7 +86,8 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
 
     const unit = num(p.unitQty) || 12;
     const targetGiven = toDozen(targetSold, unit);
-    const targetRem = Math.max(0, targetGiven - targetSold);
+    const ovKey = targetBranch + "|" + bc;
+    const targetRem = overrides[ovKey] !== undefined ? num(overrides[ovKey]) : Math.max(0, targetGiven - targetSold);
     if (targetRem >= needRem) return; // مو ناقص
     needCount++;
 
@@ -116,7 +118,8 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       .filter(([br]) => br !== targetBranch && !newBranches.includes(br) && !closed.includes(br))
       .map(([br, sold]) => {
         const given = toDozen(sold, unit);
-        const rem = Math.max(0, given - sold);
+        const srcKey = br + "|" + bc;
+        const rem = overrides[srcKey] !== undefined ? num(overrides[srcKey]) : Math.max(0, given - sold);
         const pct = given>0 ? (sold/given)*100 : 0;
         return { br, sold, rem, pct, city: cityOf(br, cityOverrides) };
       })
