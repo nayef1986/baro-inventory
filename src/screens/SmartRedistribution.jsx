@@ -146,9 +146,18 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       }
     };
 
-    // الأولوية: stale = حرّك الراكد أولاً · warehouse = المستودع أولاً
-    if (priority === "stale") { takeFromBranch(); takeFromWarehouse(); }
-    else { takeFromWarehouse(); if (needQty >= unit/2) takeFromBranch(); }
+    // قاعدة أساسية: لو المستودع يغطّي الحاجة كاملة → خذ منه فقط (لا تظهره في الفروع)
+    if (warehouseStock >= needQty) {
+      takeFromWarehouse();
+    } else if (priority === "stale") {
+      // الراكد أولاً: حرّك راكد الفروع، ثم المستودع يكمّل
+      takeFromBranch();
+      takeFromWarehouse();
+    } else {
+      // المستودع أولاً: خذ ما فيه، ثم الفروع تكمّل
+      takeFromWarehouse();
+      if (needQty >= unit/2) takeFromBranch();
+    }
   });
 
   // ترتيب: نفس المدينة أولاً
