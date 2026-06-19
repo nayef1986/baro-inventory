@@ -55,7 +55,7 @@ function cityOf(branch, overrides = {}) {
 }
 
 // 🎯 عبّي فرع: لكل منتج ناقص عند الفرع، من وين نجيبه (فرع فائض نفس المدينة أولوية، ثم أي فائض، ثم المستودع)
-function fillBranch(targetBranch, products, periods, settings, needRem, surplusRem) {
+function fillBranch(targetBranch, products, periods, settings, needRem, surplusRem, priority = "warehouse") {
   const cityOverrides = settings?.cityOverrides ?? {};
   const newBranches = settings?.newBranches ?? [];
   const closed = settings?.closedBranches ?? [];
@@ -100,45 +100,53 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       sellPrice: num(p.sellPrice),
     };
 
-    // 1) المستودع الرئيسي أولاً = المشترى − مجموع الموزّع لكل الفروع
+    // مخزون المستودع = المشترى − مجموع الموزّع لكل الفروع
     const bought = totalPurchases(p);
     let totalGiven = 0;
     Object.values(brSales).forEach(sold => { totalGiven += toDozen(sold, unit); });
     const warehouseStock = Math.max(0, bought - totalGiven);
 
-    if (warehouseStock >= unit) {
-      const fromWh = Math.min(warehouseStock, needQty);
-      fromWarehouse.push({ ...item, qty: fromWh });
-      needQty -= fromWh;
-      if (needQty < unit/2) return; // المستودع غطّى الحاجة
-    }
-
-    // 2) لو المستودع ما كفّى → من فرع فائض (نفس المدينة أولوية)
-    const candidates = Object.entries(brSales)
-      .filter(([br]) => br !== targetBranch && !newBranches.includes(br) && !closed.includes(br))
+    // الفروع الراكدة (مصدر محتمل): باع أقل من نص معدّل المنتج، أو متبقيه المعدّل كبير
+    const allBr = Object.entries(brSales).filter(([br]) => !closed.includes(br));
+    const totalProdSold = allBr.reduce((s,[,sold])=>s+sold, 0);
+    const avgProdSold = allBr.length > 0 ? totalProdSold / allBr.length : 0;
+    const candidates = allBr
+      .filter(([br]) => br !== targetBranch && !newBranches.includes(br))
       .map(([br, sold]) => {
         const given = toDozen(sold, unit);
         const srcKey = br + "|" + bc;
         const rem = overrides[srcKey] !== undefined ? num(overrides[srcKey]) : Math.max(0, given - sold);
-        const pct = given>0 ? (sold/given)*100 : 0;
-        return { br, sold, rem, pct, city: cityOf(br, cityOverrides) };
+        return { br, sold, rem, city: cityOf(br, cityOverrides) };
       })
-      .filter(s => s.rem >= surplusRem && s.pct < 40)
+      .filter(s => (avgProdSold > 0 && s.sold < avgProdSold * 0.5 && s.rem > 0) || s.rem >= surplusRem)
       .sort((a,b) => {
         const aCity = a.city === tCity ? 0 : 1;
         const bCity = b.city === tCity ? 0 : 1;
         return aCity - bCity || b.rem - a.rem;
       });
 
-    if (candidates.length > 0) {
+    const takeFromBranch = () => {
+      if (candidates.length === 0) return;
       const src = candidates[0];
-      const moveQty = Math.min(src.rem, needQty);
+      const moveQty = Math.min(Math.max(src.rem, unit), needQty);
       if (moveQty >= unit/2) {
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
         fromSources[src.br].items.push({ ...item, qty: moveQty, srcRem: src.rem, srcSold: src.sold });
+        needQty -= moveQty;
       }
-    }
+    };
+    const takeFromWarehouse = () => {
+      if (warehouseStock >= unit && needQty >= unit/2) {
+        const fromWh = Math.min(warehouseStock, needQty);
+        fromWarehouse.push({ ...item, qty: fromWh });
+        needQty -= fromWh;
+      }
+    };
+
+    // الأولوية: stale = حرّك الراكد أولاً · warehouse = المستودع أولاً
+    if (priority === "stale") { takeFromBranch(); takeFromWarehouse(); }
+    else { takeFromWarehouse(); if (needQty >= unit/2) takeFromBranch(); }
   });
 
   // ترتيب: نفس المدينة أولاً
@@ -160,14 +168,15 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
   const [fillTarget, setFillTarget] = useState(null);  // الفرع المختار لتعبئته
   const [needRem, setNeedRem] = useState(6);           // ناقص: متبقي أقل من
   const [surplusRem, setSurplusRem] = useState(12);    // فائض: متبقي أكثر من
+  const [priority, setPriority] = useState("stale");   // stale = الراكد أولاً · warehouse = المستودع أولاً
   const [openSrc, setOpenSrc] = useState({});          // مصادر مفتوحة
 
   const analysis = useMemo(()=>analyze(products, periods, settings), [products, periods, settings]);
 
   const branchList = useMemo(()=>allBranches(periods).filter(b=>!(settings?.closedBranches??[]).includes(b)), [periods, settings]);
   const fillPlan = useMemo(
-    ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem) : null,
-    [fillTarget, products, periods, settings, needRem, surplusRem]
+    ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem, priority) : null,
+    [fillTarget, products, periods, settings, needRem, surplusRem, priority]
   );
 
   // طباعة خطة تعبئة الفرع — mode: "all" | "warehouse" | "branches"
@@ -486,6 +495,24 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                 <span style={{color:"#94a3b8",fontWeight:"700"}}>· فائض لو أكثر من</span>
                 <input type="number" value={surplusRem} min={0} onChange={e=>setSurplusRem(Math.max(0,Number(e.target.value)||0))}
                   style={{width:"50px",background:"#1e293b",border:"1px solid #334155",color:"#4ade80",borderRadius:"8px",padding:"6px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
+              </div>
+
+              {/* أولوية المصدر */}
+              <div style={{background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"12px",padding:"10px"}}>
+                <div style={{fontSize:"12px",color:"#94a3b8",fontWeight:"700",marginBottom:"8px"}}>من وين نعبّي أول؟</div>
+                <div style={{display:"flex",gap:"6px"}}>
+                  {[["stale","🔄 الراكد بالفروع أول"],["warehouse","🏬 المستودع أول"]].map(([k,l])=>(
+                    <button key={k} onClick={()=>setPriority(k)} style={{
+                      flex:1,padding:"9px",borderRadius:"10px",cursor:"pointer",fontFamily:"Cairo",fontSize:"12px",fontWeight:"700",
+                      background:priority===k?"rgba(59,130,246,0.2)":"transparent",
+                      color:priority===k?"#93c5fd":"rgba(255,255,255,0.4)",
+                      border:priority===k?"1px solid rgba(59,130,246,0.4)":"1px solid #2d3a52",
+                    }}>{l}</button>
+                  ))}
+                </div>
+                <div style={{fontSize:"10px",color:"#64748b",marginTop:"6px"}}>
+                  {priority==="stale" ? "💡 يحرّك البضاعة الراكدة من الفروع أولاً، والمستودع يكمّل" : "💡 يوزّع من المستودع أولاً، والفروع تكمّل"}
+                </div>
               </div>
 
               {fillPlan && (fillPlan.sources.length>0 || fillPlan.fromWarehouse.length>0) ? (
