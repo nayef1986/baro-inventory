@@ -134,7 +134,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       if (moveQty >= unit/2) {
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
-        fromSources[src.br].items.push({ ...item, qty: moveQty, srcRem: src.rem, srcSold: src.sold });
+        fromSources[src.br].items.push({ ...item, qty: moveQty, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
         needQty -= moveQty;
       }
     };
@@ -566,6 +566,12 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                   <div style={{display:"flex",gap:"8px",marginTop:"2px",fontSize:"10px"}}>
                                     <span style={{color:"#94a3b8"}}>جاء {m.bought}</span>
                                     <span style={{color:"#c4b5fd"}}>المستودع {m.whStock}</span>
+                                  </div>
+                                  <div style={{marginTop:"3px",fontSize:"10px",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+                                    <span style={{background:m.srcStale?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.2)",color:m.srcStale?"#fca5a5":"#6ee7b7",padding:"1px 7px",borderRadius:"100px",fontWeight:"700"}}>
+                                      {m.srcStale?"🔴 المصدر راكد":"🟢 المصدر قوي"}
+                                    </span>
+                                    <span style={{color:"#94a3b8"}}>باقي عنده {m.srcRem}</span>
                                   </div>
                                 </div>
                                 <div style={{textAlign:"center",flexShrink:0}}>
