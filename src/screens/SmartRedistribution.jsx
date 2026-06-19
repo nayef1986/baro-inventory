@@ -256,6 +256,81 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     if (w) { w.document.write(html); w.document.close(); }
   };
 
+  // بناء HTML لمصدر واحد (للطباعة أو الصورة)
+  const buildSourceHtml = (srcLabel, items, forImage = false) => {
+    const d = new Date();
+    const dnum = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+    const imgCell = (bc) => { const im = images?.[bc]; return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`; };
+    const rows = items.map(m=>`<tr><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td>${m.factory}</td><td>${m.targetSold}</td><td>${m.targetGiven}</td><td>${m.targetRem}</td><td class="q">${m.qty}</td></tr>`).join("");
+    return `<div class="page">
+      <div class="hd"><div class="brand">${settings?.brandName ?? "ALBAROO"}</div>
+      <div class="ttl">🎯 تعبئة ${fillTarget} ← ${srcLabel}</div>
+      <div style="font-size:13px;color:#64748b;margin-top:6px">📅 ${dnum} · ${items.length} منتج</div></div>
+      <table><thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>🏭</th><th>باع</th><th>أخذ</th><th>باقي</th><th>ينقل</th></tr></thead><tbody>${rows}</tbody></table>
+      ${forImage?"":'<div class="warn">⚠️ الكميات تقديرية — تأكد من الرف الفعلي قبل النقل</div>'}
+    </div>`;
+  };
+
+  const sourceStyle = `
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+    body{background:#f1f5f9;color:#1a1a1a}
+    .page{max-width:820px;margin:0 auto;background:#fff;padding:24px;border-radius:14px}
+    .hd{border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:18px;text-align:center}
+    .brand{font-size:24px;font-weight:900;color:#0f172a}.ttl{font-size:16px;color:#475569;margin-top:4px;font-weight:700}
+    table{width:100%;border-collapse:collapse}
+    th{background:#e2e8f0;padding:8px 6px;font-size:11px;color:#334155}
+    td{border:1px solid #e2e8f0;padding:7px 6px;text-align:center;font-size:12px;vertical-align:middle}
+    td.imgc{width:50px;padding:3px}.th{width:44px;height:44px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+    .noimg{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
+    td.nm{text-align:right;font-weight:700;color:#0f172a}td.bc{font-family:monospace;font-size:10px;color:#64748b}
+    td.q{font-size:18px;font-weight:900;color:#1e3a5f}tr:nth-child(even) td{background:#fafbfc}
+    .warn{text-align:center;color:#475569;font-size:12px;margin-top:14px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:8px}`;
+
+  // طباعة مصدر واحد
+  const printSource = (srcLabel, items) => {
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${srcLabel}</title>
+      <style>${sourceStyle}
+        .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+        .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+        .bk{background:#334155;color:#fff}.pr{background:#1e3a5f;color:#fff}
+        .page{margin:70px auto 30px}
+        @media print{body{background:#fff}.tb{display:none}.page{margin:0;max-width:100%}}
+      </style></head><body>
+      <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+      ${buildSourceHtml(srcLabel, items)}
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  // حفظ صورة لمصدر واحد
+  const saveSourceImage = async (srcLabel, items) => {
+    try {
+      const h2c = await new Promise((resolve, reject) => {
+        if (window.html2canvas) return resolve(window.html2canvas);
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+        s.onload = () => resolve(window.html2canvas); s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      const holder = document.createElement("div");
+      holder.style.cssText = "position:fixed;left:-9999px;top:0;width:820px;background:#f1f5f9";
+      holder.innerHTML = `<style>${sourceStyle}</style>${buildSourceHtml(srcLabel, items, true)}`;
+      document.body.appendChild(holder);
+      const canvas = await h2c(holder.querySelector(".page"), { scale:2, backgroundColor:"#fff", useCORS:true });
+      document.body.removeChild(holder);
+      const fn = `تعبئة-${fillTarget}-${srcLabel}.jpg`.replace(/[^\w\u0600-\u06FF.-]/g,"_");
+      const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
+      if (blob && navigator.canShare) {
+        const file = new File([blob], fn, { type:"image/jpeg" });
+        if (navigator.canShare({ files:[file] })) { await navigator.share({ files:[file] }); return; }
+      }
+      const a = document.createElement("a");
+      a.href = blob ? URL.createObjectURL(blob) : canvas.toDataURL("image/jpeg",0.92);
+      a.download = fn; a.click();
+    } catch { alert("تعذّر حفظ الصورة — استخدم الطباعة"); }
+  };
 
   // تجميع بالكونتينر
   const byContainer = useMemo(()=>{
@@ -559,6 +634,10 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                         </div>
                         {open && (
                           <div style={{padding:"0 10px 10px",display:"flex",flexDirection:"column",gap:"6px"}}>
+                            <div style={{display:"flex",gap:"6px",marginBottom:"2px"}}>
+                              <button onClick={()=>printSource(s.branch, s.items)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#93c5fd",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>🖨️ طباعة</button>
+                              <button onClick={()=>saveSourceImage(s.branch, s.items)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#6ee7b7",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>📷 حفظ صورة</button>
+                            </div>
                             {s.items.map(m => (
                               <div key={m.barcode} style={{display:"flex",alignItems:"center",gap:"10px",background:"rgba(255,255,255,0.03)",borderRadius:"10px",padding:"8px"}}>
                                 {images?.[m.barcode]
@@ -607,6 +686,10 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                       </div>
                       {openSrc.__wh && (
                         <div style={{padding:"0 10px 10px",display:"flex",flexDirection:"column",gap:"6px"}}>
+                          <div style={{display:"flex",gap:"6px",marginBottom:"2px"}}>
+                            <button onClick={()=>printSource("المستودع الرئيسي", fillPlan.fromWarehouse)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#93c5fd",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>🖨️ طباعة</button>
+                            <button onClick={()=>saveSourceImage("المستودع الرئيسي", fillPlan.fromWarehouse)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#6ee7b7",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>📷 حفظ صورة</button>
+                          </div>
                           {fillPlan.fromWarehouse.map(m => (
                             <div key={m.barcode} style={{display:"flex",alignItems:"center",gap:"10px",background:"rgba(255,255,255,0.03)",borderRadius:"10px",padding:"8px"}}>
                               {images?.[m.barcode]
