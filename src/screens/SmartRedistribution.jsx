@@ -1,7 +1,7 @@
 // ─── إعادة التوزيع الذكية بالمصنع (نقل بين الفروع) ───────────────
 // يكتشف الراكد والسريع لكل مصنع عبر الفترات، يقترح نقل، وأنت تعدّل.
 import { useState, useMemo } from "react";
-import { getFactoryCode, num, allBranches } from "../lib/calc.js";
+import { getFactoryCode, num, allBranches, totalPurchases } from "../lib/calc.js";
 
 const toDozen = (n, u) => Math.ceil(n / (u||12)) * (u||12);
 
@@ -89,9 +89,29 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
     if (targetRem >= needRem) return; // مو ناقص
     needCount++;
 
-    const needQty = toDozen(Math.max(needRem - targetRem, targetSold), unit);
+    let needQty = toDozen(Math.max(needRem - targetRem, targetSold), unit);
 
-    // نبحث عن فرع فائض لنفس المنتج
+    const item = {
+      barcode: bc, name: p.name, container: p.container ?? "",
+      factory: getFactoryCode(bc),
+      targetSold, targetRem,
+      sellPrice: num(p.sellPrice),
+    };
+
+    // 1) المستودع الرئيسي أولاً = المشترى − مجموع الموزّع لكل الفروع
+    const bought = totalPurchases(p);
+    let totalGiven = 0;
+    Object.values(brSales).forEach(sold => { totalGiven += toDozen(sold, unit); });
+    const warehouseStock = Math.max(0, bought - totalGiven);
+
+    if (warehouseStock >= unit) {
+      const fromWh = Math.min(warehouseStock, needQty);
+      fromWarehouse.push({ ...item, qty: fromWh });
+      needQty -= fromWh;
+      if (needQty < unit/2) return; // المستودع غطّى الحاجة
+    }
+
+    // 2) لو المستودع ما كفّى → من فرع فائض (نفس المدينة أولوية)
     const candidates = Object.entries(brSales)
       .filter(([br]) => br !== targetBranch && !newBranches.includes(br) && !closed.includes(br))
       .map(([br, sold]) => {
@@ -100,20 +120,12 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
         const pct = given>0 ? (sold/given)*100 : 0;
         return { br, sold, rem, pct, city: cityOf(br, cityOverrides) };
       })
-      .filter(s => s.rem >= surplusRem && s.pct < 40)  // فائض + بطيء
+      .filter(s => s.rem >= surplusRem && s.pct < 40)
       .sort((a,b) => {
-        // نفس المدينة أولاً، ثم الأكثر فائضاً
         const aCity = a.city === tCity ? 0 : 1;
         const bCity = b.city === tCity ? 0 : 1;
         return aCity - bCity || b.rem - a.rem;
       });
-
-    const item = {
-      barcode: bc, name: p.name, container: p.container ?? "",
-      factory: getFactoryCode(bc),
-      targetSold, targetRem, needQty,
-      sellPrice: num(p.sellPrice),
-    };
 
     if (candidates.length > 0) {
       const src = candidates[0];
@@ -122,11 +134,8 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
         fromSources[src.br].items.push({ ...item, qty: moveQty, srcRem: src.rem, srcSold: src.sold });
-        return;
       }
     }
-    // ما فيه فرع فائض → المستودع
-    fromWarehouse.push({ ...item, qty: needQty });
   });
 
   // ترتيب: نفس المدينة أولاً
@@ -158,9 +167,11 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     [fillTarget, products, periods, settings, needRem, surplusRem]
   );
 
-  // طباعة خطة تعبئة الفرع (مقسّمة بالمصدر، بالصور)
-  const printFill = () => {
+  // طباعة خطة تعبئة الفرع — mode: "all" | "warehouse" | "branches"
+  const printFill = (mode = "all") => {
     if (!fillPlan) return;
+    const showWh = mode === "all" || mode === "warehouse";
+    const showBr = mode === "all" || mode === "branches";
     const d = new Date();
     const dnum = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
     const imgCell = (bc) => { const im = images?.[bc]; return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`; };
@@ -171,11 +182,15 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
         ${items.map(m=>`<tr><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td>${m.factory}</td><td class="q">${m.qty}</td></tr>`).join("")}
         </tbody></table>
       </div>`;
-    const srcHtml = fillPlan.sources.map(s =>
-      section(`📦 من فرع: ${s.branch}${s.sameCity?' <span style="color:#16a34a">✓ نفس المدينة</span>':''}`, "tr", s.items)
-    ).join("");
-    const whHtml = fillPlan.fromWarehouse.length ? section("🏬 من المستودع الرئيسي", "wh", fillPlan.fromWarehouse) : "";
-    const totalItems = fillPlan.sources.reduce((s,x)=>s+x.items.length,0) + fillPlan.fromWarehouse.length;
+    const srcHtml = showBr ? fillPlan.sources.map(s =>
+      section(`📦 من فرع: ${s.branch}${s.sameCity?' <span style="color:#1e3a5f">✓ نفس المدينة</span>':''}`, "tr", s.items)
+    ).join("") : "";
+    const whHtml = (showWh && fillPlan.fromWarehouse.length) ? section("🏬 من المستودع الرئيسي", "wh", fillPlan.fromWarehouse) : "";
+    const whCount = fillPlan.fromWarehouse.length;
+    const brCount = fillPlan.sources.reduce((s,x)=>s+x.items.length,0);
+    const totalItems = (showWh?whCount:0) + (showBr?brCount:0);
+    if (totalItems === 0) { alert("لا منتجات في هذا القسم"); return; }
+    const planLabel = mode==="warehouse" ? "من المستودع الرئيسي" : mode==="branches" ? "من الفروع" : "الكاملة";
     const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تعبئة ${fillTarget}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -183,15 +198,15 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
         body{background:#f1f5f9;color:#1a1a1a}
         .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
         .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
-        .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+        .bk{background:#334155;color:#fff}.pr{background:#1e3a5f;color:#fff}
         .page{max-width:820px;margin:70px auto 30px;background:#fff;padding:24px;border-radius:14px}
         .hd{border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:18px;text-align:center}
         .brand{font-size:24px;font-weight:900;color:#0f172a}
         .ttl{font-size:16px;color:#475569;margin-top:4px;font-weight:700}
         .sec{margin-bottom:22px;page-break-inside:avoid}
         .sech{padding:11px 16px;border-radius:10px 10px 0 0;font-weight:900;font-size:15px;color:#fff;display:flex;justify-content:space-between;align-items:center}
-        .sech.wh{background:linear-gradient(135deg,#2563eb,#1d4ed8)}
-        .sech.tr{background:linear-gradient(135deg,#ea580c,#c2410c)}
+        .sech.wh{background:#1e3a5f}
+        .sech.tr{background:#475569}
         .cnt{font-size:12px;font-weight:700;background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:100px}
         table{width:100%;border-collapse:collapse}
         th{background:#e2e8f0;padding:8px 6px;font-size:11px;color:#334155}
@@ -201,17 +216,17 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
         .noimg{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
         td.nm{text-align:right;font-weight:700;color:#0f172a}
         td.bc{font-family:monospace;font-size:10px;color:#64748b}
-        td.q{font-size:18px;font-weight:900;color:#2563eb}
+        td.q{font-size:18px;font-weight:900;color:#1e3a5f}
         tr:nth-child(even) td{background:#fafbfc}
-        .warn{text-align:center;color:#d97706;font-size:12px;margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px}
+        .warn{text-align:center;color:#475569;font-size:12px;margin-top:14px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:8px}
         @media print{body{background:#fff}.tb{display:none}.page{margin:0;max-width:100%}}
       </style></head><body>
       <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
       <div class="page">
         <div class="hd"><div class="brand">${settings?.brandName ?? "ALBAROO"}</div>
-        <div class="ttl">🎯 خطة تعبئة فرع: ${fillTarget}</div>
-        <div style="font-size:13px;color:#64748b;margin-top:6px">📅 ${dnum} · ${totalItems} منتج · ${fillPlan.sources.length} مصدر</div></div>
-        ${srcHtml}${whHtml}
+        <div class="ttl">🎯 خطة تعبئة فرع: ${fillTarget} — ${planLabel}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:6px">📅 ${dnum} · ${totalItems} منتج</div></div>
+        ${whHtml}${srcHtml}
         <div class="warn">⚠️ الكميات تقديرية من المبيعات — تأكد من الرف الفعلي قبل النقل</div>
       </div></body></html>`;
     const w = window.open("", "_blank");
@@ -295,10 +310,10 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
       .h{text-align:center;border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:14px}
       .lg{font-size:24px;font-weight:900;letter-spacing:3px}.t{font-size:16px;font-weight:700;margin-top:4px}
       .route{display:flex;justify-content:center;gap:14px;align-items:center;margin:14px 0;font-size:15px;font-weight:900}
-      .from{color:#dc2626}.to{color:#16a34a}.ar{color:#64748b}
+      .from{color:#475569}.to{color:#1e3a5f}.ar{color:#64748b}
       .meta{text-align:center;font-size:12px;color:#555;margin-bottom:12px}
-      table{width:100%;border-collapse:collapse}th{background:#3b82f6;color:#fff;padding:8px;font-size:13px;border:1px solid #93c5fd}
-      td{border:1px solid #cbd5e1;padding:8px;text-align:center;font-size:14px}td.nm{text-align:right;font-weight:700}td.bc{font-family:monospace;font-size:12px}td.q{font-size:18px;font-weight:900;color:#16a34a}td.rn{color:#888;width:30px}
+      table{width:100%;border-collapse:collapse}th{background:#1e3a5f;color:#fff;padding:8px;font-size:13px;border:1px solid #94a3b8}
+      td{border:1px solid #cbd5e1;padding:8px;text-align:center;font-size:14px}td.nm{text-align:right;font-weight:700}td.bc{font-family:monospace;font-size:12px}td.q{font-size:18px;font-weight:900;color:#1e3a5f}td.rn{color:#888;width:30px}
       td.im{width:54px;padding:4px}.pimg{width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1}.pnoimg{width:46px;height:46px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto}
       .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:12px;display:flex;gap:8px;justify-content:center}
       .tb button{font-family:'Cairo';font-weight:900;border:none;border-radius:10px;padding:11px 24px;cursor:pointer;font-size:14px}
@@ -472,9 +487,19 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
 
               {fillPlan && (fillPlan.sources.length>0 || fillPlan.fromWarehouse.length>0) ? (
                 <>
-                  <button onClick={printFill} style={{width:"100%",padding:"13px",borderRadius:"14px",border:"none",background:"linear-gradient(135deg,#d4a853,#b8935a)",color:"#0a0804",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>
-                    🖨️ اطبع خطة التعبئة كاملة (مقسّمة بالمصدر)
-                  </button>
+                  <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                    <div style={{display:"flex",gap:"8px"}}>
+                      <button onClick={()=>printFill("warehouse")} disabled={fillPlan.fromWarehouse.length===0} style={{flex:1,padding:"12px",borderRadius:"12px",border:"none",background:fillPlan.fromWarehouse.length?"#1e3a5f":"#334155",color:"#fff",fontSize:"13px",fontWeight:"900",cursor:fillPlan.fromWarehouse.length?"pointer":"default",fontFamily:"Cairo",opacity:fillPlan.fromWarehouse.length?1:0.5}}>
+                        🏬 اطبع المستودع ({fillPlan.fromWarehouse.length})
+                      </button>
+                      <button onClick={()=>printFill("branches")} disabled={fillPlan.sources.length===0} style={{flex:1,padding:"12px",borderRadius:"12px",border:"none",background:fillPlan.sources.length?"#475569":"#334155",color:"#fff",fontSize:"13px",fontWeight:"900",cursor:fillPlan.sources.length?"pointer":"default",fontFamily:"Cairo",opacity:fillPlan.sources.length?1:0.5}}>
+                        📦 اطبع الفروع ({fillPlan.sources.reduce((s,x)=>s+x.items.length,0)})
+                      </button>
+                    </div>
+                    <button onClick={()=>printFill("all")} style={{width:"100%",padding:"12px",borderRadius:"12px",border:"1px solid #475569",background:"transparent",color:"#94a3b8",fontSize:"12px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
+                      🖨️ اطبع الكل معاً
+                    </button>
+                  </div>
 
                   {/* المصادر */}
                   {fillPlan.sources.map(s => {
