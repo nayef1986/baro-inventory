@@ -96,7 +96,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
     const item = {
       barcode: bc, name: p.name, container: p.container ?? "",
       factory: getFactoryCode(bc),
-      targetSold, targetRem,
+      targetSold, targetGiven, targetRem,
       sellPrice: num(p.sellPrice),
     };
 
@@ -105,6 +105,8 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
     let totalGiven = 0;
     Object.values(brSales).forEach(sold => { totalGiven += toDozen(sold, unit); });
     const warehouseStock = Math.max(0, bought - totalGiven);
+    item.bought = bought;          // كم جاء (المشترى الكلي)
+    item.whStock = warehouseStock; // كم باقي في المستودع
 
     // الفروع الراكدة (مصدر محتمل): باع أقل من نص معدّل المنتج، أو متبقيه المعدّل كبير
     const allBr = Object.entries(brSales).filter(([br]) => !closed.includes(br));
@@ -190,8 +192,8 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     const section = (title, cls, items) => `
       <div class="sec">
         <div class="sech ${cls}">${title} <span class="cnt">${items.length} منتج</span></div>
-        <table><thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>🏭</th><th>الكمية</th></tr></thead><tbody>
-        ${items.map(m=>`<tr><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td>${m.factory}</td><td class="q">${m.qty}</td></tr>`).join("")}
+        <table><thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>🏭</th><th>باع</th><th>أخذ</th><th>باقي</th><th>ينقل</th></tr></thead><tbody>
+        ${items.map(m=>`<tr><td class="imgc">${imgCell(m.barcode)}</td><td class="nm">${m.name}</td><td class="bc">${m.barcode}</td><td>${m.factory}</td><td>${m.targetSold}</td><td>${m.targetGiven}</td><td>${m.targetRem}</td><td class="q">${m.qty}</td></tr>`).join("")}
         </tbody></table>
       </div>`;
     const srcHtml = showBr ? fillPlan.sources.map(s =>
@@ -556,10 +558,19 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
                                   <div style={{fontSize:"11px",color:"#64748b",fontFamily:"monospace"}}>{m.barcode}</div>
+                                  <div style={{display:"flex",gap:"8px",marginTop:"3px",fontSize:"10px"}}>
+                                    <span style={{color:"#fbbf24"}}>باع {m.targetSold}</span>
+                                    <span style={{color:"#60a5fa"}}>أخذ {m.targetGiven}</span>
+                                    <span style={{color:"#6ee7b7"}}>باقي {m.targetRem}</span>
+                                  </div>
+                                  <div style={{display:"flex",gap:"8px",marginTop:"2px",fontSize:"10px"}}>
+                                    <span style={{color:"#94a3b8"}}>جاء {m.bought}</span>
+                                    <span style={{color:"#c4b5fd"}}>المستودع {m.whStock}</span>
+                                  </div>
                                 </div>
                                 <div style={{textAlign:"center",flexShrink:0}}>
                                   <div style={{fontSize:"18px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
-                                  <div style={{fontSize:"9px",color:"#64748b"}}>قطعة</div>
+                                  <div style={{fontSize:"9px",color:"#64748b"}}>ينقل</div>
                                 </div>
                               </div>
                             ))}
@@ -589,10 +600,19 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
                                 <div style={{fontSize:"11px",color:"#64748b",fontFamily:"monospace"}}>{m.barcode}</div>
+                                <div style={{display:"flex",gap:"8px",marginTop:"3px",fontSize:"10px"}}>
+                                  <span style={{color:"#fbbf24"}}>باع {m.targetSold}</span>
+                                  <span style={{color:"#60a5fa"}}>أخذ {m.targetGiven}</span>
+                                  <span style={{color:"#6ee7b7"}}>باقي {m.targetRem}</span>
+                                </div>
+                                <div style={{display:"flex",gap:"8px",marginTop:"2px",fontSize:"10px"}}>
+                                  <span style={{color:"#94a3b8"}}>جاء {m.bought}</span>
+                                  <span style={{color:"#c4b5fd"}}>المستودع {m.whStock}</span>
+                                </div>
                               </div>
                               <div style={{textAlign:"center",flexShrink:0}}>
                                 <div style={{fontSize:"18px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
-                                <div style={{fontSize:"9px",color:"#64748b"}}>قطعة</div>
+                                <div style={{fontSize:"9px",color:"#64748b"}}>ينقل</div>
                               </div>
                             </div>
                           ))}
