@@ -270,7 +270,7 @@ function SmartSearch({ products, periods, settings, images, onSaveImage, onRemov
 
 // ─── شاشة الاحتياج ───────────────────────────────────────────
 
-const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings }) => {
+const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRemoveImage, settings, onSaveSettings }) => {
   const [minStock, setMinStock] = useState(settings?.minStock ?? 12);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("weak");  // weak | strong | hero
@@ -290,6 +290,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
   // احتياج الفرع: كل منتج باعه الفرع (باع/أخذ/باقي) + بياناته
   const allItems = useMemo(() => {
     if (!periods.length) return [];
+    const overrides = settings?.stockOverrides ?? {};
     const branchData = {};
     const soldAllIndex = {};
     periods.forEach(per => {
@@ -305,7 +306,9 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const sold = num(branchData[p.barcode] ?? 0);
         const dozens = Math.ceil(sold / minStock);
         const given = dozens * minStock;
-        const remaining = Math.max(0, given - sold);
+        const ovKey = branch + "|" + p.barcode;
+        const hasOverride = overrides[ovKey] !== undefined;
+        const remaining = hasOverride ? num(overrides[ovKey]) : Math.max(0, given - sold);
         const needQty = Math.max(0, minStock - remaining);
         const bought = totalPurchases(p);
         const allSold = soldAllIndex[p.barcode] ?? 0;
@@ -315,9 +318,21 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const soldPct = bought > 0 ? (allSold/bought)*100 : 0;
         const margin = buyPrice > 0 ? ((sellPrice-buyPrice)/buyPrice)*100 : 0;
         const isHero = (soldPct > 70 && margin > 20) || starred.includes(p.barcode);
-        return { ...p, sold, given, remaining, needQty, closingAll, bought, totalSoldAll: allSold, buyPrice, sellPrice, soldPct, margin, isHero };
+        return { ...p, sold, given, remaining, needQty, closingAll, bought, totalSoldAll: allSold, buyPrice, sellPrice, soldPct, margin, isHero, hasOverride };
       });
-  }, [products, branch, minStock, periods, starred]);
+  }, [products, branch, minStock, periods, starred, settings]);
+
+  // تعديل المتبقي اليدوي (يُحفظ لكل فرع+منتج)
+  const [editRem, setEditRem] = useState(null);   // barcode قيد التعديل
+  const [remInput, setRemInput] = useState("");
+  const saveRemaining = async (barcode, val) => {
+    const overrides = { ...(settings?.stockOverrides ?? {}) };
+    const key = branch + "|" + barcode;
+    if (val === "" || val === null) delete overrides[key];   // مسح = رجوع للتقدير
+    else overrides[key] = Math.max(0, Number(val) || 0);
+    if (onSaveSettings) await onSaveSettings({ ...settings, stockOverrides: overrides });
+    setEditRem(null); setRemInput("");
+  };
 
   // بحث (باركود/اسم/مصنع)
   const searched = useMemo(() => {
@@ -464,9 +479,23 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         <div className="flex gap-1.5 flex-wrap mt-2">
           <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
           <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">أخذ {fmtN(x.given)}</span>
-          <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/30 text-emerald-300">باقي {fmtN(x.remaining)}</span>
+          <button onClick={()=>{ setEditRem(x.barcode); setRemInput(String(x.remaining)); }}
+            className="text-xs px-2 py-0.5 rounded-lg font-bold"
+            style={{background:x.hasOverride?"rgba(212,168,83,0.2)":"rgba(16,185,129,0.2)",color:x.hasOverride?"#d4a853":"#6ee7b7",border:x.hasOverride?"1px solid rgba(212,168,83,0.4)":"1px solid transparent"}}>
+            باقي {fmtN(x.remaining)} {x.hasOverride?"✓":"✏️"}
+          </button>
           <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">بيع {fmtN(x.sellPrice)}﷼</span>
         </div>
+        {editRem === x.barcode && (
+          <div className="flex items-center gap-2 mt-2 bg-slate-900/60 rounded-lg p-2">
+            <span className="text-xs text-slate-400 font-bold shrink-0">المتبقي الفعلي:</span>
+            <input type="number" value={remInput} autoFocus onChange={e=>setRemInput(e.target.value)} min={0}
+              className="w-16 bg-slate-700 border border-amber-500 text-slate-100 rounded-lg px-2 py-1.5 text-sm font-black text-center focus:outline-none" />
+            <button onClick={()=>saveRemaining(x.barcode, remInput)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shrink-0">حفظ</button>
+            {x.hasOverride && <button onClick={()=>saveRemaining(x.barcode, "")} className="bg-slate-600 text-slate-200 px-2 py-1.5 rounded-lg text-xs shrink-0">↺ تقدير</button>}
+            <button onClick={()=>{ setEditRem(null); setRemInput(""); }} className="bg-slate-700 text-slate-400 px-2 py-1.5 rounded-lg text-xs shrink-0">✕</button>
+          </div>
+        )}
         <button onClick={()=>printNeeds([x], `احتياج · ${x.name}`)}
           className="w-full mt-2 bg-slate-700/60 border border-slate-600 text-slate-300 py-1.5 rounded-lg text-xs font-bold">
           🖨️ طباعة تقرير هذا المنتج
@@ -1045,7 +1074,7 @@ const BranchDetail = memo(({ branch, products, periods, images, onSaveImage, onR
           </button>
         ))}
       </div>
-      {view === "need"     && <NeedSection branch={branch} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
+      {view === "need"     && <NeedSection branch={branch} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} onSaveSettings={onSaveSettings} />}
       {view === "transfer" && <TransferSection branch={branch} products={products} periods={periods} images={images} settings={settings} onSaveSettings={onSaveSettings} />}
       {view === "top"      && <TopBottomSection branch={branch} products={products} periods={periods} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
       {view === "search"   && <SmartSearch products={products} periods={periods} settings={settings} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} />}
