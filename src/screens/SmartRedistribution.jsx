@@ -134,7 +134,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       if (moveQty >= unit/2) {
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
-        fromSources[src.br].items.push({ ...item, qty: moveQty, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
+        fromSources[src.br].items.push({ ...item, qty: moveQty, srcBranch: src.br, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
         needQty -= moveQty;
       }
     };
@@ -189,6 +189,18 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem, priority) : null,
     [fillTarget, products, periods, settings, needRem, surplusRem, priority]
   );
+
+  // تعديل المتبقي داخل عبّي فرع (هدف أو مصدر) — يحفظ في stockOverrides والخطة تتحدّث فوراً
+  const [editKey, setEditKey] = useState(null);   // "branch|barcode" قيد التعديل
+  const [editVal, setEditVal] = useState("");
+  const saveStock = async (br, barcode, val) => {
+    const overrides = { ...(settings?.stockOverrides ?? {}) };
+    const key = br + "|" + barcode;
+    if (val === "" || val === null) delete overrides[key];
+    else overrides[key] = Math.max(0, Number(val) || 0);
+    if (onSaveSettings) await onSaveSettings({ ...settings, stockOverrides: overrides });
+    setEditKey(null); setEditVal("");
+  };
 
   // طباعة خطة تعبئة الفرع — mode: "all" | "warehouse" | "branches"
   const printFill = (mode = "all") => {
@@ -661,6 +673,37 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                     </span>
                                     <span style={{color:"#94a3b8"}}>باقي عنده {m.srcRem}</span>
                                   </div>
+                                  {/* تعديل المتبقي — الهدف والمصدر (خط كبير) */}
+                                  <div style={{display:"flex",gap:"6px",marginTop:"8px",flexWrap:"wrap"}}>
+                                    {editKey===(fillTarget+"|"+m.barcode) ? (
+                                      <div style={{display:"flex",gap:"4px",alignItems:"center",background:"#0f172a",borderRadius:"10px",padding:"4px"}}>
+                                        <span style={{fontSize:"13px",color:"#6ee7b7",fontWeight:"700"}}>🎯 باقي:</span>
+                                        <input type="number" value={editVal} autoFocus onChange={e=>setEditVal(e.target.value)}
+                                          style={{width:"60px",background:"#1e293b",border:"2px solid #10b981",color:"#fff",borderRadius:"8px",padding:"8px",fontSize:"18px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
+                                        <button onClick={()=>saveStock(fillTarget, m.barcode, editVal)} style={{background:"#10b981",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>حفظ</button>
+                                        <button onClick={()=>{setEditKey(null);setEditVal("");}} style={{background:"#475569",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 12px",fontSize:"14px",cursor:"pointer",fontFamily:"Cairo"}}>✕</button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={()=>{setEditKey(fillTarget+"|"+m.barcode);setEditVal(String(m.targetRem));}}
+                                        style={{background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.4)",color:"#6ee7b7",borderRadius:"10px",padding:"7px 12px",fontSize:"13px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
+                                        🎯 عدّل باقي الهدف ({m.targetRem})
+                                      </button>
+                                    )}
+                                    {editKey===(m.srcBranch+"|"+m.barcode) ? (
+                                      <div style={{display:"flex",gap:"4px",alignItems:"center",background:"#0f172a",borderRadius:"10px",padding:"4px"}}>
+                                        <span style={{fontSize:"13px",color:"#fbbf24",fontWeight:"700"}}>📦 باقي:</span>
+                                        <input type="number" value={editVal} autoFocus onChange={e=>setEditVal(e.target.value)}
+                                          style={{width:"60px",background:"#1e293b",border:"2px solid #f59e0b",color:"#fff",borderRadius:"8px",padding:"8px",fontSize:"18px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
+                                        <button onClick={()=>saveStock(m.srcBranch, m.barcode, editVal)} style={{background:"#f59e0b",color:"#0a0804",border:"none",borderRadius:"8px",padding:"9px 14px",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>حفظ</button>
+                                        <button onClick={()=>{setEditKey(null);setEditVal("");}} style={{background:"#475569",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 12px",fontSize:"14px",cursor:"pointer",fontFamily:"Cairo"}}>✕</button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={()=>{setEditKey(m.srcBranch+"|"+m.barcode);setEditVal(String(m.srcRem));}}
+                                        style={{background:"rgba(245,158,11,0.15)",border:"1px solid rgba(245,158,11,0.4)",color:"#fbbf24",borderRadius:"10px",padding:"7px 12px",fontSize:"13px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
+                                        📦 عدّل باقي المصدر ({m.srcRem})
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <div style={{textAlign:"center",flexShrink:0}}>
                                   <div style={{fontSize:"18px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
@@ -706,6 +749,22 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                 <div style={{display:"flex",gap:"8px",marginTop:"2px",fontSize:"10px"}}>
                                   <span style={{color:"#94a3b8"}}>جاء {m.bought}</span>
                                   <span style={{color:"#c4b5fd"}}>المستودع {m.whStock}</span>
+                                </div>
+                                <div style={{marginTop:"8px"}}>
+                                  {editKey===(fillTarget+"|"+m.barcode) ? (
+                                    <div style={{display:"flex",gap:"4px",alignItems:"center",background:"#0f172a",borderRadius:"10px",padding:"4px",width:"fit-content"}}>
+                                      <span style={{fontSize:"13px",color:"#6ee7b7",fontWeight:"700"}}>🎯 باقي:</span>
+                                      <input type="number" value={editVal} autoFocus onChange={e=>setEditVal(e.target.value)}
+                                        style={{width:"60px",background:"#1e293b",border:"2px solid #10b981",color:"#fff",borderRadius:"8px",padding:"8px",fontSize:"18px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
+                                      <button onClick={()=>saveStock(fillTarget, m.barcode, editVal)} style={{background:"#10b981",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>حفظ</button>
+                                      <button onClick={()=>{setEditKey(null);setEditVal("");}} style={{background:"#475569",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 12px",fontSize:"14px",cursor:"pointer",fontFamily:"Cairo"}}>✕</button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={()=>{setEditKey(fillTarget+"|"+m.barcode);setEditVal(String(m.targetRem));}}
+                                      style={{background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.4)",color:"#6ee7b7",borderRadius:"10px",padding:"7px 12px",fontSize:"13px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
+                                      🎯 عدّل باقي الهدف ({m.targetRem})
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                               <div style={{textAlign:"center",flexShrink:0}}>
