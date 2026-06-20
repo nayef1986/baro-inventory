@@ -118,7 +118,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
         const given = toDozen(sold, unit);
         const srcKey = br + "|" + bc;
         const rem = overrides[srcKey] !== undefined ? num(overrides[srcKey]) : Math.max(0, given - sold);
-        return { br, sold, rem, city: cityOf(br, cityOverrides) };
+        return { br, sold, given, rem, city: cityOf(br, cityOverrides) };
       })
       .filter(s => (avgProdSold > 0 && s.sold < avgProdSold * 0.5 && s.rem > 0) || s.rem >= surplusRem)
       .sort((a,b) => {
@@ -134,7 +134,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       if (moveQty >= unit/2) {
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
-        fromSources[src.br].items.push({ ...item, qty: moveQty, srcBranch: src.br, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
+        fromSources[src.br].items.push({ ...item, qty: moveQty, srcBranch: src.br, srcGiven: src.given, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
         needQty -= moveQty;
       }
     };
@@ -658,19 +658,24 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📦 {m.name}</div>
                                   <div style={{fontSize:"16px",color:"#fff",fontFamily:"monospace",fontWeight:"900",letterSpacing:"1px",marginTop:"2px"}}>{m.barcode}</div>
-                                  <div style={{fontSize:"10px",color:"#60a5fa",marginTop:"2px"}}>🏭 {m.factory}</div>
-                                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"6px"}}>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(59,130,246,0.2)",color:"#93c5fd"}}>جاء {m.bought}</span>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(245,158,11,0.2)",color:"#fcd34d"}}>باع {m.targetSold}</span>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(96,165,250,0.2)",color:"#93c5fd"}}>أخذ {m.targetGiven}</span>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(100,116,139,0.3)",color:"#cbd5e1"}}>باقي {m.targetRem}</span>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(168,139,250,0.2)",color:"#c4b5fd"}}>🏬 المستودع {m.whStock}</span>
+                                  <div style={{fontSize:"11px",color:"#60a5fa",marginTop:"2px"}}>🏭 {m.factory}</div>
+                                  {/* المستقبِل */}
+                                  <div style={{marginTop:"6px"}}>
+                                    <div style={{fontSize:"10px",color:"#6ee7b7",fontWeight:"700",marginBottom:"3px"}}>📥 الفرع المستقبِل ({fillTarget})</div>
+                                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(245,158,11,0.2)",color:"#fcd34d"}}>باع {m.targetSold}</span>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(96,165,250,0.2)",color:"#93c5fd"}}>أخذ {m.targetGiven}</span>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(100,116,139,0.3)",color:"#cbd5e1"}}>باقي {m.targetRem}</span>
+                                    </div>
                                   </div>
-                                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"4px"}}>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",fontWeight:"700",background:m.srcStale?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.2)",color:m.srcStale?"#fca5a5":"#6ee7b7"}}>
-                                      {m.srcStale?"🔴 المرسِل راكد":"🟢 المرسِل قوي"}
-                                    </span>
-                                    <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(100,116,139,0.3)",color:"#cbd5e1"}}>باقي عند المرسِل {m.srcRem}</span>
+                                  {/* المرسِل */}
+                                  <div style={{marginTop:"6px"}}>
+                                    <div style={{fontSize:"10px",fontWeight:"700",marginBottom:"3px",color:m.srcStale?"#fca5a5":"#6ee7b7"}}>📤 الفرع المرسِل ({m.srcBranch}) · {m.srcStale?"🔴 راكد":"🟢 قوي"}</div>
+                                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(245,158,11,0.2)",color:"#fcd34d"}}>باع {m.srcSold}</span>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(96,165,250,0.2)",color:"#93c5fd"}}>أخذ {m.srcGiven}</span>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(100,116,139,0.3)",color:"#cbd5e1"}}>باقي {m.srcRem}</span>
+                                    </div>
                                   </div>
                                   {/* تعديل المتبقي — المستقبِل والمرسِل (خط كبير ملوّن) */}
                                   <div style={{display:"flex",gap:"6px",marginTop:"8px",flexWrap:"wrap"}}>
@@ -702,6 +707,14 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                         ✏️ عدّل مخزون المرسِل
                                       </button>
                                     )}
+                                  </div>
+                                  {/* المستودع الرئيسي — تحت التعديل */}
+                                  <div style={{marginTop:"8px",paddingTop:"8px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+                                    <div style={{fontSize:"10px",color:"#c4b5fd",fontWeight:"700",marginBottom:"3px"}}>🏬 المستودع الرئيسي</div>
+                                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(59,130,246,0.2)",color:"#93c5fd"}}>جاء {m.bought}</span>
+                                      <span style={{fontSize:"11px",padding:"2px 8px",borderRadius:"8px",background:"rgba(168,139,250,0.2)",color:"#c4b5fd"}}>باقي {m.whStock}</span>
+                                    </div>
                                   </div>
                                 </div>
                                 <div style={{textAlign:"center",flexShrink:0}}>
