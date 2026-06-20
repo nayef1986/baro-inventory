@@ -636,7 +636,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                       <div key={s.branch} style={{background:"#0f1626",border:`1px solid ${s.sameCity?"#16a34a":"#ea580c"}40`,borderRadius:"14px",overflow:"hidden"}}>
                         <div onClick={()=>setOpenSrc(o=>({...o,[s.branch]:!o[s.branch]}))} style={{padding:"13px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                           <div>
-                            <div style={{fontWeight:"900",color:"#fff",fontSize:"14px"}}>📦 من {s.branch}</div>
+                            <div style={{fontWeight:"900",color:"#fff",fontSize:"14px"}}>📤 المرسِل: {s.branch}</div>
                             <div style={{fontSize:"11px",color:s.sameCity?"#4ade80":"#fb923c",marginTop:"2px"}}>{s.sameCity?`✓ نفس المدينة (${s.city})`:`📍 ${s.city||"مدينة أخرى"}`}</div>
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
@@ -651,33 +651,34 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                               <button onClick={()=>saveSourceImage(s.branch, s.items)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#6ee7b7",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>📷 حفظ صورة</button>
                             </div>
                             {s.items.map(m => (
-                              <div key={m.barcode} style={{display:"flex",alignItems:"center",gap:"10px",background:"rgba(255,255,255,0.03)",borderRadius:"10px",padding:"8px"}}>
+                              <div key={m.barcode} style={{display:"flex",alignItems:"flex-start",gap:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",padding:"10px"}}>
                                 {images?.[m.barcode]
-                                  ? <img src={images[m.barcode]} alt="" onClick={()=>setViewImg({src:images[m.barcode],name:m.name})} style={{width:"44px",height:"44px",borderRadius:"8px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
-                                  : <div style={{width:"44px",height:"44px",borderRadius:"8px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>📦</div>}
+                                  ? <img src={images[m.barcode]} alt="" onClick={()=>setViewImg({src:images[m.barcode],name:m.name})} style={{width:"72px",height:"72px",borderRadius:"10px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
+                                  : <div style={{width:"72px",height:"72px",borderRadius:"10px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"30px",flexShrink:0}}>📦</div>}
                                 <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
-                                  <div style={{fontSize:"11px",color:"#64748b",fontFamily:"monospace"}}>{m.barcode}</div>
-                                  <div style={{display:"flex",gap:"8px",marginTop:"3px",fontSize:"10px"}}>
-                                    <span style={{color:"#fbbf24"}}>باع {m.targetSold}</span>
-                                    <span style={{color:"#60a5fa"}}>أخذ {m.targetGiven}</span>
-                                    <span style={{color:"#6ee7b7"}}>باقي {m.targetRem}</span>
+                                  <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📦 {m.name}</div>
+                                  <div style={{fontSize:"16px",color:"#fff",fontFamily:"monospace",fontWeight:"900",letterSpacing:"1px",marginTop:"2px"}}>{m.barcode}</div>
+                                  <div style={{fontSize:"10px",color:"#60a5fa",marginTop:"2px"}}>🏭 {m.factory}</div>
+                                  <div style={{display:"flex",gap:"6px",marginTop:"5px",fontSize:"11px",flexWrap:"wrap"}}>
+                                    <span style={{color:"#fbbf24"}}>🛒 باع {m.targetSold}</span>
+                                    <span style={{color:"#60a5fa"}}>📥 أخذ {m.targetGiven}</span>
+                                    <span style={{color:"#6ee7b7"}}>📦 باقي {m.targetRem}</span>
                                   </div>
-                                  <div style={{display:"flex",gap:"8px",marginTop:"2px",fontSize:"10px"}}>
-                                    <span style={{color:"#94a3b8"}}>جاء {m.bought}</span>
-                                    <span style={{color:"#c4b5fd"}}>المستودع {m.whStock}</span>
+                                  <div style={{display:"flex",gap:"6px",marginTop:"3px",fontSize:"11px",flexWrap:"wrap"}}>
+                                    <span style={{color:"#94a3b8"}}>🚚 جاء {m.bought}</span>
+                                    <span style={{color:"#c4b5fd"}}>🏬 المستودع {m.whStock}</span>
                                   </div>
-                                  <div style={{marginTop:"3px",fontSize:"10px",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
-                                    <span style={{background:m.srcStale?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.2)",color:m.srcStale?"#fca5a5":"#6ee7b7",padding:"1px 7px",borderRadius:"100px",fontWeight:"700"}}>
-                                      {m.srcStale?"🔴 المصدر راكد":"🟢 المصدر قوي"}
+                                  <div style={{marginTop:"4px",fontSize:"11px",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+                                    <span style={{background:m.srcStale?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.2)",color:m.srcStale?"#fca5a5":"#6ee7b7",padding:"2px 8px",borderRadius:"100px",fontWeight:"700"}}>
+                                      {m.srcStale?"🔴 المرسِل راكد":"🟢 المرسِل قوي"}
                                     </span>
-                                    <span style={{color:"#94a3b8"}}>باقي عنده {m.srcRem}</span>
+                                    <span style={{color:"#94a3b8"}}>📤 باقي عنده {m.srcRem}</span>
                                   </div>
-                                  {/* تعديل المتبقي — الهدف والمصدر (خط كبير) */}
+                                  {/* تعديل المتبقي — المستقبِل والمرسِل (خط كبير ملوّن) */}
                                   <div style={{display:"flex",gap:"6px",marginTop:"8px",flexWrap:"wrap"}}>
                                     {editKey===(fillTarget+"|"+m.barcode) ? (
                                       <div style={{display:"flex",gap:"4px",alignItems:"center",background:"#0f172a",borderRadius:"10px",padding:"4px"}}>
-                                        <span style={{fontSize:"13px",color:"#6ee7b7",fontWeight:"700"}}>🎯 باقي:</span>
+                                        <span style={{fontSize:"13px",color:"#6ee7b7",fontWeight:"700"}}>📥 باقي:</span>
                                         <input type="number" value={editVal} autoFocus onChange={e=>setEditVal(e.target.value)}
                                           style={{width:"60px",background:"#1e293b",border:"2px solid #10b981",color:"#fff",borderRadius:"8px",padding:"8px",fontSize:"18px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
                                         <button onClick={()=>saveStock(fillTarget, m.barcode, editVal)} style={{background:"#10b981",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>حفظ</button>
@@ -686,12 +687,12 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                     ) : (
                                       <button onClick={()=>{setEditKey(fillTarget+"|"+m.barcode);setEditVal(String(m.targetRem));}}
                                         style={{background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.4)",color:"#6ee7b7",borderRadius:"10px",padding:"7px 12px",fontSize:"13px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
-                                        🎯 عدّل باقي الهدف ({m.targetRem})
+                                        📥 عدّل باقي المستقبِل ({m.targetRem})
                                       </button>
                                     )}
                                     {editKey===(m.srcBranch+"|"+m.barcode) ? (
                                       <div style={{display:"flex",gap:"4px",alignItems:"center",background:"#0f172a",borderRadius:"10px",padding:"4px"}}>
-                                        <span style={{fontSize:"13px",color:"#fbbf24",fontWeight:"700"}}>📦 باقي:</span>
+                                        <span style={{fontSize:"13px",color:"#fbbf24",fontWeight:"700"}}>📤 باقي:</span>
                                         <input type="number" value={editVal} autoFocus onChange={e=>setEditVal(e.target.value)}
                                           style={{width:"60px",background:"#1e293b",border:"2px solid #f59e0b",color:"#fff",borderRadius:"8px",padding:"8px",fontSize:"18px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
                                         <button onClick={()=>saveStock(m.srcBranch, m.barcode, editVal)} style={{background:"#f59e0b",color:"#0a0804",border:"none",borderRadius:"8px",padding:"9px 14px",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>حفظ</button>
@@ -700,14 +701,14 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                     ) : (
                                       <button onClick={()=>{setEditKey(m.srcBranch+"|"+m.barcode);setEditVal(String(m.srcRem));}}
                                         style={{background:"rgba(245,158,11,0.15)",border:"1px solid rgba(245,158,11,0.4)",color:"#fbbf24",borderRadius:"10px",padding:"7px 12px",fontSize:"13px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
-                                        📦 عدّل باقي المصدر ({m.srcRem})
+                                        📤 عدّل باقي المرسِل ({m.srcRem})
                                       </button>
                                     )}
                                   </div>
                                 </div>
                                 <div style={{textAlign:"center",flexShrink:0}}>
-                                  <div style={{fontSize:"18px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
-                                  <div style={{fontSize:"9px",color:"#64748b"}}>ينقل</div>
+                                  <div style={{fontSize:"22px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
+                                  <div style={{fontSize:"10px",color:"#94a3b8"}}>🔄 ينقل</div>
                                 </div>
                               </div>
                             ))}
@@ -734,26 +735,27 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                             <button onClick={()=>saveSourceImage("المستودع الرئيسي", fillPlan.fromWarehouse)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#6ee7b7",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>📷 حفظ صورة</button>
                           </div>
                           {fillPlan.fromWarehouse.map(m => (
-                            <div key={m.barcode} style={{display:"flex",alignItems:"center",gap:"10px",background:"rgba(255,255,255,0.03)",borderRadius:"10px",padding:"8px"}}>
+                            <div key={m.barcode} style={{display:"flex",alignItems:"flex-start",gap:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",padding:"10px"}}>
                               {images?.[m.barcode]
-                                ? <img src={images[m.barcode]} alt="" onClick={()=>setViewImg({src:images[m.barcode],name:m.name})} style={{width:"44px",height:"44px",borderRadius:"8px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
-                                : <div style={{width:"44px",height:"44px",borderRadius:"8px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>📦</div>}
+                                ? <img src={images[m.barcode]} alt="" onClick={()=>setViewImg({src:images[m.barcode],name:m.name})} style={{width:"72px",height:"72px",borderRadius:"10px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
+                                : <div style={{width:"72px",height:"72px",borderRadius:"10px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"30px",flexShrink:0}}>📦</div>}
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
-                                <div style={{fontSize:"11px",color:"#64748b",fontFamily:"monospace"}}>{m.barcode}</div>
-                                <div style={{display:"flex",gap:"8px",marginTop:"3px",fontSize:"10px"}}>
-                                  <span style={{color:"#fbbf24"}}>باع {m.targetSold}</span>
-                                  <span style={{color:"#60a5fa"}}>أخذ {m.targetGiven}</span>
-                                  <span style={{color:"#6ee7b7"}}>باقي {m.targetRem}</span>
+                                <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📦 {m.name}</div>
+                                <div style={{fontSize:"16px",color:"#fff",fontFamily:"monospace",fontWeight:"900",letterSpacing:"1px",marginTop:"2px"}}>{m.barcode}</div>
+                                <div style={{fontSize:"10px",color:"#60a5fa",marginTop:"2px"}}>🏭 {m.factory}</div>
+                                <div style={{display:"flex",gap:"6px",marginTop:"5px",fontSize:"11px",flexWrap:"wrap"}}>
+                                  <span style={{color:"#fbbf24"}}>🛒 باع {m.targetSold}</span>
+                                  <span style={{color:"#60a5fa"}}>📥 أخذ {m.targetGiven}</span>
+                                  <span style={{color:"#6ee7b7"}}>📦 باقي {m.targetRem}</span>
                                 </div>
-                                <div style={{display:"flex",gap:"8px",marginTop:"2px",fontSize:"10px"}}>
-                                  <span style={{color:"#94a3b8"}}>جاء {m.bought}</span>
-                                  <span style={{color:"#c4b5fd"}}>المستودع {m.whStock}</span>
+                                <div style={{display:"flex",gap:"6px",marginTop:"3px",fontSize:"11px",flexWrap:"wrap"}}>
+                                  <span style={{color:"#94a3b8"}}>🚚 جاء {m.bought}</span>
+                                  <span style={{color:"#c4b5fd"}}>🏬 المستودع الرئيسي {m.whStock}</span>
                                 </div>
                                 <div style={{marginTop:"8px"}}>
                                   {editKey===(fillTarget+"|"+m.barcode) ? (
                                     <div style={{display:"flex",gap:"4px",alignItems:"center",background:"#0f172a",borderRadius:"10px",padding:"4px",width:"fit-content"}}>
-                                      <span style={{fontSize:"13px",color:"#6ee7b7",fontWeight:"700"}}>🎯 باقي:</span>
+                                      <span style={{fontSize:"13px",color:"#6ee7b7",fontWeight:"700"}}>📥 باقي:</span>
                                       <input type="number" value={editVal} autoFocus onChange={e=>setEditVal(e.target.value)}
                                         style={{width:"60px",background:"#1e293b",border:"2px solid #10b981",color:"#fff",borderRadius:"8px",padding:"8px",fontSize:"18px",fontWeight:"900",textAlign:"center",fontFamily:"Cairo"}} />
                                       <button onClick={()=>saveStock(fillTarget, m.barcode, editVal)} style={{background:"#10b981",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",fontSize:"14px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>حفظ</button>
@@ -762,14 +764,14 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                                   ) : (
                                     <button onClick={()=>{setEditKey(fillTarget+"|"+m.barcode);setEditVal(String(m.targetRem));}}
                                       style={{background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.4)",color:"#6ee7b7",borderRadius:"10px",padding:"7px 12px",fontSize:"13px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>
-                                      🎯 عدّل باقي الهدف ({m.targetRem})
+                                      📥 عدّل باقي المستقبِل ({m.targetRem})
                                     </button>
                                   )}
                                 </div>
                               </div>
                               <div style={{textAlign:"center",flexShrink:0}}>
-                                <div style={{fontSize:"18px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
-                                <div style={{fontSize:"9px",color:"#64748b"}}>ينقل</div>
+                                <div style={{fontSize:"22px",fontWeight:"900",color:"#60a5fa"}}>{m.qty}</div>
+                                <div style={{fontSize:"10px",color:"#94a3b8"}}>🔄 ينقل</div>
                               </div>
                             </div>
                           ))}
