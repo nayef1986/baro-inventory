@@ -12,7 +12,7 @@ import { ProductImage, CameraScanner } from "../components/ProductImage.jsx";
 import {
   allBranches, getFactoryCode, arabicIncludes,
   allContainers, allFactoryCodes, totalPurchases,
-  soldAllPeriods, num, getSalesNames,
+  soldAllPeriods, num, getSalesNames, getBranchRemaining,
 } from "../lib/calc.js";
 import {
   exportBranchNeedReport, printBranchNeedReport,
@@ -308,7 +308,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const given = dozens * minStock;
         const ovKey = branch + "|" + p.barcode;
         const hasOverride = overrides[ovKey] !== undefined;
-        const remaining = hasOverride ? num(overrides[ovKey]) : Math.max(0, given - sold);
+        const remaining = getBranchRemaining(branch, p.barcode, periods, overrides, minStock);
         const needQty = Math.max(0, minStock - remaining);
         const bought = totalPurchases(p);
         const allSold = soldAllIndex[p.barcode] ?? 0;
@@ -329,7 +329,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
     const overrides = { ...(settings?.stockOverrides ?? {}) };
     const key = branch + "|" + barcode;
     if (val === "" || val === null) delete overrides[key];   // مسح = رجوع للتقدير
-    else overrides[key] = Math.max(0, Number(val) || 0);
+    else overrides[key] = { qty: Math.max(0, Number(val) || 0), atPeriodCount: periods.length };  // يثبّت الرقم، والمبيعات الجديدة تُخصم تلقائياً
     if (onSaveSettings) await onSaveSettings({ ...settings, stockOverrides: overrides });
     setEditRem(null); setRemInput("");
   };
