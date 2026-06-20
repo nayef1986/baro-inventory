@@ -13,6 +13,21 @@ export const pct = (part, total) =>
 
 export const safeDiv = (a, b) => (num(b) !== 0 ? num(a) / num(b) : 0);
 
+// ─── تنسيق الأرقام ──────────────────────────────────────────
+
+export const fmtN = (v) => {
+  const n = Number(v) || 0;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+};
+export const fmtM = (v) => {
+  const n = Number(v) || 0;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+};
+export const fmtPct = (v) => {
+  const n = Number(v) || 0;
+  return Math.round(n) + "%";
+};
+
 // ─── المشتريات ──────────────────────────────────────────────
 
 /**
@@ -105,6 +120,21 @@ export function branchesSoldProduct(barcode, period) {
     .sort((a, b) => b.qty - a.qty);
 }
 
+/**
+ * أسماء المنتجات من ملفات المبيعات (باركود → اسم)
+ */
+export function getSalesNames(periods) {
+  const names = {};
+  periods.forEach((period) => {
+    Object.values(period.sales ?? {}).forEach((branchData) => {
+      Object.entries(branchData).forEach(([barcode, d]) => {
+        if (d?.name && !names[barcode]) names[barcode] = d.name;
+      });
+    });
+  });
+  return names;
+}
+
 // ─── المخزون ────────────────────────────────────────────────
 
 /**
@@ -161,9 +191,6 @@ export function calcProduct(product, periods) {
 // ─── الفروع ─────────────────────────────────────────────────
 
 /**
- * كل الفروع من مجموعة فترات
- */
-/**
  * المتبقي الفعلي لمنتج في فرع — يدعم 3 حالات:
  * - لا تعديل: تقدير دزينة المبيعات ناقص المبيعات
  * - تعديل رقم قديم: ثابت
@@ -189,6 +216,9 @@ export function getBranchRemaining(branch, barcode, periods, overrides = {}, min
   return Math.max(0, baseQty - newSold);
 }
 
+/**
+ * كل الفروع من مجموعة فترات
+ */
 export function allBranches(periods) {
   const set = new Set();
   periods.forEach((period) => {
@@ -199,8 +229,6 @@ export function allBranches(periods) {
 
 /**
  * تقييم منتج في فرع
- * mode: "sold" | "closing" | "both"
- * returns: { qty, closingQty, soldPct, closingPct, rank }
  */
 export function productStrengthInBranch(product, branch, periods, mode = "sold") {
   const sold = soldAllPeriods(product.barcode, periods, branch);
@@ -218,9 +246,7 @@ export function productStrengthInBranch(product, branch, periods, mode = "sold")
 }
 
 /**
- * منتجات فرع مرتبة حسب القوة — مع فلترة كونتينر أو مصنع
- * sortBy: "sold" | "closing"
- * filter: { type: "container"|"factory"|"all", value: string }
+ * منتجات فرع مرتبة حسب القوة
  */
 export function branchProductsSorted(products, branch, periods, sortBy = "sold", filter = { type: "all" }) {
   let filtered = products;
@@ -263,7 +289,6 @@ export function branchTopBottom(products, branch, periods, sortBy = "sold", n = 
 
 /**
  * احتياج فرع من آخر فترة
- * المنطق: أول المدة = 12، الاحتياج = 12 − (أُعطي − بيع)
  */
 export function branchNeed(products, branch, period) {
   if (!period?.sales) return [];
@@ -334,8 +359,7 @@ export function containerSummary(products, containerName, periods) {
 // ─── تقرير المصنع ───────────────────────────────────────────
 
 /**
- * منتجات مصنع مع نسب مبيعاتها — جاهز للتقرير
- * threshold: النسبة التي يحددها المستخدم (مثلاً 60)
+ * منتجات مصنع مع نسب مبيعاتها
  */
 export function factoryReport(products, factoryCode, periods, threshold) {
   const facProducts = products.filter(
