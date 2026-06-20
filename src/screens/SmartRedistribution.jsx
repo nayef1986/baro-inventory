@@ -1,7 +1,7 @@
 // ─── إعادة التوزيع الذكية بالمصنع (نقل بين الفروع) ───────────────
 // يكتشف الراكد والسريع لكل مصنع عبر الفترات، يقترح نقل، وأنت تعدّل.
 import { useState, useMemo } from "react";
-import { getFactoryCode, num, allBranches, totalPurchases } from "../lib/calc.js";
+import { getFactoryCode, num, allBranches, totalPurchases, getBranchRemaining } from "../lib/calc.js";
 
 const toDozen = (n, u) => Math.ceil(n / (u||12)) * (u||12);
 
@@ -87,7 +87,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
     const unit = num(p.unitQty) || 12;
     const targetGiven = toDozen(targetSold, unit);
     const ovKey = targetBranch + "|" + bc;
-    const targetRem = overrides[ovKey] !== undefined ? num(overrides[ovKey]) : Math.max(0, targetGiven - targetSold);
+    const targetRem = getBranchRemaining(targetBranch, bc, periods, overrides, unit);
     if (targetRem >= needRem) return; // مو ناقص
     needCount++;
 
@@ -117,7 +117,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       .map(([br, sold]) => {
         const given = toDozen(sold, unit);
         const srcKey = br + "|" + bc;
-        const rem = overrides[srcKey] !== undefined ? num(overrides[srcKey]) : Math.max(0, given - sold);
+        const rem = getBranchRemaining(br, bc, periods, overrides, unit);
         return { br, sold, given, rem, city: cityOf(br, cityOverrides) };
       })
       .filter(s => (avgProdSold > 0 && s.sold < avgProdSold * 0.5 && s.rem > 0) || s.rem >= surplusRem)
@@ -197,7 +197,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     const overrides = { ...(settings?.stockOverrides ?? {}) };
     const key = br + "|" + barcode;
     if (val === "" || val === null) delete overrides[key];
-    else overrides[key] = Math.max(0, Number(val) || 0);
+    else overrides[key] = { qty: Math.max(0, Number(val) || 0), atPeriodCount: periods.length };
     if (onSaveSettings) await onSaveSettings({ ...settings, stockOverrides: overrides });
     setEditKey(null); setEditVal("");
   };
