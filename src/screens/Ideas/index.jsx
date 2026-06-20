@@ -104,7 +104,7 @@ export default function IdeasScreen({ products = [], periods = [], settings = {}
         {ready && PRODUCTS.length > 0 && (
           <div style={{display:"flex",gap:"3px",padding:"4px",background:"rgba(255,245,220,0.05)",border:"1px solid rgba(212,168,83,0.15)",borderRadius:"16px",marginBottom:"16px"}}>
             {[["suggestions","💡 اقتراحات"],["analysis","📊 تحليل"],["builder","🎨 بطاقة"]].map(([k,l])=>(
-              <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 6px",borderRadius:"12px",border:"none",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"13px",fontWeight:"700",color:tab===k?"#d4a853":"rgba(255,255,255,0.35)",background:tab===k?"rgba(212,168,83,0.15)":"transparent",border:tab===k?"1px solid rgba(212,168,83,0.3)":"1px solid transparent",transition:"all 0.25s"}}>
+              <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 6px",borderRadius:"12px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"13px",fontWeight:"700",color:tab===k?"#d4a853":"rgba(255,255,255,0.35)",background:tab===k?"rgba(212,168,83,0.15)":"transparent",border:tab===k?"1px solid rgba(212,168,83,0.3)":"1px solid transparent",transition:"all 0.25s"}}>
                 {l}
               </button>
             ))}
