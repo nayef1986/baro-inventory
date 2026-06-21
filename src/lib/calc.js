@@ -483,3 +483,148 @@ export function arabicIncludes(text, query) {
 }
 
 export { MIN_STOCK };
+
+// ─── تحليلات التقارير ───────────────────────────────────────
+
+/**
+ * تحليل إعادة الطلب لمنتج
+ */
+export function analyzeReorder(product, periods) {
+  if (!periods || periods.length === 0) return null;
+  const bought = totalPurchases(product);
+  if (bought === 0) return null;
+  const sold = soldAllPeriods(product.barcode, periods);
+  const closingQty = Math.max(0, bought - sold);
+
+  const perSales = periods.map(per => soldInPeriod(product.barcode, per));
+  const active = perSales.filter(q => q > 0);
+  if (active.length === 0) return null;
+  const avgSales = active.reduce((s, q) => s + q, 0) / active.length;
+  const lastSales = perSales[perSales.length - 1];
+
+  const monthsToEmpty = avgSales > 0 ? closingQty / avgSales : 999;
+  const daysToEmpty = Math.round(monthsToEmpty * 30);
+
+  let status = "ok";
+  if (closingQty === 0) status = "empty";
+  else if (daysToEmpty <= 30) status = "urgent";
+  else if (daysToEmpty <= 60) status = "soon";
+
+  let trend = "stable";
+  if (lastSales > avgSales * 1.2) trend = "rising";
+  else if (lastSales < avgSales * 0.8) trend = "falling";
+
+  let message = "";
+  if (status === "empty") message = "⛔ نفد المخزون";
+  else if (status === "urgent") message = `🔴 ينفد خلال ${daysToEmpty} يوم — اطلب الآن`;
+  else if (status === "soon") message = `🟡 ينفد خلال ${daysToEmpty} يوم`;
+
+  let trendMsg = "";
+  if (trend === "rising") trendMsg = "📈 الطلب يرتفع — زِد الكمية";
+  else if (trend === "falling") trendMsg = "📉 الطلب ينخفض";
+
+  return { status, trend, daysToEmpty, closing: closingQty, avgSales, lastSales, message, trendMsg };
+}
+
+/**
+ * تنبيهات ذكية (تحتاج فترتين+)
+ */
+export function getSmartAlerts(products, periods) {
+  if (!periods || periods.length < 2) return [];
+  const alerts = [];
+  const lastPer = periods[periods.length - 1];
+  const prevPer = periods[periods.length - 2];
+
+  products.forEach(p => {
+    const soldLast = soldInPeriod(p.barcode, lastPer);
+    const soldPrev = soldInPeriod(p.barcode, prevPer);
+    const bought = totalPurchases(p);
+    const closingQty = Math.max(0, bought - soldAllPeriods(p.barcode, periods));
+
+    // صاعد قوي
+    if (soldPrev > 0 && soldLast >= soldPrev * 2 && soldLast >= 6) {
+      alerts.push({
+        icon: "🚀", title: p.name, barcode: p.barcode, color: "green",
+        message: `صاعد قوي +${Math.round(((soldLast - soldPrev) / soldPrev) * 100)}%`,
+        detail: `باع ${soldPrev} → ${soldLast}`,
+      });
+    }
+    // هابط حاد
+    else if (soldPrev >= 6 && soldLast <= soldPrev * 0.4) {
+      alerts.push({
+        icon: "📉", title: p.name, barcode: p.barcode, color: "red",
+        message: `هابط حاد -${Math.round(((soldPrev - soldLast) / soldPrev) * 100)}%`,
+        detail: `باع ${soldPrev} → ${soldLast}`,
+      });
+    }
+    // يحتاج إعادة طلب
+    else if (closingQty > 0 && closingQty <= MIN_STOCK && soldLast > 0) {
+      alerts.push({
+        icon: "🔔", title: p.name, barcode: p.barcode, color: "amber",
+        message: `يحتاج إعادة طلب`,
+        detail: `متبقي ${closingQty} · باع ${soldLast} آخر فترة`,
+      });
+    }
+  });
+
+  return alerts.sort((a, b) => {
+    const order = { red: 0, green: 1, amber: 2 };
+    return order[a.color] - order[b.color];
+  });
+}
+
+/**
+ * أفضل المنتجات: ربحاً ودوراناً
+ */
+export function topProductsAnalysis(products, periods) {
+  const calc = products.map(p => {
+    const bought = totalPurchases(p);
+    const sold = soldAllPeriods(p.barcode, periods);
+    const buyPrice = avgBuyPrice(p);
+    const sellPrice = num(p.sellPrice);
+    const rev = totalRevenue(p.barcode, periods);
+    const cost = sold * buyPrice;
+    const profit = rev - cost;
+    const margin = cost > 0 ? (profit / cost) * 100 : 0;
+    const turnover = bought > 0 ? (sold / bought) * 100 : 0;
+    return { ...p, bought, sold, rev, profit, margin, turnover };
+  });
+
+  const profitable = [...calc].filter(p => p.profit > 0).sort((a, b) => b.profit - a.profit).slice(0, 30);
+  const fastest = [...calc].filter(p => p.sold > 0).sort((a, b) => b.turnover - a.turnover).slice(0, 30);
+
+  return { profitable, fastest };
+}
+
+/**
+ * تحليل ترند الفروع
+ */
+export function branchTrendAnalysis(products, periods) {
+  if (!periods || periods.length === 0) return [];
+  const branches = allBranches(periods);
+  const lastPer = periods[periods.length - 1];
+  const prevPer = periods.length >= 2 ? periods[periods.length - 2] : null;
+
+  return branches.map(branch => {
+    let totalRev = 0;
+    Object.values(lastPer.sales?.[branch] ?? {}).forEach(d => { totalRev += num(d.totalPrice); });
+
+    let growth = 0;
+    if (prevPer) {
+      let revPrev = 0;
+      Object.values(prevPer.sales?.[branch] ?? {}).forEach(d => { revPrev += num(d.totalPrice); });
+      growth = revPrev > 0 ? ((totalRev - revPrev) / revPrev) * 100 : 0;
+    }
+
+    const branchSales = lastPer.sales?.[branch] ?? {};
+    const topProducts = Object.entries(branchSales)
+      .map(([barcode, d]) => {
+        const prod = products.find(p => p.barcode === barcode);
+        return { barcode, name: prod?.name ?? barcode, qty: num(d.qty) };
+      })
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 3);
+
+    return { branch, growth, totalRev, topProducts };
+  }).sort((a, b) => b.totalRev - a.totalRev);
+}
