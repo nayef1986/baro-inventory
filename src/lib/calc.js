@@ -626,5 +626,26 @@ export function branchTrendAnalysis(products, periods) {
       .slice(0, 3);
 
     return { branch, growth, totalRev, topProducts };
+    
+
+// ─── المتبقي الفعلي مع الخصم التلقائي ───────────────────────
+export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12) {
+  const sold = soldAllPeriods(barcode, periods, branch);
+  const key = branch + "|" + barcode;
+  const ov = overrides[key];
+  if (ov === undefined || ov === null) {
+    const given = Math.ceil(sold / minStock) * minStock;
+    return Math.max(0, given - sold);
+  }
+  if (typeof ov === "number") {
+    return Math.max(0, ov);
+  }
+  const baseQty = num(ov.qty);
+  const atCount = num(ov.atPeriodCount);
+  const newPeriods = periods.slice(atCount);
+  const newSold = newPeriods.reduce((s, per) => s + soldInPeriod(barcode, per, branch), 0);
+  return Math.max(0, baseQty - newSold);
+}
+
   }).sort((a, b) => b.totalRev - a.totalRev);
 }
