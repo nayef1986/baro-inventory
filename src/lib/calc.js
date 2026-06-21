@@ -615,8 +615,7 @@ export function branchTrendAnalysis(products, periods) {
       Object.values(prevPer.sales?.[branch] ?? {}).forEach(d => { revPrev += num(d.totalPrice); });
       growth = revPrev > 0 ? ((totalRev - revPrev) / revPrev) * 100 : 0;
     }
-
-    const branchSales = lastPer.sales?.[branch] ?? {};
+        const branchSales = lastPer.sales?.[branch] ?? {};
     const topProducts = Object.entries(branchSales)
       .map(([barcode, d]) => {
         const prod = products.find(p => p.barcode === barcode);
@@ -626,7 +625,8 @@ export function branchTrendAnalysis(products, periods) {
       .slice(0, 3);
 
     return { branch, growth, totalRev, topProducts };
-    
+  }).sort((a, b) => b.totalRev - a.totalRev);
+}
 
 // ─── المتبقي الفعلي مع الخصم التلقائي ───────────────────────
 export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12) {
@@ -645,7 +645,4 @@ export function getBranchRemaining(branch, barcode, periods, overrides = {}, min
   const newPeriods = periods.slice(atCount);
   const newSold = newPeriods.reduce((s, per) => s + soldInPeriod(barcode, per, branch), 0);
   return Math.max(0, baseQty - newSold);
-}
-
-  }).sort((a, b) => b.totalRev - a.totalRev);
 }
