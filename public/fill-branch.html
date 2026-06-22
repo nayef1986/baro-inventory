@@ -127,14 +127,17 @@ function cityOf(branch, ov={}){
   if(parts.length>=3) return parts[parts.length-2];
   return "";
 }
-function getBranchRemaining(branch, bc, periods, overrides={}, minStock=MIN){
+function getBranchRemaining(branch, bc, periods, overrides={}, minStock=MIN, meta={}){
   const sold=soldAllPeriods(bc,periods,branch);
   const key=branch+"|"+bc;
   const ov=overrides[key];
   if(ov===undefined||ov===null){ const g=Math.ceil(sold/minStock)*minStock; return Math.max(0,g-sold); }
-  if(typeof ov==="number") return Math.max(0,ov);
-  const baseQty=num(ov.qty), atCount=num(ov.atPeriodCount);
-  const newSold=periods.slice(atCount).reduce((s,per)=>s+soldInPeriod(bc,per,branch),0);
+  // ov رقم (متوافق مع النظام القديم). meta[key] فيه نقطة الفترة للخصم التلقائي
+  const baseQty = typeof ov==="number" ? num(ov) : num(ov.qty);
+  const m = meta[key];
+  if(m===undefined||m===null){ return Math.max(0,baseQty); } // بدون نقطة فترة = ثابت
+  const atCount = num(m.atPeriodCount);
+  const newSold = periods.slice(atCount).reduce((s,per)=>s+soldInPeriod(bc,per,branch),0);
   return Math.max(0,baseQty-newSold);
 }
 
@@ -147,9 +150,21 @@ async function boot(){
     const [products, periods, settings] = await Promise.all([
       sbGet(KEYS.PRODUCTS), sbGet(KEYS.PERIODS), sbGet(KEYS.SETTINGS)
     ]);
-    DATA = { products:products??[], periods:periods??[], settings:settings??{}, images:{} };
+    const s = settings ?? {};
+    // ترحيل: لو stockOverrides فيها صيغة كائن قديمة {qty,atPeriodCount} → حوّلها لرقم + meta
+    // (يحمي النظام الأساسي الذي يتوقّع رقماً)
+    if(s.stockOverrides){
+      const ov={}, meta={ ...(s.stockMeta??{}) };
+      let migrated=false;
+      Object.entries(s.stockOverrides).forEach(([k,v])=>{
+        if(v && typeof v==="object"){ ov[k]=num(v.qty); meta[k]={ atPeriodCount:num(v.atPeriodCount) }; migrated=true; }
+        else ov[k]=v;
+      });
+      s.stockOverrides=ov; s.stockMeta=meta;
+      if(migrated){ try{ await sbSet(KEYS.SETTINGS, s); }catch(e){} }
+    }
+    DATA = { products:products??[], periods:periods??[], settings:s, images:{} };
     render();
-    // الصور تُحمّل بعدين (ثقيلة) — ما توقف الواجهة
     sbGet(KEYS.IMAGES).then(imgs=>{ if(imgs){ DATA.images=imgs; if(STATE.target) render(); } }).catch(()=>{});
   } catch(e){
     app.innerHTML = `<div class="empty"><div class="ic">⚠️</div><div style="font-size:15px;font-weight:900;color:#fff">خطأ في التحميل</div><div style="font-size:12px;margin-top:6px;color:#94a3b8">${esc(String(e.message||e))}</div></div>`;
@@ -161,6 +176,7 @@ function fillBranch(targetBranch){
   const { products, periods, settings } = DATA;
   const cityOverrides = settings?.cityOverrides ?? {};
   const newBranches = settings?.newBranches ?? [];
+  const stockMeta = settings?.stockMeta ?? {};
   const closed = settings?.closedBranches ?? [];
   const overrides = settings?.stockOverrides ?? {};
   const tCity = cityOf(targetBranch, cityOverrides);
@@ -188,7 +204,7 @@ function fillBranch(targetBranch){
     if(targetSold<=0) return;
     const unit=num(p.unitQty)||MIN;
     const targetGiven=toDozen(targetSold,unit);
-    const targetRem=getBranchRemaining(targetBranch,bc,periods,overrides,unit);
+    const targetRem=getBranchRemaining(targetBranch,bc,periods,overrides,unit,stockMeta);
     if(targetRem>=needRem) return;
     needCount++;
     let needQty=toDozen(Math.max(needRem-targetRem,targetSold),unit);
@@ -207,7 +223,7 @@ function fillBranch(targetBranch){
       .filter(([br])=>br!==targetBranch&&!newBranches.includes(br))
       .map(([br,sold])=>{
         const given=toDozen(sold,unit);
-        const rem=getBranchRemaining(br,bc,periods,overrides,unit);
+        const rem=getBranchRemaining(br,bc,periods,overrides,unit,stockMeta);
         return { br, sold, given, rem, city:cityOf(br,cityOverrides) };
       })
       .filter(s=>(avgProdSold>0&&s.sold<avgProdSold*0.5&&s.rem>0)||s.rem>=surplusRem)
@@ -244,20 +260,23 @@ function fillBranch(targetBranch){
 
 async function saveStock(br, barcode, val){
   const key=br+"|"+barcode;
-  // عرض فوري للموظف
+  const n = Math.max(0, Number(val)||0);
+  // عرض فوري — qty رقم (متوافق مع النظام) + meta منفصل
   const localOv={ ...(DATA.settings?.stockOverrides??{}) };
-  if(val===""||val===null) delete localOv[key];
-  else localOv[key]={ qty:Math.max(0,Number(val)||0), atPeriodCount:DATA.periods.length };
-  DATA.settings={ ...DATA.settings, stockOverrides:localOv };
+  const localMeta={ ...(DATA.settings?.stockMeta??{}) };
+  if(val===""||val===null){ delete localOv[key]; delete localMeta[key]; }
+  else { localOv[key]=n; localMeta[key]={ atPeriodCount:DATA.periods.length }; }
+  DATA.settings={ ...DATA.settings, stockOverrides:localOv, stockMeta:localMeta };
   STATE.edit=null; STATE.editVal="";
   render();
-  // حفظ آمن: نقرأ أحدث settings من Supabase وندمج التعديل (ما نمسح إعدادات غيرنا)
+  // حفظ آمن: نقرأ أحدث settings وندمج
   try {
     const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
     const ov = { ...(fresh.stockOverrides??{}) };
-    if(val===""||val===null) delete ov[key];
-    else ov[key]={ qty:Math.max(0,Number(val)||0), atPeriodCount:DATA.periods.length };
-    const merged = { ...fresh, stockOverrides:ov };
+    const meta = { ...(fresh.stockMeta??{}) };
+    if(val===""||val===null){ delete ov[key]; delete meta[key]; }
+    else { ov[key]=n; meta[key]={ atPeriodCount:DATA.periods.length }; }
+    const merged = { ...fresh, stockOverrides:ov, stockMeta:meta };
     DATA.settings = merged;
     await sbSet(KEYS.SETTINGS, merged);
   } catch(e){
@@ -406,6 +425,7 @@ window.confirmTransfer = async (srcBranch, isWh)=>{
   // اقرأ أحدث settings
   const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
   const ov = { ...(fresh.stockOverrides??{}) };
+  const meta = { ...(fresh.stockMeta??{}) };
   const transferred = { ...(fresh.transferred??{}) };
   const periodCount = DATA.periods.length;
   const batchId = (isWh?"WH":srcBranch)+"→"+STATE.target+"|"+Date.now();
@@ -413,21 +433,22 @@ window.confirmTransfer = async (srcBranch, isWh)=>{
 
   items.forEach(m=>{
     const tgtKey = STATE.target+"|"+m.barcode;
-    const tgtBefore = getBranchRemaining(STATE.target, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN);
-    // المستقبِل يزيد
-    ov[tgtKey] = { qty: tgtBefore + m.qty, atPeriodCount: periodCount };
+    const tgtBefore = getBranchRemaining(STATE.target, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN, meta);
+    // المستقبِل يزيد — qty رقم + meta منفصل
+    ov[tgtKey] = tgtBefore + m.qty;
+    meta[tgtKey] = { atPeriodCount: periodCount };
     let srcBefore = null;
     if(!isWh){
       const srcKey = srcBranch+"|"+m.barcode;
-      srcBefore = getBranchRemaining(srcBranch, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN);
-      // المرسِل ينقص
-      ov[srcKey] = { qty: Math.max(0, srcBefore - m.qty), atPeriodCount: periodCount };
+      srcBefore = getBranchRemaining(srcBranch, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN, meta);
+      ov[srcKey] = Math.max(0, srcBefore - m.qty);
+      meta[srcKey] = { atPeriodCount: periodCount };
     }
     record.items.push({ barcode:m.barcode, qty:m.qty, srcBefore, tgtBefore });
   });
 
   transferred[batchId] = record;
-  const merged = { ...fresh, stockOverrides:ov, transferred };
+  const merged = { ...fresh, stockOverrides:ov, stockMeta:meta, transferred };
   DATA.settings = merged;
   render();
   await sbSet(KEYS.SETTINGS, merged);
@@ -437,6 +458,7 @@ window.undoTransfer = async (batchId)=>{
   if(!confirm("تراجع عن هذا النقل؟ سيرجع المخزون كما كان.")) return;
   const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
   const ov = { ...(fresh.stockOverrides??{}) };
+  const meta = { ...(fresh.stockMeta??{}) };
   const transferred = { ...(fresh.transferred??{}) };
   const rec = transferred[batchId];
   if(!rec) return;
@@ -444,15 +466,17 @@ window.undoTransfer = async (batchId)=>{
 
   rec.items.forEach(it=>{
     const tgtKey = rec.to+"|"+it.barcode;
-    ov[tgtKey] = { qty: Math.max(0, it.tgtBefore), atPeriodCount: periodCount };
+    ov[tgtKey] = Math.max(0, it.tgtBefore);
+    meta[tgtKey] = { atPeriodCount: periodCount };
     if(!rec.isWh && it.srcBefore!==null){
       const srcKey = rec.from+"|"+it.barcode;
-      ov[srcKey] = { qty: Math.max(0, it.srcBefore), atPeriodCount: periodCount };
+      ov[srcKey] = Math.max(0, it.srcBefore);
+      meta[srcKey] = { atPeriodCount: periodCount };
     }
   });
 
   delete transferred[batchId];
-  const merged = { ...fresh, stockOverrides:ov, transferred };
+  const merged = { ...fresh, stockOverrides:ov, stockMeta:meta, transferred };
   DATA.settings = merged;
   render();
   await sbSet(KEYS.SETTINGS, merged);
