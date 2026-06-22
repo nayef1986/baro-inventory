@@ -707,13 +707,13 @@ function renderFill(){
     ${tCity?`<div class="c">📍 ${esc(tCity)}</div>`:""}
     <div class="n">${plan.needCount} منتج يحتاج تعبئة</div></div>`;
 
-  // أدوات التحكم
-  h += `<div class="ctrl">
-    <span class="lbl">حد النقص:</span><input type="number" value="${STATE.needRem}" onchange="setNeedRem(this.value)">
-    <span class="lbl">فائض المرسِل:</span><input type="number" value="${STATE.surplusRem}" onchange="setSurplusRem(this.value)">
+  // أدوات التحكم — الأرقام بلون مميز
+  h += `<div class="ctrl" style="background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.3)">
+    <span class="lbl" style="color:#f87171">حد النقص:</span><input type="number" value="${STATE.needRem}" onchange="setNeedRem(this.value)" style="border-color:#f87171;color:#f87171">
+    <span class="lbl" style="color:#4ade80">فائض المرسِل:</span><input type="number" value="${STATE.surplusRem}" onchange="setSurplusRem(this.value)" style="border-color:#4ade80;color:#4ade80">
     <button onclick="applyControls()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-weight:900;font-family:Cairo;cursor:pointer">تطبيق</button>
   </div>`;
-  // الأولوية — ثلاثة خيارات جنب بعض
+  // الأولوية — ثلاثة خيارات
   h += `<div class="prio"><div class="h">الأولوية في السحب:</div><div class="row">
     <button class="${STATE.priority==='stale'?'on':''}" onclick="setPriority('stale')">🔴 الراكد أولاً</button>
     <button class="${STATE.priority==='warehouse'?'on':''}" onclick="setPriority('warehouse')">🏬 المستودع أولاً</button>
@@ -727,15 +727,26 @@ function renderFill(){
     return;
   }
 
-  // أزرار الطباعة — مطابقة للأصل (مستودع + فروع، ثم الكل)
+  // الطباعة — كل مصدر + زر طباعته جنبه
   const whCount = plan.fromWarehouse.length;
   const brCount = plan.sources.reduce((s,x)=>s+x.items.length,0);
-  h += `<div class="prnt"><div class="r">
-    <button onclick="${whCount?"printPlan('warehouse')":""}" style="background:${whCount?'#1e3a5f':'#334155'};opacity:${whCount?1:0.5}">🏬 اطبع المستودع (${whCount})</button>
-    <button onclick="${brCount?"printPlan('branches')":""}" style="background:${brCount?'#475569':'#334155'};opacity:${brCount?1:0.5}">📦 اطبع الفروع (${brCount})</button>
-  </div>
-    <button onclick="printPlan('all')" style="width:100%;background:transparent;border:1px solid #475569;color:#94a3b8;font-size:12px">🖨️ اطبع الكل معاً</button>
-  </div>`;
+  h += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">`;
+  if(brCount){
+    h += `<div style="display:flex;gap:8px;align-items:center">
+      <div style="flex:1;background:#0f1626;border:1px solid #ea580c40;border-radius:12px;padding:11px 14px;font-size:13px;font-weight:900;color:#fb923c">📦 الفروع (${brCount})</div>
+      <button onclick="printPlan('branches')" style="background:#475569;color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:13px;font-weight:900;cursor:pointer;font-family:Cairo">🖨️ طباعة</button>
+    </div>`;
+  }
+  if(whCount){
+    h += `<div style="display:flex;gap:8px;align-items:center">
+      <div style="flex:1;background:#0f1626;border:1px solid #2563eb40;border-radius:12px;padding:11px 14px;font-size:13px;font-weight:900;color:#60a5fa">🏬 المستودع الرئيسي (${whCount})</div>
+      <button onclick="printPlan('warehouse')" style="background:#1e3a5f;color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:13px;font-weight:900;cursor:pointer;font-family:Cairo">🖨️ طباعة</button>
+    </div>`;
+  }
+  if(whCount && brCount){
+    h += `<button onclick="printPlan('all')" style="width:100%;background:transparent;border:1px solid #475569;color:#94a3b8;font-size:12px;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;font-family:Cairo">🖨️ اطبع الكل معاً</button>`;
+  }
+  h += `</div>`;
 
   // المستودع — قابل للطي زي الأصل
   if(plan.fromWarehouse.length){
