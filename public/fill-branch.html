@@ -198,7 +198,7 @@ function fillBranch(targetBranch){
     Object.values(brSales).forEach(s=>{ totalGiven+=toDozen(s,unit); });
     const warehouseStock=Math.max(0,bought-totalGiven);
 
-    const item={ barcode:bc, name:p.name, factory:getFactoryCode(bc), targetSold, targetGiven, targetRem, bought, whStock:warehouseStock };
+    const item={ barcode:bc, name:p.name, container:p.container??"", factory:getFactoryCode(bc), targetSold, targetGiven, targetRem, sellPrice:num(p.sellPrice), bought, whStock:warehouseStock };
 
     const allBr=Object.entries(brSales).filter(([br])=>!closed.includes(br));
     const totalProdSold=allBr.reduce((s,[,sold])=>s+sold,0);
@@ -207,8 +207,7 @@ function fillBranch(targetBranch){
       .filter(([br])=>br!==targetBranch&&!newBranches.includes(br))
       .map(([br,sold])=>{
         const given=toDozen(sold,unit);
-        const srcKey=br+"|"+bc;
-        const rem=overrides[srcKey]!==undefined?(typeof overrides[srcKey]==="number"?num(overrides[srcKey]):getBranchRemaining(br,bc,periods,overrides,unit)):Math.max(0,given-sold);
+        const rem=getBranchRemaining(br,bc,periods,overrides,unit);
         return { br, sold, given, rem, city:cityOf(br,cityOverrides) };
       })
       .filter(s=>(avgProdSold>0&&s.sold<avgProdSold*0.5&&s.rem>0)||s.rem>=surplusRem)
@@ -244,15 +243,112 @@ function fillBranch(targetBranch){
 }
 
 async function saveStock(br, barcode, val){
-  const overrides={ ...(DATA.settings?.stockOverrides??{}) };
   const key=br+"|"+barcode;
-  if(val===""||val===null) delete overrides[key];
-  else overrides[key]={ qty:Math.max(0,Number(val)||0), atPeriodCount:DATA.periods.length };
-  DATA.settings={ ...DATA.settings, stockOverrides:overrides };
+  // عرض فوري للموظف
+  const localOv={ ...(DATA.settings?.stockOverrides??{}) };
+  if(val===""||val===null) delete localOv[key];
+  else localOv[key]={ qty:Math.max(0,Number(val)||0), atPeriodCount:DATA.periods.length };
+  DATA.settings={ ...DATA.settings, stockOverrides:localOv };
   STATE.edit=null; STATE.editVal="";
   render();
-  await sbSet(KEYS.SETTINGS, DATA.settings);
+  // حفظ آمن: نقرأ أحدث settings من Supabase وندمج التعديل (ما نمسح إعدادات غيرنا)
+  try {
+    const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
+    const ov = { ...(fresh.stockOverrides??{}) };
+    if(val===""||val===null) delete ov[key];
+    else ov[key]={ qty:Math.max(0,Number(val)||0), atPeriodCount:DATA.periods.length };
+    const merged = { ...fresh, stockOverrides:ov };
+    DATA.settings = merged;
+    await sbSet(KEYS.SETTINGS, merged);
+  } catch(e){
+    await sbSet(KEYS.SETTINGS, DATA.settings);
+  }
 }
+
+// ─── الطباعة وحفظ الصورة ───
+
+function buildSourceHtml(srcLabel, items, isWh){
+  let rows = "";
+  items.forEach((m,i)=>{
+    const img = DATA.images?.[m.barcode];
+    const imgCell = img ? `<img src="${img}" class="pimg">` : `<div class="pnoimg">📦</div>`;
+    rows += `<tr><td class="rn">${i+1}</td><td>${imgCell}</td><td class="bc">${m.barcode}</td><td class="nm">${esc(m.name)}</td><td class="fc">${m.factory}</td><td class="q">${m.qty}</td></tr>`;
+  });
+  const title = isWh
+    ? `🏬 نقل من المستودع الرئيسي ← إلى الفرع: ${esc(STATE.target)}`
+    : `🔄 نقل من الفرع: ${esc(srcLabel)} ← إلى الفرع: ${esc(STATE.target)}`;
+  const d = new Date();
+  const ds = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+  return `<div class="phd"><h1>${title}</h1><div class="d">${ds} · ${DATA.settings?.brandName||"البارو"}</div></div>
+    <table><thead><tr><th>#</th><th>الصورة</th><th>الباركود</th><th>المنتج</th><th>المصنع</th><th>ينقل</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+const PRINT_STYLE = `@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+  *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+  body{padding:18px;padding-top:70px;color:#000;background:#fff}
+  .phd{text-align:center;border-bottom:3px solid #1e3a5f;padding-bottom:12px;margin-bottom:14px}
+  .phd h1{font-size:20px;color:#1e3a5f}
+  .phd .d{font-size:12px;color:#475569;margin-top:4px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#475569;color:#fff;padding:8px;font-size:12px}
+  td{border:1px solid #cbd5e1;padding:7px;font-size:13px;text-align:center}
+  .pimg{width:46px;height:46px;object-fit:cover;border-radius:6px}
+  .pnoimg{font-size:24px}
+  .rn{font-weight:900;color:#64748b}
+  .bc{font-family:monospace;font-weight:900;font-size:14px}
+  .nm{text-align:right;font-weight:700}
+  .fc{color:#1e3a5f;font-weight:700}
+  .q{font-size:18px;font-weight:900;color:#1e3a5f}`;
+
+window.printSource = (srcLabel, isWh)=>{
+  const plan = fillBranch(STATE.target);
+  const items = isWh ? plan.fromWarehouse : (plan.sources.find(s=>s.branch===srcLabel)?.items||[]);
+  if(!items.length) return;
+  const win = window.open("","_blank");
+  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تعبئة ${esc(STATE.target)}</title><style>${PRINT_STYLE}
+    @media print{.noprint{display:none}}</style></head><body>
+    ${buildSourceHtml(srcLabel, items, isWh)}
+    <div class="noprint" style="position:fixed;top:0;left:0;right:0;display:flex;gap:10px;padding:12px;background:#1e3a5f;z-index:999">
+    <button onclick="window.close()" style="flex:1;background:#475569;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:900;font-family:Cairo;cursor:pointer">✕ إغلاق</button>
+    <button onclick="window.print()" style="flex:2;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:900;font-family:Cairo;cursor:pointer">🖨️ طباعة</button>
+  </div>
+    </body></html>`);
+  win.document.close();
+};
+
+function loadHtml2Canvas(){
+  return new Promise((resolve,reject)=>{
+    if(window.html2canvas) return resolve(window.html2canvas);
+    const s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    s.onload=()=>resolve(window.html2canvas); s.onerror=reject;
+    document.head.appendChild(s);
+  });
+}
+
+window.saveSourceImage = async (srcLabel, isWh)=>{
+  const plan = fillBranch(STATE.target);
+  const items = isWh ? plan.fromWarehouse : (plan.sources.find(s=>s.branch===srcLabel)?.items||[]);
+  if(!items.length) return;
+  try{
+    const h2c = await loadHtml2Canvas();
+    const holder = document.createElement("div");
+    holder.style.cssText = "position:fixed;left:-9999px;top:0;width:560px;background:#fff;padding:18px";
+    holder.innerHTML = `<style>${PRINT_STYLE}</style>${buildSourceHtml(srcLabel, items, isWh)}`;
+    document.body.appendChild(holder);
+    const canvas = await h2c(holder, { scale:2, backgroundColor:"#fff" });
+    document.body.removeChild(holder);
+    const fn = `تعبئة-${STATE.target}-${srcLabel}.jpg`.replace(/[^\w\u0600-\u06FF.-]/g,"_");
+    const blob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.92));
+    if(blob && navigator.canShare){
+      const file = new File([blob], fn, { type:"image/jpeg" });
+      if(navigator.canShare({ files:[file] })){ await navigator.share({ files:[file] }); return; }
+    }
+    const a = document.createElement("a");
+    a.href = blob ? URL.createObjectURL(blob) : canvas.toDataURL("image/jpeg",0.92);
+    a.download = fn; a.click();
+  }catch(e){ alert("تعذّر حفظ الصورة — استخدم الطباعة"); }
+};
 
 // ─── الواجهة ───
 const app = document.getElementById("app");
@@ -265,7 +361,8 @@ function render(){
 }
 
 function renderPicker(){
-  const branches = allBranches(DATA.periods);
+  const closed = DATA.settings?.closedBranches ?? [];
+  const branches = allBranches(DATA.periods).filter(b => !closed.includes(b));
   if(branches.length===0){
     app.innerHTML = `<div class="empty"><div class="ic">📭</div><div style="font-size:16px;font-weight:900;color:#fff">لا توجد بيانات</div><div style="font-size:13px;margin-top:6px">ارفع فترات مبيعات في النظام أولاً</div></div>`;
     return;
@@ -375,30 +472,45 @@ function renderFill(){
     return;
   }
 
-  // أزرار الطباعة
+  // أزرار الطباعة — مطابقة للأصل (مستودع + فروع، ثم الكل)
+  const whCount = plan.fromWarehouse.length;
+  const brCount = plan.sources.reduce((s,x)=>s+x.items.length,0);
   h += `<div class="prnt"><div class="r">
-    <button style="background:#1e3a5f" onclick="printPlan('all')">🖨️ طباعة الكل</button>
-  </div><div class="r">
-    ${plan.fromWarehouse.length?`<button style="background:#6d28d9" onclick="printPlan('warehouse')">🏬 المستودع فقط</button>`:""}
-    ${plan.sources.length?`<button style="background:#475569" onclick="printPlan('branches')">🏪 الفروع فقط</button>`:""}
-  </div></div>`;
+    <button onclick="${whCount?"printPlan('warehouse')":""}" style="background:${whCount?'#1e3a5f':'#334155'};opacity:${whCount?1:0.5}">🏬 اطبع المستودع (${whCount})</button>
+    <button onclick="${brCount?"printPlan('branches')":""}" style="background:${brCount?'#475569':'#334155'};opacity:${brCount?1:0.5}">📦 اطبع الفروع (${brCount})</button>
+  </div>
+    <button onclick="printPlan('all')" style="width:100%;background:transparent;border:1px solid #475569;color:#94a3b8;font-size:12px">🖨️ اطبع الكل معاً</button>
+  </div>`;
 
-  // المستودع
+  // المستودع — قابل للطي زي الأصل
   if(plan.fromWarehouse.length){
-    h += `<div class="src"><div class="sh" style="background:rgba(168,139,250,0.1)"><div>
-      <div class="nm">🏬 من المستودع الرئيسي</div></div>
-      <span class="cnt">${plan.fromWarehouse.length}</span></div>`;
-    plan.fromWarehouse.forEach(m=>{ h += itemCard(m, true); });
+    const whOpen = STATE.openSrc.__wh !== false;
+    h += `<div class="src" style="border:1px solid #2563eb40"><div class="sh" onclick="toggleSrc('__wh')" style="background:rgba(37,99,235,0.08)">
+      <div class="nm">🏬 من المستودع الرئيسي</div>
+      <span class="cnt">${plan.fromWarehouse.length} منتج ${whOpen?'▲':'▼'}</span></div>`;
+    if(whOpen){
+      h += `<div style="display:flex;gap:8px;padding:10px 10px 4px">
+        <button onclick="printSource('المستودع الرئيسي',true)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #334155;background:#1e293b;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo">🖨️ طباعة</button>
+        <button onclick="saveSourceImage('المستودع الرئيسي',true)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #334155;background:#1e293b;color:#6ee7b7;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo">📷 حفظ صورة</button>
+      </div>`;
+      plan.fromWarehouse.forEach(m=>{ h += itemCard(m, true); });
+    }
     h += `</div>`;
   }
   // الفروع
   plan.sources.forEach(s=>{
     const open = STATE.openSrc[s.branch] !== false; // مفتوح افتراضياً
-    h += `<div class="src"><div class="sh" onclick="toggleSrc('${esc(s.branch).replace(/'/g,"\\'")}')" style="background:${s.sameCity?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.03)'}">
-      <div><div class="nm">🏪 ${esc(s.branch)}</div>
-      <div class="ci" style="color:${s.sameCity?'#6ee7b7':'#94a3b8'}">${s.sameCity?'✓ نفس المدينة':esc(s.city||'')}</div></div>
+    h += `<div class="src" style="border:1px solid ${s.sameCity?'#16a34a':'#ea580c'}40"><div class="sh" onclick="toggleSrc('${esc(s.branch).replace(/'/g,"\\'")}')">
+      <div><div class="nm">📤 المرسِل: ${esc(s.branch)}</div>
+      <div class="ci" style="color:${s.sameCity?'#4ade80':'#fb923c'}">${s.sameCity?`✓ نفس المدينة (${esc(s.city||'')})`:`📍 ${esc(s.city||'مدينة أخرى')}`}</div></div>
       <span class="cnt">${s.items.length} ${open?'▲':'▼'}</span></div>`;
-    if(open){ s.items.forEach(m=>{ h += itemCard(m, false); }); }
+    if(open){
+      h += `<div style="display:flex;gap:8px;padding:10px 10px 4px">
+        <button onclick="printSource('${esc(s.branch).replace(/'/g,"\\'")}',false)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #334155;background:#1e293b;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo">🖨️ طباعة</button>
+        <button onclick="saveSourceImage('${esc(s.branch).replace(/'/g,"\\'")}',false)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #334155;background:#1e293b;color:#6ee7b7;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo">📷 حفظ صورة</button>
+      </div>`;
+      s.items.forEach(m=>{ h += itemCard(m, false); });
+    }
     h += `</div>`;
   });
 
@@ -436,7 +548,7 @@ window.printPlan = (mode)=>{
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
     *{font-family:'Cairo',sans-serif;box-sizing:border-box}
-    body{padding:20px;color:#000}
+    body{padding:20px;padding-top:70px;color:#000}
     .phd{text-align:center;margin-bottom:20px;border-bottom:3px solid #1e3a5f;padding-bottom:12px}
     .phd h1{font-size:24px;color:#1e3a5f}
     .phd .d{font-size:13px;color:#475569;margin-top:4px}
@@ -452,7 +564,10 @@ window.printPlan = (mode)=>{
   </style></head><body>
   <div class="phd"><h1>🎯 بوليصة تعبئة فرع: ${esc(STATE.target)}</h1><div class="d">${new Date().toLocaleDateString("ar-SA")} · ${DATA.settings?.brandName||"البارو"}</div></div>
   ${body}
-  <button class="noprint" onclick="window.print()" style="position:fixed;bottom:20px;left:20px;background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:14px 28px;font-size:15px;font-weight:900;font-family:Cairo;cursor:pointer">🖨️ اطبع</button>
+  <div class="noprint" style="position:fixed;top:0;left:0;right:0;display:flex;gap:10px;padding:12px;background:#1e3a5f;z-index:999">
+    <button onclick="window.close()" style="flex:1;background:#475569;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:900;font-family:Cairo;cursor:pointer">✕ إغلاق</button>
+    <button onclick="window.print()" style="flex:2;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:900;font-family:Cairo;cursor:pointer">🖨️ طباعة</button>
+  </div>
   </body></html>`);
   win.document.close();
 };
