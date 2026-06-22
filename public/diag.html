@@ -83,11 +83,39 @@ async function run(){
     h+=`</div>`;
   }
 
-  // ملخص + زر التنظيف
+  // ملخص + أزرار
   h+=`<button class="copy" onclick="copyReport()">📋 نسخ التقرير</button>`;
-  h+=`<button class="fix" onclick="cleanFix()">🧹 تنظيف settings (إصلاح التعليق)</button>`;
+  h+=`<button class="fix" onclick="cleanFix()">🧹 تنظيف settings (نقل stockMeta لـFILL)</button>`;
+  h+=`<div class="box"><h2>🧪 أزرار اختبار السبب</h2>
+    <div class="row" style="color:#94a3b8;margin-bottom:8px">جرّب واحد، افتح النظام. لو اشتغل = هذا السبب. كلها تنشئ نسخة احتياطية أولاً.</div>
+    <button onclick="testRemove('stockOverrides')" style="background:#7c2d12">1️⃣ احذف stockOverrides واختبر</button>
+    <button onclick="testRemove('stockMeta')" style="background:#7c2d12">2️⃣ احذف stockMeta واختبر</button>
+    <button onclick="testRemove('transfers')" style="background:#7c2d12">3️⃣ احذف transfers واختبر</button>
+    <button onclick="restoreBackup()" style="background:#166534">↩️ استرجاع (تراجع عن الحذف)</button>
+  </div>`;
   out.innerHTML=h;
 }
+
+window.testRemove=async(field)=>{
+  if(!confirm(`حذف "${field}" من settings للاختبار؟\nبنحفظ نسخة احتياطية — تقدر ترجّعها.`)) return;
+  const r=await sbGet(KEYS.SETTINGS);
+  if(r.error||r.empty){ alert("ما قدرت أقرأ settings"); return; }
+  const s=r.value;
+  // نسخة احتياطية
+  await sbSet("baro_settings_backup", s);
+  // احذف الحقp
+  delete s[field];
+  const ok=await sbSet(KEYS.SETTINGS, s);
+  alert(ok ? `✅ حُذف "${field}".\nافتح النظام الأساسي الآن:\n- اشتغل = ${field} هو السبب\n- علّق = جرّب زر ثاني` : "⚠️ خطأ بالحفظ");
+};
+
+window.restoreBackup=async()=>{
+  const r=await sbGet("baro_settings_backup");
+  if(r.error||r.empty){ alert("ما فيه نسخة احتياطية"); return; }
+  const ok=await sbSet(KEYS.SETTINGS, r.value);
+  alert(ok ? "✅ تم الاسترجاع" : "⚠️ خطأ");
+  run();
+};
 
 window.copyReport=()=>{
   navigator.clipboard.writeText(report).then(()=>alert("تم نسخ التقرير — الصقه للمبرمج")).catch(()=>{
