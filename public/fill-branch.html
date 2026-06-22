@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>عبّي فرع — البارو</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;direction:rtl;padding:14px;padding-bottom:60px;max-width:560px;margin:0 auto}
+  .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .hd h1{font-size:20px;font-weight:900;color:#fff}
+  .hd a{background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:#93c5fd;border-radius:100px;padding:6px 12px;font-size:12px;font-weight:700;text-decoration:none}
+  .loading{text-align:center;padding:60px 20px;color:#64748b}
+  .spin{font-size:32px;animation:s 1s linear infinite;display:inline-block}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .branch-btn{width:100%;background:#0f1626;border:1px solid #2d3a52;border-radius:14px;padding:14px;text-align:right;cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;color:#e2e8f0;font-family:'Cairo'}
+  .branch-btn:active{background:#1a2540}
+  .branch-btn .nm{font-weight:900;font-size:15px}
+  .back{color:#60a5fa;font-weight:700;font-size:13px;background:none;border:none;cursor:pointer;font-family:'Cairo';margin-bottom:10px;padding:6px 0}
+  .info{background:rgba(212,168,83,0.08);border:1px solid rgba(212,168,83,0.2);border-radius:12px;padding:12px;font-size:12px;color:#d4a853;margin-bottom:12px;line-height:1.6}
+  .tgt{background:#0f1626;border:1px solid #2d3a52;border-radius:14px;padding:14px;margin-bottom:12px}
+  .tgt .t{font-size:18px;font-weight:900;color:#fff}
+  .tgt .c{font-size:12px;color:#94a3b8;margin-top:2px}
+  .tgt .n{font-size:13px;color:#d4a853;margin-top:6px;font-weight:700}
+  .ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:10px;font-size:12px;margin-bottom:10px}
+  .ctrl input{width:50px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:6px;font-weight:900;text-align:center;font-family:'Cairo'}
+  .ctrl .lbl{color:#94a3b8;font-weight:700}
+  .prio{background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:10px;margin-bottom:10px}
+  .prio .h{font-size:12px;color:#94a3b8;font-weight:700;margin-bottom:8px}
+  .prio .row{display:flex;gap:6px}
+  .prio button{flex:1;padding:9px;border-radius:10px;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:700;background:transparent;color:rgba(255,255,255,0.4);border:1px solid #2d3a52}
+  .prio button.on{background:rgba(59,130,246,0.2);color:#93c5fd;border-color:rgba(59,130,246,0.4)}
+  .prnt{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+  .prnt .r{display:flex;gap:8px}
+  .prnt button{flex:1;padding:12px;border-radius:12px;border:none;font-size:13px;font-weight:900;cursor:pointer;color:#fff;font-family:'Cairo'}
+  .src{background:#0f1626;border-radius:14px;overflow:hidden;margin-bottom:10px}
+  .src .sh{padding:13px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .src .sh .nm{font-weight:900;color:#fff;font-size:14px}
+  .src .sh .ci{font-size:11px;margin-top:2px}
+  .src .sh .cnt{background:#1e293b;color:#93c5fd;font-size:12px;font-weight:900;padding:4px 10px;border-radius:100px}
+  .item{display:flex;align-items:flex-start;gap:12px;background:rgba(255,255,255,0.04);border-radius:12px;padding:10px;margin:0 10px 6px}
+  .item img,.item .ph{width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0}
+  .item .ph{background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:26px}
+  .item .nm{font-size:13px;font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .bc{font-size:15px;color:#fff;font-family:monospace;font-weight:900;letter-spacing:1px;margin-top:2px}
+  .item .fc{font-size:10px;color:#60a5fa;margin-top:2px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:8px}
+  .b-blue{background:rgba(59,130,246,0.2);color:#93c5fd}
+  .b-amber{background:rgba(245,158,11,0.2);color:#fcd34d}
+  .b-gray{background:rgba(100,116,139,0.3);color:#cbd5e1}
+  .b-purple{background:rgba(168,139,250,0.2);color:#c4b5fd}
+  .b-red{background:rgba(239,68,68,0.2);color:#fca5a5}
+  .b-green{background:rgba(34,197,94,0.2);color:#6ee7b7}
+  .qty{text-align:center;flex-shrink:0}
+  .qty .n{font-size:22px;font-weight:900;color:#60a5fa}
+  .qty .l{font-size:10px;color:#94a3b8}
+  .editrow{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .editrow button{flex:1;border-radius:10px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Cairo'}
+  .ed-amber{background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#fcd34d}
+  .ed-green{background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7}
+  .editbox{display:flex;gap:4px;align-items:center;background:#0f172a;border-radius:10px;padding:4px}
+  .editbox span{font-size:12px;font-weight:700}
+  .editbox input{width:56px;background:#1e293b;border:2px solid #10b981;color:#fff;border-radius:8px;padding:8px;font-size:18px;font-weight:900;text-align:center;font-family:'Cairo'}
+  .editbox .sv{background:#10b981;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:900;cursor:pointer;font-family:'Cairo'}
+  .editbox .cx{background:#475569;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-size:14px;cursor:pointer;font-family:'Cairo'}
+  .empty{text-align:center;padding:50px 20px;color:#64748b}
+  .empty .ic{font-size:36px;margin-bottom:10px}
+  .whbar{background:rgba(168,139,250,0.08);border-top:1px solid rgba(255,255,255,0.06);padding:8px 10px;margin-top:6px}
+  .whbar .h{font-size:10px;color:#c4b5fd;font-weight:700;margin-bottom:3px}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading"><span class="spin">⏳</span><div style="margin-top:12px">جاري التحميل…</div></div></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+const KEYS = { PRODUCTS:"baro_products_v2", PERIODS:"baro_periods_v2", SETTINGS:"baro_settings_v2", IMAGES:"baro_images_v2" };
+const MIN = 12;
+
+async function sbGet(key){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}&select=value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }});
+    if(!res.ok) return null;
+    const rows = await res.json();
+    if(!rows?.length) return null;
+    return JSON.parse(rows[0].value);
+  }catch{ return null; }
+}
+async function sbSet(key,value){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`,{
+      method:"POST",
+      headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+      body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }),
+    });
+    return res.ok;
+  }catch{ return false; }
+}
+
+const num = v => Number(v)||0;
+const toDozen = (n,u) => Math.ceil(n/(u||MIN))*(u||MIN);
+const fmtN = v => (Number(v)||0).toLocaleString("en-US",{maximumFractionDigits:0});
+const getFactoryCode = bc => { const s=String(bc??"").trim(); return s.length<5?s:s.slice(0,5); };
+
+function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
+function soldInPeriod(bc, per, branch){
+  if(!per?.sales) return 0;
+  if(branch) return num(per.sales[branch]?.[bc]?.qty);
+  return Object.values(per.sales).reduce((s,bd)=>s+num(bd[bc]?.qty),0);
+}
+function soldAllPeriods(bc, periods, branch){
+  return periods.reduce((s,per)=>s+soldInPeriod(bc,per,branch),0);
+}
+function allBranches(periods){
+  const set=new Set();
+  periods.forEach(per=>Object.keys(per.sales??{}).forEach(b=>set.add(b)));
+  return [...set].sort();
+}
+function cityOf(branch, ov={}){
+  if(ov[branch]) return ov[branch];
+  const parts=String(branch).split("-").map(p=>p.trim());
+  if(parts.length>=3) return parts[parts.length-2];
+  return "";
+}
+function getBranchRemaining(branch, bc, periods, overrides={}, minStock=MIN){
+  const sold=soldAllPeriods(bc,periods,branch);
+  const key=branch+"|"+bc;
+  const ov=overrides[key];
+  if(ov===undefined||ov===null){ const g=Math.ceil(sold/minStock)*minStock; return Math.max(0,g-sold); }
+  if(typeof ov==="number") return Math.max(0,ov);
+  const baseQty=num(ov.qty), atCount=num(ov.atPeriodCount);
+  const newSold=periods.slice(atCount).reduce((s,per)=>s+soldInPeriod(bc,per,branch),0);
+  return Math.max(0,baseQty-newSold);
+}
+
+// ─── الحالة ───
+let DATA = { products:[], periods:[], settings:{}, images:{} };
+let STATE = { target:null, needRem:6, surplusRem:12, priority:"stale", openSrc:{}, edit:null, editVal:"" };
+
+async function boot(){
+  const [products, periods, settings, images] = await Promise.all([
+    sbGet(KEYS.PRODUCTS), sbGet(KEYS.PERIODS), sbGet(KEYS.SETTINGS), sbGet(KEYS.IMAGES)
+  ]);
+  DATA = { products:products??[], periods:periods??[], settings:settings??{}, images:images??{} };
+  render();
+}
+
+// ─── حساب التعبئة ───
+function fillBranch(targetBranch){
+  const { products, periods, settings } = DATA;
+  const cityOverrides = settings?.cityOverrides ?? {};
+  const newBranches = settings?.newBranches ?? [];
+  const closed = settings?.closedBranches ?? [];
+  const overrides = settings?.stockOverrides ?? {};
+  const tCity = cityOf(targetBranch, cityOverrides);
+  const { needRem, surplusRem, priority } = STATE;
+
+  const salesByProd = {};
+  periods.forEach(per=>{
+    Object.entries(per.sales??{}).forEach(([br,d])=>{
+      if(closed.includes(br)) return;
+      Object.keys(d).forEach(bc=>{
+        if(!salesByProd[bc]) salesByProd[bc]={};
+        salesByProd[bc][br]=(salesByProd[bc][br]??0)+num(d[bc]?.qty??0);
+      });
+    });
+  });
+
+  const fromSources = {};
+  const fromWarehouse = [];
+  let needCount = 0;
+
+  products.forEach(p=>{
+    const bc=p.barcode;
+    const brSales=salesByProd[bc]??{};
+    const targetSold=brSales[targetBranch]??0;
+    if(targetSold<=0) return;
+    const unit=num(p.unitQty)||MIN;
+    const targetGiven=toDozen(targetSold,unit);
+    const targetRem=getBranchRemaining(targetBranch,bc,periods,overrides,unit);
+    if(targetRem>=needRem) return;
+    needCount++;
+    let needQty=toDozen(Math.max(needRem-targetRem,targetSold),unit);
+
+    const bought=totalPurchases(p);
+    let totalGiven=0;
+    Object.values(brSales).forEach(s=>{ totalGiven+=toDozen(s,unit); });
+    const warehouseStock=Math.max(0,bought-totalGiven);
+
+    const item={ barcode:bc, name:p.name, factory:getFactoryCode(bc), targetSold, targetGiven, targetRem, bought, whStock:warehouseStock };
+
+    const allBr=Object.entries(brSales).filter(([br])=>!closed.includes(br));
+    const totalProdSold=allBr.reduce((s,[,sold])=>s+sold,0);
+    const avgProdSold=allBr.length>0?totalProdSold/allBr.length:0;
+    const candidates=allBr
+      .filter(([br])=>br!==targetBranch&&!newBranches.includes(br))
+      .map(([br,sold])=>{
+        const given=toDozen(sold,unit);
+        const srcKey=br+"|"+bc;
+        const rem=overrides[srcKey]!==undefined?(typeof overrides[srcKey]==="number"?num(overrides[srcKey]):getBranchRemaining(br,bc,periods,overrides,unit)):Math.max(0,given-sold);
+        return { br, sold, given, rem, city:cityOf(br,cityOverrides) };
+      })
+      .filter(s=>(avgProdSold>0&&s.sold<avgProdSold*0.5&&s.rem>0)||s.rem>=surplusRem)
+      .sort((a,b)=>{ const ac=a.city===tCity?0:1, bc2=b.city===tCity?0:1; return ac-bc2||b.rem-a.rem; });
+
+    const takeFromBranch=()=>{
+      if(candidates.length===0) return;
+      const src=candidates[0];
+      const moveQty=Math.min(Math.max(src.rem,unit),needQty);
+      if(moveQty>=unit/2){
+        const sameCity=src.city===tCity;
+        if(!fromSources[src.br]) fromSources[src.br]={ sameCity, city:src.city, items:[] };
+        fromSources[src.br].items.push({ ...item, qty:moveQty, srcBranch:src.br, srcGiven:src.given, srcRem:src.rem, srcSold:src.sold, srcStale:avgProdSold>0&&src.sold<avgProdSold*0.5 });
+        needQty-=moveQty;
+      }
+    };
+    const takeFromWarehouse=()=>{
+      if(warehouseStock>=unit&&needQty>=unit/2){
+        const fromWh=Math.min(warehouseStock,needQty);
+        fromWarehouse.push({ ...item, qty:fromWh });
+        needQty-=fromWh;
+      }
+    };
+
+    if(warehouseStock>=needQty){ takeFromWarehouse(); }
+    else if(priority==="stale"){ takeFromBranch(); takeFromWarehouse(); }
+    else { takeFromWarehouse(); if(needQty>=unit/2) takeFromBranch(); }
+  });
+
+  const sources=Object.entries(fromSources).map(([br,d])=>({ branch:br, ...d }))
+    .sort((a,b)=>(a.sameCity?0:1)-(b.sameCity?0:1)||b.items.length-a.items.length);
+  return { sources, fromWarehouse, needCount, tCity };
+}
+
+async function saveStock(br, barcode, val){
+  const overrides={ ...(DATA.settings?.stockOverrides??{}) };
+  const key=br+"|"+barcode;
+  if(val===""||val===null) delete overrides[key];
+  else overrides[key]={ qty:Math.max(0,Number(val)||0), atPeriodCount:DATA.periods.length };
+  DATA.settings={ ...DATA.settings, stockOverrides:overrides };
+  STATE.edit=null; STATE.editVal="";
+  render();
+  await sbSet(KEYS.SETTINGS, DATA.settings);
+}
+
+// ─── الواجهة ───
+const app = document.getElementById("app");
+
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function render(){
+  if(!STATE.target){ renderPicker(); return; }
+  renderFill();
+}
+
+function renderPicker(){
+  const branches = allBranches(DATA.periods);
+  if(branches.length===0){
+    app.innerHTML = `<div class="empty"><div class="ic">📭</div><div style="font-size:16px;font-weight:900;color:#fff">لا توجد بيانات</div><div style="font-size:13px;margin-top:6px">ارفع فترات مبيعات في النظام أولاً</div></div>`;
+    return;
+  }
+  let h = `<div class="hd"><h1>🎯 عبّي فرع</h1><a href="https://baro-inventory-qmpp.vercel.app">النظام ←</a></div>`;
+  h += `<div class="info">اختر الفرع الذي تريد تعبئته. النظام يجمّع نواقصه من المستودع والفروع الراكدة — نفس المدينة أولوية.</div>`;
+  branches.forEach(b=>{
+    const city = cityOf(b, DATA.settings?.cityOverrides??{});
+    h += `<button class="branch-btn" onclick="pick('${esc(b).replace(/'/g,"\\'")}')">
+      <span class="nm">🏪 ${esc(b)}</span>
+      ${city?`<span style="font-size:11px;color:#94a3b8">${esc(city)}</span>`:""}
+    </button>`;
+  });
+  app.innerHTML = h;
+}
+
+window.pick = (b)=>{ STATE.target=b; STATE.edit=null; render(); };
+window.back = ()=>{ STATE.target=null; STATE.edit=null; render(); };
+window.setPriority = (p)=>{ STATE.priority=p; render(); };
+window.setNeedRem = (v)=>{ STATE.needRem=Math.max(0,Number(v)||0); };
+window.setSurplusRem = (v)=>{ STATE.surplusRem=Math.max(0,Number(v)||0); };
+window.applyControls = ()=>{ render(); };
+window.toggleSrc = (br)=>{ STATE.openSrc[br]=!STATE.openSrc[br]; render(); };
+window.startEdit = (key,val)=>{ STATE.edit=key; STATE.editVal=String(val); render(); };
+window.cancelEdit = ()=>{ STATE.edit=null; STATE.editVal=""; render(); };
+window.onEditInput = (v)=>{ STATE.editVal=v; };
+window.doSave = (br,bc)=>{ saveStock(br,bc,STATE.editVal); };
+
+function itemCard(m, isWh){
+  const img = DATA.images?.[m.barcode];
+  const imgHtml = img ? `<img src="${img}" alt="">` : `<div class="ph">📦</div>`;
+  const tKey = STATE.target+"|"+m.barcode;
+  const sKey = (m.srcBranch||"")+"|"+m.barcode;
+
+  let editHtml;
+  if(STATE.edit===tKey){
+    editHtml = `<div class="editbox"><span style="color:#6ee7b7">المستقبِل:</span>
+      <input type="number" value="${esc(STATE.editVal)}" oninput="onEditInput(this.value)" autofocus>
+      <button class="sv" onclick="doSave('${esc(STATE.target).replace(/'/g,"\\'")}','${m.barcode}')">حفظ</button>
+      <button class="cx" onclick="cancelEdit()">✕</button></div>`;
+  } else if(!isWh && STATE.edit===sKey){
+    editHtml = `<div class="editbox"><span style="color:#fcd34d">المرسِل:</span>
+      <input type="number" value="${esc(STATE.editVal)}" oninput="onEditInput(this.value)" autofocus style="border-color:#f59e0b">
+      <button class="sv" style="background:#f59e0b;color:#0a0804" onclick="doSave('${esc(m.srcBranch).replace(/'/g,"\\'")}','${m.barcode}')">حفظ</button>
+      <button class="cx" onclick="cancelEdit()">✕</button></div>`;
+  } else {
+    editHtml = `<div class="editrow">`;
+    if(!isWh){
+      editHtml += `<button class="ed-amber" onclick="startEdit('${sKey.replace(/'/g,"\\'")}',${m.srcRem})">✏️ عدّل مخزون المرسِل</button>`;
+    }
+    editHtml += `<button class="ed-green" onclick="startEdit('${tKey.replace(/'/g,"\\'")}',${m.targetRem})">✏️ عدّل مخزون المستقبِل</button></div>`;
+  }
+
+  // معلومات المستقبِل
+  let info = `<div style="margin-top:6px"><div style="font-size:10px;color:#6ee7b7;font-weight:700;margin-bottom:3px">📥 المستقبِل (${esc(STATE.target)})</div><div class="badges">
+    <span class="badge b-amber">باع ${m.targetSold}</span>
+    <span class="badge b-blue">أخذ ${m.targetGiven}</span>
+    <span class="badge b-gray">باقي ${m.targetRem}</span></div></div>`;
+  // معلومات المرسِل (للفروع فقط)
+  if(!isWh){
+    info += `<div style="margin-top:6px"><div style="font-size:10px;font-weight:700;margin-bottom:3px;color:${m.srcStale?'#fca5a5':'#6ee7b7'}">📤 المرسِل (${esc(m.srcBranch)}) · ${m.srcStale?'🔴 راكد':'🟢 قوي'}</div><div class="badges">
+      <span class="badge b-amber">باع ${m.srcSold}</span>
+      <span class="badge b-blue">أخذ ${m.srcGiven}</span>
+      <span class="badge b-gray">باقي ${m.srcRem}</span></div></div>`;
+  }
+
+  return `<div class="item">
+    ${imgHtml}
+    <div style="flex:1;min-width:0">
+      <div class="nm">${esc(m.name)}</div>
+      <div class="bc">${m.barcode}</div>
+      <div class="fc">🏭 ${m.factory}</div>
+      ${info}
+      ${editHtml}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06)">
+        <div style="font-size:10px;color:#c4b5fd;font-weight:700;margin-bottom:3px">🏬 المستودع الرئيسي</div>
+        <div class="badges"><span class="badge b-blue">جاء ${m.bought}</span><span class="badge b-purple">باقي ${m.whStock}</span></div>
+      </div>
+    </div>
+    <div class="qty"><div class="n">${m.qty}</div><div class="l">🔄 ينقل</div></div>
+  </div>`;
+}
+
+function renderFill(){
+  const plan = fillBranch(STATE.target);
+  const tCity = plan.tCity;
+  let h = `<button class="back" onclick="back()">← رجوع للفروع</button>`;
+  h += `<div class="tgt"><div class="t">🎯 تعبئة: ${esc(STATE.target)}</div>
+    ${tCity?`<div class="c">📍 ${esc(tCity)}</div>`:""}
+    <div class="n">${plan.needCount} منتج يحتاج تعبئة</div></div>`;
+
+  // أدوات التحكم
+  h += `<div class="ctrl">
+    <span class="lbl">حد النقص:</span><input type="number" value="${STATE.needRem}" onchange="setNeedRem(this.value)">
+    <span class="lbl">فائض المرسِل:</span><input type="number" value="${STATE.surplusRem}" onchange="setSurplusRem(this.value)">
+    <button onclick="applyControls()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-weight:900;font-family:Cairo;cursor:pointer">تطبيق</button>
+  </div>`;
+  // الأولوية
+  h += `<div class="prio"><div class="h">الأولوية في السحب:</div><div class="row">
+    <button class="${STATE.priority==='stale'?'on':''}" onclick="setPriority('stale')">🔴 الراكد أولاً</button>
+    <button class="${STATE.priority==='warehouse'?'on':''}" onclick="setPriority('warehouse')">🏬 المستودع أولاً</button>
+  </div></div>`;
+
+  if(plan.sources.length===0 && plan.fromWarehouse.length===0){
+    h += `<div class="empty"><div class="ic">✅</div><div style="font-size:15px;font-weight:900;color:#fff">لا يوجد نقص</div><div style="font-size:13px;margin-top:6px">الفرع مكتفٍ — ما يحتاج تعبئة</div></div>`;
+    app.innerHTML = h;
+    return;
+  }
+
+  // أزرار الطباعة
+  h += `<div class="prnt"><div class="r">
+    <button style="background:#1e3a5f" onclick="printPlan('all')">🖨️ طباعة الكل</button>
+  </div><div class="r">
+    ${plan.fromWarehouse.length?`<button style="background:#6d28d9" onclick="printPlan('warehouse')">🏬 المستودع فقط</button>`:""}
+    ${plan.sources.length?`<button style="background:#475569" onclick="printPlan('branches')">🏪 الفروع فقط</button>`:""}
+  </div></div>`;
+
+  // المستودع
+  if(plan.fromWarehouse.length){
+    h += `<div class="src"><div class="sh" style="background:rgba(168,139,250,0.1)"><div>
+      <div class="nm">🏬 من المستودع الرئيسي</div></div>
+      <span class="cnt">${plan.fromWarehouse.length}</span></div>`;
+    plan.fromWarehouse.forEach(m=>{ h += itemCard(m, true); });
+    h += `</div>`;
+  }
+  // الفروع
+  plan.sources.forEach(s=>{
+    const open = STATE.openSrc[s.branch] !== false; // مفتوح افتراضياً
+    h += `<div class="src"><div class="sh" onclick="toggleSrc('${esc(s.branch).replace(/'/g,"\\'")}')" style="background:${s.sameCity?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.03)'}">
+      <div><div class="nm">🏪 ${esc(s.branch)}</div>
+      <div class="ci" style="color:${s.sameCity?'#6ee7b7':'#94a3b8'}">${s.sameCity?'✓ نفس المدينة':esc(s.city||'')}</div></div>
+      <span class="cnt">${s.items.length} ${open?'▲':'▼'}</span></div>`;
+    if(open){ s.items.forEach(m=>{ h += itemCard(m, false); }); }
+    h += `</div>`;
+  });
+
+  app.innerHTML = h;
+}
+
+// ─── الطباعة ───
+window.printPlan = (mode)=>{
+  const plan = fillBranch(STATE.target);
+  const showWh = mode==="all"||mode==="warehouse";
+  const showBr = mode==="all"||mode==="branches";
+  let body = "";
+
+  const section = (title, items, isWh)=>{
+    let s = `<div class="psec"><div class="pst">${title}</div><table><thead><tr><th>الصورة</th><th>المنتج</th><th>الباركود</th><th>المصنع</th><th>ينقل</th></tr></thead><tbody>`;
+    items.forEach(m=>{
+      const img = DATA.images?.[m.barcode];
+      s += `<tr><td>${img?`<img src="${img}">`:'📦'}</td><td>${esc(m.name)}</td><td class="mono">${m.barcode}</td><td>${m.factory}</td><td class="q">${m.qty}</td></tr>`;
+    });
+    s += `</tbody></table></div>`;
+    return s;
+  };
+
+  if(showWh && plan.fromWarehouse.length){
+    body += section(`🏬 نقل من المستودع الرئيسي ← إلى الفرع: ${esc(STATE.target)}`, plan.fromWarehouse, true);
+  }
+  if(showBr){
+    plan.sources.forEach(s=>{
+      body += section(`🔄 نقل من الفرع: ${esc(s.branch)} ← إلى الفرع: ${esc(STATE.target)}${s.sameCity?' (نفس المدينة)':''}`, s.items, false);
+    });
+  }
+
+  const win = window.open("", "_blank");
+  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>بوليصة تعبئة ${esc(STATE.target)}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo',sans-serif;box-sizing:border-box}
+    body{padding:20px;color:#000}
+    .phd{text-align:center;margin-bottom:20px;border-bottom:3px solid #1e3a5f;padding-bottom:12px}
+    .phd h1{font-size:24px;color:#1e3a5f}
+    .phd .d{font-size:13px;color:#475569;margin-top:4px}
+    .psec{margin-bottom:24px;page-break-inside:avoid}
+    .pst{background:#1e3a5f;color:#fff;padding:10px 14px;border-radius:8px;font-size:15px;font-weight:900;margin-bottom:8px}
+    table{width:100%;border-collapse:collapse}
+    th{background:#475569;color:#fff;padding:8px;font-size:12px}
+    td{border:1px solid #cbd5e1;padding:8px;font-size:13px;text-align:center}
+    td img{width:46px;height:46px;object-fit:cover;border-radius:6px}
+    .mono{font-family:monospace;font-weight:900;font-size:14px}
+    .q{font-size:18px;font-weight:900;color:#1e3a5f}
+    @media print{.noprint{display:none}}
+  </style></head><body>
+  <div class="phd"><h1>🎯 بوليصة تعبئة فرع: ${esc(STATE.target)}</h1><div class="d">${new Date().toLocaleDateString("ar-SA")} · ${DATA.settings?.brandName||"البارو"}</div></div>
+  ${body}
+  <button class="noprint" onclick="window.print()" style="position:fixed;bottom:20px;left:20px;background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:14px 28px;font-size:15px;font-weight:900;font-family:Cairo;cursor:pointer">🖨️ اطبع</button>
+  </body></html>`);
+  win.document.close();
+};
+
+boot();
+</script>
+</body>
+</html>
