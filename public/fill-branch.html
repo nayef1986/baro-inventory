@@ -143,7 +143,16 @@ function getBranchRemaining(branch, bc, periods, overrides={}, minStock=MIN, met
 
 // ─── الحالة ───
 let DATA = { products:[], periods:[], settings:{}, images:{} };
-let STATE = { target:null, needRem:6, surplusRem:12, priority:"stale", openSrc:{}, edit:null, editVal:"" };
+let STATE = { target:null, view:null, needRem:6, surplusRem:12, priority:"stale", openSrc:{}, edit:null, editVal:"", qtyEdits:{}, qtyEditKey:null, qtyEditVal:"", logSub:"transfers" };
+let WORKER = "";
+try { WORKER = localStorage.getItem("baro_worker") || ""; } catch {}
+window.setWorker = (name)=>{
+  const n = String(name||"").trim();
+  if(!n) return;
+  WORKER = n;
+  try { localStorage.setItem("baro_worker", n); } catch {}
+  render();
+};
 
 async function boot(){
   try {
@@ -248,7 +257,8 @@ function fillBranch(targetBranch){
       }
     };
 
-    if(warehouseStock>=needQty){ takeFromWarehouse(); }
+    if(priority==="staleonly"){ takeFromBranch(); }  // الراكد فقط — بدون مستودع
+    else if(warehouseStock>=needQty){ takeFromWarehouse(); }
     else if(priority==="stale"){ takeFromBranch(); takeFromWarehouse(); }
     else { takeFromWarehouse(); if(needQty>=unit/2) takeFromBranch(); }
   });
@@ -261,6 +271,8 @@ function fillBranch(targetBranch){
 async function saveStock(br, barcode, val){
   const key=br+"|"+barcode;
   const n = Math.max(0, Number(val)||0);
+  const prod = DATA.products.find(p=>p.barcode===barcode);
+  const before = getBranchRemaining(br, barcode, DATA.periods, DATA.settings?.stockOverrides??{}, num(prod?.unitQty)||MIN, DATA.settings?.stockMeta??{});
   // عرض فوري — qty رقم (متوافق مع النظام) + meta منفصل
   const localOv={ ...(DATA.settings?.stockOverrides??{}) };
   const localMeta={ ...(DATA.settings?.stockMeta??{}) };
@@ -276,7 +288,11 @@ async function saveStock(br, barcode, val){
     const meta = { ...(fresh.stockMeta??{}) };
     if(val===""||val===null){ delete ov[key]; delete meta[key]; }
     else { ov[key]=n; meta[key]={ atPeriodCount:DATA.periods.length }; }
-    const merged = { ...fresh, stockOverrides:ov, stockMeta:meta };
+    // سجل التعديل
+    const editLog = Array.isArray(fresh.editLog) ? [...fresh.editLog] : [];
+    editLog.unshift({ branch:br, barcode, name:prod?.name||barcode, from:before, to:(val===""||val===null?null:n), worker:WORKER, ts:Date.now() });
+    if(editLog.length>200) editLog.length=200; // حد أقصى
+    const merged = { ...fresh, stockOverrides:ov, stockMeta:meta, editLog };
     DATA.settings = merged;
     await sbSet(KEYS.SETTINGS, merged);
   } catch(e){
@@ -291,7 +307,8 @@ function buildSourceHtml(srcLabel, items, isWh){
   items.forEach((m,i)=>{
     const img = DATA.images?.[m.barcode];
     const imgCell = img ? `<img src="${img}" class="pimg">` : `<div class="pnoimg">📦</div>`;
-    rows += `<tr><td class="rn">${i+1}</td><td>${imgCell}</td><td class="bc">${m.barcode}</td><td class="nm">${esc(m.name)}</td><td class="fc">${m.factory}</td><td class="q">${m.qty}</td></tr>`;
+    const q = effectiveQty(m, isWh);
+    rows += `<tr><td class="rn">${i+1}</td><td>${imgCell}</td><td class="bc">${m.barcode}</td><td class="nm">${esc(m.name)}</td><td class="fc">${m.factory}</td><td class="q">${q}</td></tr>`;
   });
   const title = isWh
     ? `🏬 نقل من المستودع الرئيسي ← إلى الفرع: ${esc(STATE.target)}`
@@ -375,9 +392,96 @@ const app = document.getElementById("app");
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 function render(){
+  if(!WORKER){ renderWorkerAsk(); return; }
+  if(STATE.view==="log"){ renderLog(); return; }
   if(!STATE.target){ renderPicker(); return; }
   renderFill();
 }
+
+function renderWorkerAsk(){
+  app.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;padding:20px">
+    <div style="font-size:48px;margin-bottom:16px">👤</div>
+    <div style="font-size:20px;font-weight:900;color:#fff;margin-bottom:8px">مرحباً</div>
+    <div style="font-size:14px;color:#94a3b8;margin-bottom:20px;text-align:center">اكتب اسمك ليُسجّل مع عمليات النقل والتعديل</div>
+    <input id="wkr" type="text" placeholder="اسمك" style="width:100%;max-width:280px;background:#1e293b;border:2px solid #3b82f6;color:#fff;border-radius:12px;padding:14px;font-size:16px;font-weight:700;text-align:center;font-family:Cairo;margin-bottom:14px" onkeydown="if(event.key==='Enter')setWorker(document.getElementById('wkr').value)">
+    <button onclick="setWorker(document.getElementById('wkr').value)" style="width:100%;max-width:280px;background:#3b82f6;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:900;cursor:pointer;font-family:Cairo">دخول</button>
+  </div>`;
+  setTimeout(()=>{ const el=document.getElementById("wkr"); if(el) el.focus(); }, 50);
+}
+
+window.showLog = ()=>{ STATE.view="log"; render(); };
+window.closeLog = ()=>{ STATE.view=null; render(); };
+
+function renderLog(){
+  const sub = STATE.logSub || "transfers";
+  let h = `<button class="back" onclick="closeLog()">← رجوع</button>`;
+  h += `<div class="hd"><h1>📋 السجل</h1><span style="font-size:12px;color:#94a3b8">👤 ${esc(WORKER)}</span></div>`;
+  // تبويبين
+  h += `<div style="display:flex;gap:6px;background:rgba(255,255,255,0.04);border-radius:12px;padding:4px;margin-bottom:14px">
+    ${[["transfers","🔄 النقل"],["edits","✏️ التعديلات"]].map(([k,l])=>`
+      <button onclick="setLogSub('${k}')" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:Cairo;font-size:13px;font-weight:700;background:${sub===k?'rgba(59,130,246,0.2)':'transparent'};color:${sub===k?'#93c5fd':'rgba(255,255,255,0.4)'}">${l}</button>`).join("")}
+  </div>`;
+
+  if(sub==="transfers"){
+    const transferred = DATA.settings?.transferred ?? {};
+    const list = Object.entries(transferred).sort((a,b)=>(b[1].ts||0)-(a[1].ts||0));
+    if(list.length===0){
+      h += `<div class="empty"><div class="ic">📭</div><div style="font-size:15px;font-weight:900;color:#fff">لا يوجد نقل منفّذ</div></div>`;
+    } else {
+      list.forEach(([batchId, rec])=>{
+        const d = new Date(rec.ts||0);
+        const ds = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+        const totalQty = rec.items.reduce((s,it)=>s+num(it.qty),0);
+        h += `<div style="background:#0f1626;border:1px solid #16a34a40;border-radius:14px;padding:14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div><div style="font-size:15px;font-weight:900;color:#fff">🔄 ${esc(rec.fromLabel||rec.from)} ← ${esc(rec.to)}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:3px">📅 ${ds}${rec.worker?` · 👤 ${esc(rec.worker)}`:""}</div></div>
+            <button onclick="undoTransfer('${batchId.replace(/'/g,"\\'")}')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:9px;padding:9px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo">↩️ تراجع</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <span class="badge b-green">${rec.items.length} منتج</span>
+            <span class="badge b-blue">إجمالي ${totalQty} قطعة</span>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:8px">`;
+        rec.items.forEach(it=>{
+          const prod = DATA.products.find(p=>p.barcode===it.barcode);
+          const img = DATA.images?.[it.barcode];
+          h += `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+            ${img?`<img src="${img}" style="width:36px;height:36px;border-radius:7px;object-fit:cover;flex-shrink:0">`:`<div style="width:36px;height:36px;border-radius:7px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📦</div>`}
+            <div style="flex:1;min-width:0"><div style="font-size:12px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(prod?.name||it.barcode)}</div>
+            <div style="font-size:12px;color:#fff;font-family:monospace;font-weight:700">${it.barcode}</div></div>
+            <div style="font-size:17px;font-weight:900;color:#60a5fa;flex-shrink:0">${it.qty}</div>
+          </div>`;
+        });
+        h += `</div></div>`;
+      });
+    }
+  } else {
+    // التعديلات
+    const editLog = Array.isArray(DATA.settings?.editLog) ? DATA.settings.editLog : [];
+    if(editLog.length===0){
+      h += `<div class="empty"><div class="ic">📭</div><div style="font-size:15px;font-weight:900;color:#fff">لا توجد تعديلات</div></div>`;
+    } else {
+      editLog.forEach(e=>{
+        const d = new Date(e.ts||0);
+        const ds = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+        const img = DATA.images?.[e.barcode];
+        h += `<div style="background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+          ${img?`<img src="${img}" style="width:42px;height:42px;border-radius:8px;object-fit:cover;flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:8px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📦</div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name||e.barcode)}</div>
+            <div style="font-size:11px;color:#94a3b8">🏪 ${esc(e.branch)} · ${ds}${e.worker?` · 👤 ${esc(e.worker)}`:""}</div>
+          </div>
+          <div style="text-align:center;flex-shrink:0">
+            <div style="font-size:12px;color:#94a3b8">${e.from} ← <span style="color:#fcd34d;font-size:16px;font-weight:900">${e.to===null?'حُذف':e.to}</span></div>
+          </div>
+        </div>`;
+      });
+    }
+  }
+  app.innerHTML = h;
+}
+window.setLogSub = (s)=>{ STATE.logSub=s; render(); };
 
 function renderPicker(){
   const closed = DATA.settings?.closedBranches ?? [];
@@ -387,6 +491,12 @@ function renderPicker(){
     return;
   }
   let h = `<div class="hd"><h1>🎯 عبّي فرع</h1><a href="https://baro-inventory-qmpp.vercel.app">النظام ←</a></div>`;
+  // زر النقل المنتهي
+  const doneCount = Object.keys(DATA.settings?.transferred ?? {}).length;
+  h += `<button onclick="showLog()" style="width:100%;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:14px;padding:13px;cursor:pointer;font-family:Cairo;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;color:#6ee7b7">
+    <span style="font-weight:900;font-size:14px">📋 النقل المنتهي</span>
+    <span style="background:#16a34a;color:#fff;font-size:13px;font-weight:900;padding:3px 11px;border-radius:100px">${doneCount}</span>
+  </button>`;
   h += `<div class="info">اختر الفرع الذي تريد تعبئته. النظام يجمّع نواقصه من المستودع والفروع الراكدة — نفس المدينة أولوية.</div>`;
   branches.forEach(b=>{
     const city = cityOf(b, DATA.settings?.cityOverrides??{});
@@ -413,6 +523,22 @@ window.cancelEdit = ()=>{ STATE.edit=null; STATE.editVal=""; render(); };
 window.onEditInput = (v)=>{ STATE.editVal=v; };
 window.doSave = (br,bc)=>{ saveStock(br,bc,STATE.editVal); };
 
+// تعديل الكمية المنقولة (كم يعطي)
+window.startQty = (key,val)=>{ STATE.qtyEditKey=key; STATE.qtyEditVal=String(val); render(); };
+window.onQtyInput = (v)=>{ STATE.qtyEditVal=v; };
+window.cancelQty = ()=>{ STATE.qtyEditKey=null; STATE.qtyEditVal=""; render(); };
+window.saveQty = (key)=>{
+  const n = Math.max(0, Number(STATE.qtyEditVal)||0);
+  STATE.qtyEdits[key] = n;
+  STATE.qtyEditKey=null; STATE.qtyEditVal="";
+  render();
+};
+// الكمية الفعلية المنقولة (المعدّلة أو الافتراضية)
+function effectiveQty(m, isWh){
+  const qKey = (isWh?"WH":m.srcBranch)+"|"+m.barcode;
+  return STATE.qtyEdits[qKey] !== undefined ? STATE.qtyEdits[qKey] : m.qty;
+}
+
 // ─── اعتماد النقل: تم / تراجع ───
 // transferred: سجل الدفعات المنفّذة { id: {to, from, items:[{barcode,qty,srcBefore,tgtBefore}], ts} }
 
@@ -429,22 +555,24 @@ window.confirmTransfer = async (srcBranch, isWh)=>{
   const transferred = { ...(fresh.transferred??{}) };
   const periodCount = DATA.periods.length;
   const batchId = (isWh?"WH":srcBranch)+"→"+STATE.target+"|"+Date.now();
-  const record = { from:isWh?"__WAREHOUSE__":srcBranch, fromLabel:isWh?"المستودع":srcBranch, to:STATE.target, ts:Date.now(), isWh, items:[] };
+  const record = { from:isWh?"__WAREHOUSE__":srcBranch, fromLabel:isWh?"المستودع":srcBranch, to:STATE.target, ts:Date.now(), isWh, worker:WORKER, items:[] };
 
   items.forEach(m=>{
+    const moveQty = effectiveQty(m, isWh);  // الكمية اللي حدّدها الموظف
+    if(moveQty<=0) return; // ما يعطي شي
     const tgtKey = STATE.target+"|"+m.barcode;
     const tgtBefore = getBranchRemaining(STATE.target, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN, meta);
-    // المستقبِل يزيد — qty رقم + meta منفصل
-    ov[tgtKey] = tgtBefore + m.qty;
+    // المستقبِل يزيد بالكمية المعدّلة
+    ov[tgtKey] = tgtBefore + moveQty;
     meta[tgtKey] = { atPeriodCount: periodCount };
     let srcBefore = null;
     if(!isWh){
       const srcKey = srcBranch+"|"+m.barcode;
       srcBefore = getBranchRemaining(srcBranch, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN, meta);
-      ov[srcKey] = Math.max(0, srcBefore - m.qty);
+      ov[srcKey] = Math.max(0, srcBefore - moveQty);
       meta[srcKey] = { atPeriodCount: periodCount };
     }
-    record.items.push({ barcode:m.barcode, qty:m.qty, srcBefore, tgtBefore });
+    record.items.push({ barcode:m.barcode, qty:moveQty, srcBefore, tgtBefore });
   });
 
   transferred[batchId] = record;
@@ -534,7 +662,25 @@ function itemCard(m, isWh){
         <div class="badges"><span class="badge b-blue">جاء ${m.bought}</span><span class="badge b-purple">باقي ${m.whStock}</span></div>
       </div>
     </div>
-    <div class="qty"><div class="n">${m.qty}</div><div class="l">🔄 ينقل</div></div>
+    <div class="qty">
+      ${(()=>{
+        const qKey = (isWh?"WH":m.srcBranch)+"|"+m.barcode;
+        const curQty = STATE.qtyEdits[qKey] !== undefined ? STATE.qtyEdits[qKey] : m.qty;
+        if(STATE.qtyEditKey===qKey){
+          return `<div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+            <input type="number" value="${esc(STATE.qtyEditVal)}" oninput="onQtyInput(this.value)" autofocus style="width:60px;background:#1e293b;border:2px solid #60a5fa;color:#fff;border-radius:8px;padding:6px;font-size:18px;font-weight:900;text-align:center;font-family:Cairo">
+            <div style="display:flex;gap:3px">
+              <button onclick="saveQty('${qKey.replace(/'/g,"\\'")}')" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:900;cursor:pointer;font-family:Cairo">✓</button>
+              <button onclick="cancelQty()" style="background:#475569;color:#fff;border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;font-family:Cairo">✕</button>
+            </div>
+          </div>`;
+        }
+        return `<div onclick="startQty('${qKey.replace(/'/g,"\\'")}',${curQty})" style="cursor:pointer">
+          <div class="n">${curQty}</div>
+          <div class="l">🔄 ينقل ✏️</div>
+        </div>`;
+      })()}
+    </div>
   </div>`;
 }
 
@@ -567,11 +713,13 @@ function renderFill(){
     <span class="lbl">فائض المرسِل:</span><input type="number" value="${STATE.surplusRem}" onchange="setSurplusRem(this.value)">
     <button onclick="applyControls()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-weight:900;font-family:Cairo;cursor:pointer">تطبيق</button>
   </div>`;
-  // الأولوية
+  // الأولوية — ثلاثة خيارات جنب بعض
   h += `<div class="prio"><div class="h">الأولوية في السحب:</div><div class="row">
     <button class="${STATE.priority==='stale'?'on':''}" onclick="setPriority('stale')">🔴 الراكد أولاً</button>
     <button class="${STATE.priority==='warehouse'?'on':''}" onclick="setPriority('warehouse')">🏬 المستودع أولاً</button>
-  </div></div>`;
+    <button class="${STATE.priority==='staleonly'?'on':''}" onclick="setPriority('staleonly')">🔴 الراكد فقط</button>
+  </div>
+  <div style="font-size:10px;color:#64748b;margin-top:6px">${STATE.priority==='staleonly'?'💡 يسحب من الفروع الراكدة فقط — بدون المستودع':STATE.priority==='warehouse'?'💡 المستودع أولاً ثم الفروع':'💡 الفروع الراكدة أولاً ثم المستودع'}</div></div>`;
 
   if(plan.sources.length===0 && plan.fromWarehouse.length===0){
     h += `<div class="empty"><div class="ic">✅</div><div style="font-size:15px;font-weight:900;color:#fff">لا يوجد نقص</div><div style="font-size:13px;margin-top:6px">الفرع مكتفٍ — ما يحتاج تعبئة</div></div>`;
@@ -591,7 +739,7 @@ function renderFill(){
 
   // المستودع — قابل للطي زي الأصل
   if(plan.fromWarehouse.length){
-    const whOpen = STATE.openSrc.__wh !== false;
+    const whOpen = STATE.openSrc.__wh === true;
     h += `<div class="src" style="border:1px solid #2563eb40"><div class="sh" onclick="toggleSrc('__wh')" style="background:rgba(37,99,235,0.08)">
       <div class="nm">🏬 من المستودع الرئيسي</div>
       <span class="cnt">${plan.fromWarehouse.length} منتج ${whOpen?'▲':'▼'}</span></div>`;
@@ -607,7 +755,7 @@ function renderFill(){
   }
   // الفروع
   plan.sources.forEach(s=>{
-    const open = STATE.openSrc[s.branch] !== false; // مفتوح افتراضياً
+    const open = STATE.openSrc[s.branch] === true; // مقفل افتراضياً
     h += `<div class="src" style="border:1px solid ${s.sameCity?'#16a34a':'#ea580c'}40"><div class="sh" onclick="toggleSrc('${esc(s.branch).replace(/'/g,"\\'")}')">
       <div><div class="nm">📤 المرسِل: ${esc(s.branch)}</div>
       <div class="ci" style="color:${s.sameCity?'#4ade80':'#fb923c'}">${s.sameCity?`✓ نفس المدينة (${esc(s.city||'')})`:`📍 ${esc(s.city||'مدينة أخرى')}`}</div></div>
@@ -637,7 +785,8 @@ window.printPlan = (mode)=>{
     let s = `<div class="psec"><div class="pst">${title}</div><table><thead><tr><th>الصورة</th><th>المنتج</th><th>الباركود</th><th>المصنع</th><th>ينقل</th></tr></thead><tbody>`;
     items.forEach(m=>{
       const img = DATA.images?.[m.barcode];
-      s += `<tr><td>${img?`<img src="${img}">`:'📦'}</td><td>${esc(m.name)}</td><td class="mono">${m.barcode}</td><td>${m.factory}</td><td class="q">${m.qty}</td></tr>`;
+      const q = effectiveQty(m, isWh);
+      s += `<tr><td>${img?`<img src="${img}">`:'📦'}</td><td>${esc(m.name)}</td><td class="mono">${m.barcode}</td><td>${m.factory}</td><td class="q">${q}</td></tr>`;
     });
     s += `</tbody></table></div>`;
     return s;
