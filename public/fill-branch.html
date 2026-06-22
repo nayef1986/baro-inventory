@@ -143,11 +143,17 @@ let DATA = { products:[], periods:[], settings:{}, images:{} };
 let STATE = { target:null, needRem:6, surplusRem:12, priority:"stale", openSrc:{}, edit:null, editVal:"" };
 
 async function boot(){
-  const [products, periods, settings, images] = await Promise.all([
-    sbGet(KEYS.PRODUCTS), sbGet(KEYS.PERIODS), sbGet(KEYS.SETTINGS), sbGet(KEYS.IMAGES)
-  ]);
-  DATA = { products:products??[], periods:periods??[], settings:settings??{}, images:images??{} };
-  render();
+  try {
+    const [products, periods, settings] = await Promise.all([
+      sbGet(KEYS.PRODUCTS), sbGet(KEYS.PERIODS), sbGet(KEYS.SETTINGS)
+    ]);
+    DATA = { products:products??[], periods:periods??[], settings:settings??{}, images:{} };
+    render();
+    // الصور تُحمّل بعدين (ثقيلة) — ما توقف الواجهة
+    sbGet(KEYS.IMAGES).then(imgs=>{ if(imgs){ DATA.images=imgs; if(STATE.target) render(); } }).catch(()=>{});
+  } catch(e){
+    app.innerHTML = `<div class="empty"><div class="ic">⚠️</div><div style="font-size:15px;font-weight:900;color:#fff">خطأ في التحميل</div><div style="font-size:12px;margin-top:6px;color:#94a3b8">${esc(String(e.message||e))}</div></div>`;
+  }
 }
 
 // ─── حساب التعبئة ───
