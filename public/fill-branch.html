@@ -78,7 +78,7 @@
 const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
 const TABLE = "baro_store";
-const KEYS = { PRODUCTS:"baro_products_v2", PERIODS:"baro_periods_v2", SETTINGS:"baro_settings_v2", IMAGES:"baro_images_v2" };
+const KEYS = { PRODUCTS:"baro_products_v2", PERIODS:"baro_periods_v2", SETTINGS:"baro_settings_v2", IMAGES:"baro_images_v2", FILL:"baro_fill_v2" };
 const MIN = 12;
 
 async function sbGet(key){
@@ -142,7 +142,7 @@ function getBranchRemaining(branch, bc, periods, overrides={}, minStock=MIN, met
 }
 
 // ─── الحالة ───
-let DATA = { products:[], periods:[], settings:{}, images:{} };
+let DATA = { products:[], periods:[], settings:{}, images:{}, fill:{} };
 let STATE = { target:null, view:null, needRem:6, surplusRem:12, priority:"stale", openSrc:{}, edit:null, editVal:"", qtyEdits:{}, qtyEditKey:null, qtyEditVal:"", logSub:"transfers" };
 let WORKER = "";
 try { WORKER = localStorage.getItem("baro_worker") || ""; } catch {}
@@ -156,23 +156,31 @@ window.setWorker = (name)=>{
 
 async function boot(){
   try {
-    const [products, periods, settings] = await Promise.all([
-      sbGet(KEYS.PRODUCTS), sbGet(KEYS.PERIODS), sbGet(KEYS.SETTINGS)
+    const [products, periods, settings, fillData] = await Promise.all([
+      sbGet(KEYS.PRODUCTS), sbGet(KEYS.PERIODS), sbGet(KEYS.SETTINGS), sbGet(KEYS.FILL)
     ]);
     const s = settings ?? {};
-    // ترحيل: لو stockOverrides فيها صيغة كائن قديمة {qty,atPeriodCount} → حوّلها لرقم + meta
-    // (يحمي النظام الأساسي الذي يتوقّع رقماً)
+    const fill = fillData ?? {};
+    // تنظيف settings: stockOverrides أرقام فقط + إزالة أي بيانات الصفحة الثقيلة منه
+    let needCleanSettings = false;
     if(s.stockOverrides){
-      const ov={}, meta={ ...(s.stockMeta??{}) };
-      let migrated=false;
+      const ov={};
+      const meta = { ...(fill.stockMeta ?? {}) };
       Object.entries(s.stockOverrides).forEach(([k,v])=>{
-        if(v && typeof v==="object"){ ov[k]=num(v.qty); meta[k]={ atPeriodCount:num(v.atPeriodCount) }; migrated=true; }
+        if(v && typeof v==="object"){ ov[k]=num(v.qty); meta[k]={ atPeriodCount:num(v.atPeriodCount) }; needCleanSettings=true; }
         else ov[k]=v;
       });
-      s.stockOverrides=ov; s.stockMeta=meta;
-      if(migrated){ try{ await sbSet(KEYS.SETTINGS, s); }catch(e){} }
+      s.stockOverrides=ov;
+      fill.stockMeta=meta;
     }
-    DATA = { products:products??[], periods:periods??[], settings:s, images:{} };
+    // إزالة بيانات الصفحة من settings (لو كانت محفوظة هناك من نسخة قديمة)
+    if(s.stockMeta!==undefined){ if(!fill.stockMeta) fill.stockMeta=s.stockMeta; delete s.stockMeta; needCleanSettings=true; }
+    if(s.transferred!==undefined){ if(!fill.transferred) fill.transferred=s.transferred; delete s.transferred; needCleanSettings=true; }
+    if(s.editLog!==undefined){ if(!fill.editLog) fill.editLog=s.editLog; delete s.editLog; needCleanSettings=true; }
+    // احفظ النظيف
+    if(needCleanSettings){ try{ await sbSet(KEYS.SETTINGS, s); await sbSet(KEYS.FILL, fill); }catch(e){} }
+
+    DATA = { products:products??[], periods:periods??[], settings:s, images:{}, fill };
     render();
     sbGet(KEYS.IMAGES).then(imgs=>{ if(imgs){ DATA.images=imgs; if(STATE.target) render(); } }).catch(()=>{});
   } catch(e){
@@ -185,7 +193,7 @@ function fillBranch(targetBranch){
   const { products, periods, settings } = DATA;
   const cityOverrides = settings?.cityOverrides ?? {};
   const newBranches = settings?.newBranches ?? [];
-  const stockMeta = settings?.stockMeta ?? {};
+  const stockMeta = DATA.fill?.stockMeta ?? {};
   const closed = settings?.closedBranches ?? [];
   const overrides = settings?.stockOverrides ?? {};
   const tCity = cityOf(targetBranch, cityOverrides);
@@ -272,32 +280,36 @@ async function saveStock(br, barcode, val){
   const key=br+"|"+barcode;
   const n = Math.max(0, Number(val)||0);
   const prod = DATA.products.find(p=>p.barcode===barcode);
-  const before = getBranchRemaining(br, barcode, DATA.periods, DATA.settings?.stockOverrides??{}, num(prod?.unitQty)||MIN, DATA.settings?.stockMeta??{});
-  // عرض فوري — qty رقم (متوافق مع النظام) + meta منفصل
+  const before = getBranchRemaining(br, barcode, DATA.periods, DATA.settings?.stockOverrides??{}, num(prod?.unitQty)||MIN, DATA.fill?.stockMeta??{});
+  // عرض فوري — stockOverrides رقم في settings، stockMeta في fill
   const localOv={ ...(DATA.settings?.stockOverrides??{}) };
-  const localMeta={ ...(DATA.settings?.stockMeta??{}) };
+  const localMeta={ ...(DATA.fill?.stockMeta??{}) };
   if(val===""||val===null){ delete localOv[key]; delete localMeta[key]; }
   else { localOv[key]=n; localMeta[key]={ atPeriodCount:DATA.periods.length }; }
-  DATA.settings={ ...DATA.settings, stockOverrides:localOv, stockMeta:localMeta };
+  DATA.settings={ ...DATA.settings, stockOverrides:localOv };
+  DATA.fill={ ...DATA.fill, stockMeta:localMeta };
   STATE.edit=null; STATE.editVal="";
   render();
-  // حفظ آمن: نقرأ أحدث settings وندمج
   try {
+    // settings: نقرأ الأحدث، نحدّث stockOverrides (رقم) فقط — لا نلمس غيره
     const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
     const ov = { ...(fresh.stockOverrides??{}) };
-    const meta = { ...(fresh.stockMeta??{}) };
-    if(val===""||val===null){ delete ov[key]; delete meta[key]; }
-    else { ov[key]=n; meta[key]={ atPeriodCount:DATA.periods.length }; }
-    // سجل التعديل
-    const editLog = Array.isArray(fresh.editLog) ? [...fresh.editLog] : [];
+    if(val===""||val===null) delete ov[key]; else ov[key]=n;
+    const mergedSettings = { ...fresh, stockOverrides:ov };
+  delete mergedSettings.stockMeta; delete mergedSettings.transferred; delete mergedSettings.editLog;
+    DATA.settings = mergedSettings;
+    await sbSet(KEYS.SETTINGS, mergedSettings);
+    // fill: meta + editLog (منفصل تماماً عن النظام)
+    const freshFill = await sbGet(KEYS.FILL) || DATA.fill;
+    const meta = { ...(freshFill.stockMeta??{}) };
+    if(val===""||val===null) delete meta[key]; else meta[key]={ atPeriodCount:DATA.periods.length };
+    const editLog = Array.isArray(freshFill.editLog) ? [...freshFill.editLog] : [];
     editLog.unshift({ branch:br, barcode, name:prod?.name||barcode, from:before, to:(val===""||val===null?null:n), worker:WORKER, ts:Date.now() });
-    if(editLog.length>200) editLog.length=200; // حد أقصى
-    const merged = { ...fresh, stockOverrides:ov, stockMeta:meta, editLog };
-    DATA.settings = merged;
-    await sbSet(KEYS.SETTINGS, merged);
-  } catch(e){
-    await sbSet(KEYS.SETTINGS, DATA.settings);
-  }
+    if(editLog.length>200) editLog.length=200;
+    const mergedFill = { ...freshFill, stockMeta:meta, editLog };
+    DATA.fill = mergedFill;
+    await sbSet(KEYS.FILL, mergedFill);
+  } catch(e){}
 }
 
 // ─── الطباعة وحفظ الصورة ───
@@ -423,7 +435,7 @@ function renderLog(){
   </div>`;
 
   if(sub==="transfers"){
-    const transferred = DATA.settings?.transferred ?? {};
+    const transferred = DATA.fill?.transferred ?? {};
     const list = Object.entries(transferred).sort((a,b)=>(b[1].ts||0)-(a[1].ts||0));
     if(list.length===0){
       h += `<div class="empty"><div class="ic">📭</div><div style="font-size:15px;font-weight:900;color:#fff">لا يوجد نقل منفّذ</div></div>`;
@@ -458,7 +470,7 @@ function renderLog(){
     }
   } else {
     // التعديلات
-    const editLog = Array.isArray(DATA.settings?.editLog) ? DATA.settings.editLog : [];
+    const editLog = Array.isArray(DATA.fill?.editLog) ? DATA.fill.editLog : [];
     if(editLog.length===0){
       h += `<div class="empty"><div class="ic">📭</div><div style="font-size:15px;font-weight:900;color:#fff">لا توجد تعديلات</div></div>`;
     } else {
@@ -492,7 +504,7 @@ function renderPicker(){
   }
   let h = `<div class="hd"><h1>🎯 عبّي فرع</h1><a href="https://baro-inventory-qmpp.vercel.app">النظام ←</a></div>`;
   // زر النقل المنتهي
-  const doneCount = Object.keys(DATA.settings?.transferred ?? {}).length;
+  const doneCount = Object.keys(DATA.fill?.transferred ?? {}).length;
   h += `<button onclick="showLog()" style="width:100%;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:14px;padding:13px;cursor:pointer;font-family:Cairo;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;color:#6ee7b7">
     <span style="font-weight:900;font-size:14px">📋 النقل المنتهي</span>
     <span style="background:#16a34a;color:#fff;font-size:13px;font-weight:900;padding:3px 11px;border-radius:100px">${doneCount}</span>
@@ -548,21 +560,21 @@ window.confirmTransfer = async (srcBranch, isWh)=>{
   const items = isWh ? plan.fromWarehouse : (plan.sources.find(s=>s.branch===srcBranch)?.items||[]);
   if(!items.length) return;
 
-  // اقرأ أحدث settings
+  // settings: stockOverrides (رقم) فقط · fill: meta + transferred
   const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
+  const freshFill = await sbGet(KEYS.FILL) || DATA.fill;
   const ov = { ...(fresh.stockOverrides??{}) };
-  const meta = { ...(fresh.stockMeta??{}) };
-  const transferred = { ...(fresh.transferred??{}) };
+  const meta = { ...(freshFill.stockMeta??{}) };
+  const transferred = { ...(freshFill.transferred??{}) };
   const periodCount = DATA.periods.length;
   const batchId = (isWh?"WH":srcBranch)+"→"+STATE.target+"|"+Date.now();
   const record = { from:isWh?"__WAREHOUSE__":srcBranch, fromLabel:isWh?"المستودع":srcBranch, to:STATE.target, ts:Date.now(), isWh, worker:WORKER, items:[] };
 
   items.forEach(m=>{
-    const moveQty = effectiveQty(m, isWh);  // الكمية اللي حدّدها الموظف
-    if(moveQty<=0) return; // ما يعطي شي
+    const moveQty = effectiveQty(m, isWh);
+    if(moveQty<=0) return;
     const tgtKey = STATE.target+"|"+m.barcode;
     const tgtBefore = getBranchRemaining(STATE.target, m.barcode, DATA.periods, ov, num(m.unitQty)||MIN, meta);
-    // المستقبِل يزيد بالكمية المعدّلة
     ov[tgtKey] = tgtBefore + moveQty;
     meta[tgtKey] = { atPeriodCount: periodCount };
     let srcBefore = null;
@@ -576,18 +588,23 @@ window.confirmTransfer = async (srcBranch, isWh)=>{
   });
 
   transferred[batchId] = record;
-  const merged = { ...fresh, stockOverrides:ov, stockMeta:meta, transferred };
-  DATA.settings = merged;
+  const mergedSettings = { ...fresh, stockOverrides:ov };
+  delete mergedSettings.stockMeta; delete mergedSettings.transferred; delete mergedSettings.editLog;
+  const mergedFill = { ...freshFill, stockMeta:meta, transferred };
+  DATA.settings = mergedSettings;
+  DATA.fill = mergedFill;
   render();
-  await sbSet(KEYS.SETTINGS, merged);
+  await sbSet(KEYS.SETTINGS, mergedSettings);
+  await sbSet(KEYS.FILL, mergedFill);
 };
 
 window.undoTransfer = async (batchId)=>{
   if(!confirm("تراجع عن هذا النقل؟ سيرجع المخزون كما كان.")) return;
   const fresh = await sbGet(KEYS.SETTINGS) || DATA.settings;
+  const freshFill = await sbGet(KEYS.FILL) || DATA.fill;
   const ov = { ...(fresh.stockOverrides??{}) };
-  const meta = { ...(fresh.stockMeta??{}) };
-  const transferred = { ...(fresh.transferred??{}) };
+  const meta = { ...(freshFill.stockMeta??{}) };
+  const transferred = { ...(freshFill.transferred??{}) };
   const rec = transferred[batchId];
   if(!rec) return;
   const periodCount = DATA.periods.length;
@@ -604,15 +621,19 @@ window.undoTransfer = async (batchId)=>{
   });
 
   delete transferred[batchId];
-  const merged = { ...fresh, stockOverrides:ov, stockMeta:meta, transferred };
-  DATA.settings = merged;
+  const mergedSettings = { ...fresh, stockOverrides:ov };
+  delete mergedSettings.stockMeta; delete mergedSettings.transferred; delete mergedSettings.editLog;
+  const mergedFill = { ...freshFill, stockMeta:meta, transferred };
+  DATA.settings = mergedSettings;
+  DATA.fill = mergedFill;
   render();
-  await sbSet(KEYS.SETTINGS, merged);
+  await sbSet(KEYS.SETTINGS, mergedSettings);
+  await sbSet(KEYS.FILL, mergedFill);
 };
 
 // هل هذا المصدر منقول؟ يرجّ‍ع batchId أو null
 function isTransferred(srcBranch, isWh){
-  const transferred = DATA.settings?.transferred ?? {};
+  const transferred = DATA.fill?.transferred ?? {};
   const from = isWh ? "__WAREHOUSE__" : srcBranch;
   const found = Object.entries(transferred).find(([,r])=>r.from===from && r.to===STATE.target);
   return found ? found[0] : null;
