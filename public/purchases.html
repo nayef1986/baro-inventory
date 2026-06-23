@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>المشتريات — البارو</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;direction:rtl;padding:14px;padding-bottom:90px;max-width:680px;margin:0 auto}
+  .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .hd h1{font-size:21px;font-weight:900;color:#fff}
+  .hd .sub{font-size:11px;color:#60a5fa;margin-top:2px}
+  .hd a{background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:#93c5fd;border-radius:100px;padding:7px 13px;font-size:12px;font-weight:700;text-decoration:none}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+  .stat{background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:12px;text-align:center}
+  .stat .n{font-size:19px;font-weight:900}
+  .stat .l{font-size:10px;color:#94a3b8;margin-top:2px}
+  .upload{background:#0f1626;border:2px dashed #2d3a52;border-radius:16px;padding:24px;text-align:center;margin-bottom:14px;cursor:pointer;transition:border-color .2s}
+  .upload:active{border-color:#3b82f6}
+  .upload .ic{font-size:36px;margin-bottom:8px}
+  .upload .t{font-size:15px;font-weight:700;color:#e2e8f0}
+  .upload .s{font-size:12px;color:#64748b;margin-top:4px}
+  input[type=file]{display:none}
+  .preview{background:#0f1626;border:1px solid #2d3a52;border-radius:16px;padding:14px;margin-bottom:14px}
+  .preview h2{font-size:15px;font-weight:900;color:#fff;margin-bottom:4px}
+  .preview .meta{font-size:12px;color:#94a3b8;margin-bottom:12px}
+  .pill{display:inline-block;background:rgba(59,130,246,0.15);color:#93c5fd;border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700;margin:2px}
+  .pill.warn{background:rgba(245,158,11,0.15);color:#fcd34d}
+  .pill.ok{background:rgba(74,222,128,0.15);color:#6ee7b7}
+  .tbl{max-height:340px;overflow-y:auto;border-radius:10px;border:1px solid #1f2940;margin:10px 0}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#1e293b;color:#cbd5e1;padding:8px 6px;position:sticky;top:0;font-size:11px}
+  td{border-bottom:1px solid #1f2940;padding:7px 6px;text-align:center}
+  td.bc{font-family:monospace;font-weight:700;color:#fff;font-size:11px}
+  td.nm{text-align:right;color:#e2e8f0}
+  td.q{color:#4ade80;font-weight:900}
+  td.warn{color:#fbbf24}
+  .row-warn{background:rgba(245,158,11,0.06)}
+  .btns{display:flex;gap:8px;margin-top:12px}
+  .btns button{flex:1;padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:900;cursor:pointer;font-family:'Cairo'}
+  .btn-save{background:#16a34a;color:#fff}
+  .btn-save:disabled{background:#334155;cursor:default}
+  .btn-cancel{background:#475569;color:#fff;flex:0 0 auto;padding:13px 20px}
+  .list-item{display:flex;align-items:center;gap:10px;background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:11px;margin-bottom:7px}
+  .list-item .ic{font-size:22px}
+  .list-item .info{flex:1;min-width:0}
+  .list-item .info .t{font-size:13px;font-weight:700;color:#e2e8f0}
+  .list-item .info .s{font-size:11px;color:#94a3b8;margin-top:2px}
+  .list-item .del{background:rgba(239,68,68,0.15);color:#fca5a5;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Cairo'}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.7;margin-top:10px;display:none}
+  .log.show{display:block}
+  .ok{color:#4ade80}.err{color:#f87171}.info2{color:#60a5fa}.y{color:#fbbf24}
+  .empty{text-align:center;padding:30px;color:#64748b;font-size:13px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:11px 22px;border-radius:100px;font-size:14px;font-weight:900;z-index:99;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.show{opacity:1}
+  h3.sec{font-size:14px;color:#cbd5e1;margin:18px 0 10px}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <div>
+    <h1>📦 المشتريات</h1>
+    <div class="sub">رفع فواتير الكونتينرات</div>
+  </div>
+  <a href="https://baro-inventory-qmpp.vercel.app">النظام ←</a>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="n" id="sProds" style="color:#d4a853">…</div><div class="l">منتج</div></div>
+  <div class="stat"><div class="n" id="sConts" style="color:#60a5fa">…</div><div class="l">كونتينر</div></div>
+  <div class="stat"><div class="n" id="sUnits" style="color:#4ade80">…</div><div class="l">قطعة</div></div>
+</div>
+
+<label class="upload" for="fileInput">
+  <div class="ic">📤</div>
+  <div class="t">اختر ملف فاتورة (Excel)</div>
+  <div class="s">يكتشف العناوين تلقائياً · ينظّف الباركودات التالفة</div>
+</label>
+<input type="file" id="fileInput" accept=".xlsx,.xls">
+
+<div id="previewArea"></div>
+
+<h3 class="sec" id="contsTitle" style="display:none">الكونتينرات المرفوعة</h3>
+<div id="contsList"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+const PKEY = "baro_products_v2";
+
+let PRODUCTS = [];
+let LOADED = false;
+let pending = null; // الفاتورة المعلّقة للمراجعة
+
+// ─── Supabase ───
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+async function sbSet(key, value){
+  const res = await fetch(`${U}/rest/v1/${TABLE}`, {
+    method:"POST",
+    headers:{ apikey:K, Authorization:`Bearer ${K}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  });
+  return res.ok;
+}
+
+// ─── أدوات ───
+const num = v => { const n = parseFloat(String(v??"").replace(/,/g,"")); return isNaN(n)?0:n; };
+
+function cleanBarcode(raw){
+  if(raw instanceof Date) return "X" + raw.getTime().toString(36).toUpperCase();
+  let s = String(raw ?? "").trim().replace(/了/g,"B").replace(/\s+/g,"");
+  if(/^\d{4}-\d{2}-\d{2}/.test(s) || /\d{2}:\d{2}:\d{2}/.test(s)) s = "X" + s.replace(/[^0-9]/g,"").slice(0,12);
+  s = s.replace(/[^A-Za-z0-9\-]/g,"");
+  return s;
+}
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 1800);
+}
+
+// ─── كشف صف العناوين تلقائياً ───
+function findHeaderRow(rows){
+  for(let i=0;i<Math.min(6,rows.length);i++){
+    const joined = rows[i].map(c=>String(c??"").toLowerCase()).join(" ");
+    if(/qty|الكمية|price|تكلفة|باركود|item\s*no/.test(joined)) return i;
+  }
+  return 1; // افتراضي
+}
+
+// ─── قراءة فاتورة المشتريات ───
+function parsePurchase(rows){
+  const warnings = [];
+  let container = "";
+
+  // الكونتينر من أول صفّين
+  const top = (rows[0]||[]).concat(rows[1]||[]).join(" ");
+  const m = top.match(/BAR[A-Z0-9]+/i);
+  if(m) container = m[0].toUpperCase();
+
+  const headerRow = findHeaderRow(rows);
+  const startRow = headerRow + 1;
+
+  const merged = {};
+  let fixed = 0;
+
+  for(let i=startRow;i<rows.length;i++){
+    const row = rows[i];
+    if(!row) continue;
+    const rawBc = row[1];
+    const barcode = cleanBarcode(rawBc);
+    const name = String(row[2] ?? "").trim();
+
+    if(!barcode || barcode.toLowerCase()==="itemno") continue;
+    if(!name || name.toLowerCase()==="name" || name.toLowerCase()==="freight") continue;
+    if(name==="الإجمالي" || name==="Total") continue;
+
+    const qty = parseInt(row[3]);
+    if(isNaN(qty) || qty<=0) continue;
+
+    const buyPrice = num(row[4]);
+    const sellPrice = num(row[0]);
+
+    // علامة لو الباركود تنظّف (كان تالف)
+    const wasFixed = String(rawBc??"").trim() !== barcode && cleanBarcode(rawBc)===barcode && /^X/.test(barcode);
+    if(wasFixed) fixed++;
+
+    if(merged[barcode]){
+      merged[barcode].qty += qty;
+      if(buyPrice>0) merged[barcode].buyPrice = buyPrice;
+      if(sellPrice>0) merged[barcode].sellPrice = sellPrice;
+    } else {
+      merged[barcode] = { barcode, name, qty, buyPrice, sellPrice, container, fixed: wasFixed };
+    }
+  }
+
+  const items = Object.values(merged);
+  if(items.length===0) warnings.push("لم يُعثر على منتجات صالحة");
+  if(!container) warnings.push("لم يُعثر على رقم كونتينر");
+  return { items, container, warnings, headerRow, fixed };
+}
+
+// ─── تطبيق المشتريات (applyPurchases) ───
+function applyPurchases(existing, newItems, container){
+  const result = existing.map(p=>({...p}));
+  const map = {};
+  result.forEach(p=>{ map[p.barcode]=p; });
+  const date = new Date().toISOString().slice(0,10);
+  newItems.forEach(item=>{
+    if(map[item.barcode]){
+      const ex = map[item.barcode];
+      ex.purchases = ex.purchases ?? [];
+      ex.purchases.push({ container, qty:item.qty, buyPrice:item.buyPrice, date });
+      if(item.sellPrice>0) ex.sellPrice = item.sellPrice;
+    } else {
+      const np = { barcode:item.barcode, name:item.name, sellPrice:item.sellPrice, container:item.container||container,
+        purchases:[{ container, qty:item.qty, buyPrice:item.buyPrice, date }] };
+      result.push(np);
+      map[item.barcode]=np;
+    }
+  });
+  return result;
+}
+
+// ─── عند اختيار ملف ───
+document.getElementById("fileInput").addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:"array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+    const parsed = parsePurchase(rows);
+    parsed.fileName = file.name;
+    pending = parsed;
+    renderPreview();
+  } catch(err){
+    toast("⚠️ تعذّر قراءة الملف");
+  }
+  e.target.value = "";
+});
+
+// ─── معاينة الفاتورة قبل الاعتماد ───
+function renderPreview(){
+  const p = pending;
+  if(!p){ document.getElementById("previewArea").innerHTML=""; return; }
+  const totalQty = p.items.reduce((s,x)=>s+x.qty,0);
+  const dup = p.container && PRODUCTS.some(pr=>(pr.purchases||[]).some(x=>x.container===p.container));
+
+  let h = `<div class="preview">
+    <h2>📋 مراجعة: ${p.container || "بدون كونتينر"}</h2>
+    <div class="meta">${p.fileName} · صف العناوين: ${p.headerRow+1}</div>
+    <div>
+      <span class="pill ok">${p.items.length} منتج</span>
+      <span class="pill">${totalQty.toLocaleString()} قطعة</span>
+      ${p.fixed>0?`<span class="pill warn">${p.fixed} باركود صُلّح</span>`:""}
+      ${dup?`<span class="pill warn">⚠️ كونتينر مكرر</span>`:""}
+    </div>`;
+
+  p.warnings.forEach(w=>{ h += `<div style="color:#fca5a5;font-size:12px;margin-top:6px">⚠️ ${w}</div>`; });
+
+  // جدول
+  h += `<div class="tbl"><table><thead><tr><th>الباركود</th><th>المنتج</th><th>كمية</th><th>شراء</th><th>بيع</th></tr></thead><tbody>`;
+  p.items.slice(0,200).forEach(it=>{
+    h += `<tr class="${it.fixed?'row-warn':''}">
+      <td class="bc">${it.barcode}${it.fixed?' ⚠️':''}</td>
+      <td class="nm">${it.name}</td>
+      <td class="q">${it.qty}</td>
+      <td>${it.buyPrice||'-'}</td>
+      <td>${it.sellPrice||'-'}</td>
+    </tr>`;
+  });
+  h += `</tbody></table></div>`;
+  if(p.items.length>200) h += `<div style="font-size:11px;color:#64748b;text-align:center">…و ${p.items.length-200} منتج (الكل سيُحفظ)</div>`;
+
+  h += `<div class="btns">
+    <button class="btn-save" id="confirmBtn" onclick="confirmSave()">✅ اعتمد واحفظ (${p.items.length})</button>
+    <button class="btn-cancel" onclick="cancelPreview()">إلغاء</button>
+  </div>
+  <div class="log" id="saveLog"></div>
+  </div>`;
+
+  document.getElementById("previewArea").innerHTML = h;
+}
+
+window.cancelPreview = ()=>{ pending=null; renderPreview(); };
+
+// ─── اعتماد وحفظ ───
+window.confirmSave = async ()=>{
+  if(!pending) return;
+  if(!LOADED){ toast("⚠️ انتظر اكتمال التحميل"); return; }
+  const btn = document.getElementById("confirmBtn");
+  const log = document.getElementById("saveLog");
+  log.classList.add("show");
+  btn.disabled = true;
+  log.innerHTML = "";
+  const lg = (m,c)=>{ log.innerHTML += `<span class="${c||''}">${m}</span>\n`; };
+
+  try {
+    lg("⬇️ جلب آخر نسخة من المنتجات…","info2");
+    const fresh = await sbGet(PKEY);
+    const base = Array.isArray(fresh) ? fresh : PRODUCTS;
+
+    lg("🔗 دمج الفاتورة…","info2");
+    const updated = applyPurchases(base, pending.items, pending.container);
+
+    // حماية: ما نحفظ فاضي
+    if(!updated.length){ lg("❌ نتيجة فاضية — أُلغي","err"); btn.disabled=false; return; }
+
+    lg(`💾 حفظ ${updated.length} منتج…`,"info2");
+    const ok = await sbSet(PKEY, updated);
+    if(!ok){ lg("❌ فشل الحفظ","err"); btn.disabled=false; return; }
+
+    PRODUCTS = updated;
+    lg(`✅ تم! إجمالي المنتجات الآن: ${updated.length}`,"ok");
+    toast("✅ اعتُمدت الفاتورة");
+    pending = null;
+    setTimeout(()=>{ renderPreview(); refreshStats(); renderConts(); }, 800);
+  } catch(e){
+    lg("❌ خطأ: "+e.message,"err");
+    btn.disabled = false;
+  }
+};
+
+// ─── الإحصاء ───
+function refreshStats(){
+  const conts = new Set();
+  let units = 0;
+  PRODUCTS.forEach(p=>(p.purchases||[]).forEach(x=>{ if(x.container) conts.add(x.container); units+=num(x.qty); }));
+  document.getElementById("sProds").textContent = PRODUCTS.length;
+  document.getElementById("sConts").textContent = conts.size;
+  document.getElementById("sUnits").textContent = units.toLocaleString();
+}
+
+// ─── قائمة الكونتينرات ───
+function renderConts(){
+  const conts = {};
+  PRODUCTS.forEach(p=>(p.purchases||[]).forEach(x=>{
+    if(!x.container) return;
+    if(!conts[x.container]) conts[x.container] = { count:0, units:0 };
+    conts[x.container].count++;
+    conts[x.container].units += num(x.qty);
+  }));
+  const entries = Object.entries(conts);
+  document.getElementById("contsTitle").style.display = entries.length ? "block":"none";
+  if(!entries.length){ document.getElementById("contsList").innerHTML=""; return; }
+  let h = "";
+  entries.forEach(([name,d])=>{
+    h += `<div class="list-item">
+      <div class="ic">📦</div>
+      <div class="info">
+        <div class="t">${name}</div>
+        <div class="s">${d.count} منتج · ${d.units.toLocaleString()} قطعة</div>
+      </div>
+      <button class="del" onclick="delCont('${name.replace(/'/g,"\\'")}')">🗑️ حذف</button>
+    </div>`;
+  });
+  document.getElementById("contsList").innerHTML = h;
+}
+
+// ─── حذف كونتينر (عكس المشتريات) ───
+window.delCont = async (container)=>{
+  if(!confirm(`حذف كونتينر "${container}"؟\nسيُعكس تأثيره على المخزون.`)) return;
+  if(!LOADED){ toast("انتظر التحميل"); return; }
+  try {
+    const fresh = await sbGet(PKEY);
+    const base = Array.isArray(fresh) ? fresh : PRODUCTS;
+    const result = base.map(p=>{
+      const purchases = (p.purchases||[]).filter(x=>x.container!==container);
+      if(purchases.length===0 && (p.purchases||[]).some(x=>x.container===container)) return null;
+      return { ...p, purchases };
+    }).filter(Boolean);
+    const ok = await sbSet(PKEY, result);
+    if(ok){ PRODUCTS = result; toast("🗑️ حُذف الكونتينر"); refreshStats(); renderConts(); }
+    else toast("فشل الحذف");
+  } catch(e){ toast("خطأ: "+e.message); }
+};
+
+// ─── البوابة ───
+async function init(){
+  try {
+    const prods = await sbGet(PKEY);
+    PRODUCTS = Array.isArray(prods) ? prods : [];
+    LOADED = true;
+    refreshStats();
+    renderConts();
+  } catch(e){
+    document.getElementById("sProds").textContent = "!";
+    toast("تعذّر الاتصال — حدّث الصفحة");
+  }
+}
+init();
+</script>
+</body>
+</html>
