@@ -58,6 +58,7 @@ export default function App() {
   const [screen,   setScreen]   = useState("containers");
   const [showAI,   setShowAI]   = useState(false);
   const [aiModel,  setAiModel]  = useState("gemini");
+  const [showUpload, setShowUpload] = useState(false);
 
   // نحسب branchSummary مرة واحدة عند تغيير البيانات
   const branchSummary = useMemo(() => {
@@ -266,6 +267,11 @@ export default function App() {
 
           {/* يمين: أزرار أيقونات فقط */}
           <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+            <button onClick={() => setShowUpload(true)} style={{
+              width:"38px",height:"38px",borderRadius:"12px",background:"rgba(16,185,129,0.2)",
+              border:"1px solid rgba(16,185,129,0.3)",display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:"18px",cursor:"pointer",
+            }} title="رفع">📤</button>
             <button onClick={() => window.location.reload()}
               style={{width:"38px",height:"38px",borderRadius:"12px",background:"rgba(34,197,94,0.2)",border:"1px solid rgba(34,197,94,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",cursor:"pointer"}}
               title="تحديث">
@@ -293,6 +299,75 @@ export default function App() {
       <main className="pt-20 pb-24 px-4 max-w-lg mx-auto">
         {SCREENS[screen] ?? SCREENS.containers}
       </main>
+
+      {/* شاشة الرفع — أزرار كبيرة للصفحات المستقلة */}
+      {showUpload && (
+        <div className="fixed inset-0 bg-slate-900 z-40 overflow-y-auto">
+          <div className="px-4 pt-4 pb-24 max-w-lg mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={() => setShowUpload(false)} className="text-blue-400 font-bold text-sm flex items-center gap-1">
+                ← رجوع
+              </button>
+              <div className="font-black text-slate-100">رفع البيانات</div>
+              <div className="w-16" />
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
+              {/* المشتريات */}
+              <a href="/purchases.html" style={{textDecoration:"none"}}>
+                <div style={{
+                  background:"linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+                  border:"1px solid rgba(59,130,246,0.35)",borderRadius:"18px",padding:"24px",
+                  display:"flex",alignItems:"center",gap:"16px",cursor:"pointer",
+                }}>
+                  <div style={{fontSize:"42px"}}>📦</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"19px",fontWeight:"900",color:"#fff"}}>المشتريات</div>
+                    <div style={{fontSize:"13px",color:"#93c5fd",marginTop:"3px"}}>رفع فواتير الكونتينرات</div>
+                  </div>
+                  <div style={{fontSize:"22px",color:"#60a5fa"}}>←</div>
+                </div>
+              </a>
+
+              {/* المبيعات */}
+              <a href="/sales.html" style={{textDecoration:"none"}}>
+                <div style={{
+                  background:"linear-gradient(135deg, rgba(168,85,247,0.18), rgba(147,51,234,0.08))",
+                  border:"1px solid rgba(168,85,247,0.35)",borderRadius:"18px",padding:"24px",
+                  display:"flex",alignItems:"center",gap:"16px",cursor:"pointer",
+                }}>
+                  <div style={{fontSize:"42px"}}>📊</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"19px",fontWeight:"900",color:"#fff"}}>المبيعات</div>
+                    <div style={{fontSize:"13px",color:"#d8b4fe",marginTop:"3px"}}>رفع فترات المبيعات</div>
+                  </div>
+                  <div style={{fontSize:"22px",color:"#a855f7"}}>←</div>
+                </div>
+              </a>
+
+              {/* المستودع */}
+              <a href="/warehouse.html" style={{textDecoration:"none"}}>
+                <div style={{
+                  background:"linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.08))",
+                  border:"1px solid rgba(245,158,11,0.35)",borderRadius:"18px",padding:"24px",
+                  display:"flex",alignItems:"center",gap:"16px",cursor:"pointer",
+                }}>
+                  <div style={{fontSize:"42px"}}>🏬</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"19px",fontWeight:"900",color:"#fff"}}>المستودع</div>
+                    <div style={{fontSize:"13px",color:"#fcd34d",marginTop:"3px"}}>توزيع البضاعة على الفروع</div>
+                  </div>
+                  <div style={{fontSize:"22px",color:"#f59e0b"}}>←</div>
+                </div>
+              </a>
+            </div>
+
+            <div style={{marginTop:"18px",padding:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",fontSize:"12px",color:"#94a3b8",lineHeight:"1.7",textAlign:"center"}}>
+              صفحات مستقلة وآمنة · ترفع البيانات بدون التأثير على النظام
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* شاشة الإعدادات */}
       {showSettings && (
