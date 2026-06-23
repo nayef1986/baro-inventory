@@ -6,7 +6,18 @@ import * as XLSX from "xlsx";
 import { num } from "./calc.js";
 
 function cleanBarcode(raw) {
-  return String(raw ?? "").trim().replace(/了/g, "B").replace(/\s+/g, "");
+  // لو Excel حوّل الباركود لتاريخ (كائن Date) — نحوّله لرمز نظيف بدل ما يكسر النظام
+  if (raw instanceof Date) {
+    return "X" + raw.getTime().toString(36).toUpperCase();
+  }
+  let s = String(raw ?? "").trim().replace(/了/g, "B").replace(/\s+/g, "");
+  // لو الباركود صار نص تاريخ (2026-01-25T00:00:00 أو 2026-01-2500:00:00) — نحوّله لرمز نظيف
+  if (/^\d{4}-\d{2}-\d{2}/.test(s) || /\d{2}:\d{2}:\d{2}/.test(s)) {
+    s = "X" + s.replace(/[^0-9]/g, "").slice(0, 12);
+  }
+  // ننظّف أي رموز خطرة قد تكسر العرض/الروابط (نبقي حروف وأرقام وشرطة فقط)
+  s = s.replace(/[^A-Za-z0-9\-]/g, "");
+  return s;
 }
 
 // تنظيف اسم الفرع — يوحّد المسافات (يمنع التكرار)
