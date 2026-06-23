@@ -141,12 +141,31 @@ async function load(key) {
   if (typeof raw === "string") { try { return JSON.parse(raw); } catch { return null; } }
   return raw;
 }
+// 🛡️ حماية: لا نحفظ أبداً مصفوفة فاضية فوق بيانات حرجة (يمنع مسح كل شي)
+let DATA_LOADED = false; // يصير true فقط بعد تحميل ناجح من Supabase
+const CRITICAL_KEYS = ["baro_products_v2", "baro_periods_v2", "baro_transfers_v2"];
+
 async function save(key, value) {
+  // الحارس: لو المفتاح حرج والقيمة فاضية → ارفض الحفظ
+  if (CRITICAL_KEYS.includes(key)) {
+    const isEmpty = !value || (Array.isArray(value) && value.length === 0);
+    if (isEmpty) {
+      showToast("⚠️ مُنع حفظ بيانات فاضية (حماية)");
+      console.warn(`🛡️ رُفض حفظ ${key} لأنه فاضي`);
+      return false;
+    }
+    if (!DATA_LOADED) {
+      showToast("⚠️ انتظر اكتمال التحميل قبل الحفظ");
+      console.warn(`🛡️ رُفض حفظ ${key} — البيانات لم تُحمّل بعد`);
+      return false;
+    }
+  }
   await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
     method:"POST",
     headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
     body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
   });
+  return true;
 }
 
 function getFactoryCode(bc){ const s=String(bc??"").trim(); return s.length<5?s:s.slice(0,5); }
@@ -319,9 +338,17 @@ async function refreshAll(){
     const [prods, pers, sett, imgs, trans] = await Promise.all([
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2")
     ]);
+    // 🛡️ لو فشل تحميل المنتجات (null) لا نكتب فاضي فوقها — نوقف ونحذّر
+    if (prods === null) {
+      DATA_LOADED = false;
+      showToast("⚠️ تعذّر تحميل المنتجات — لا تعدّل الآن");
+      renderApp();
+      return;
+    }
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? [];
+    DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
     showToast("تم التحديث ✓");
-  } catch(e){ showToast("تعذّر التحديث"); }
+  } catch(e){ DATA_LOADED = false; showToast("تعذّر التحديث"); }
   renderApp();
 }
 function onSearch(v){ searchTerm = v; drawNeeds(document.getElementById("content")); }
@@ -767,6 +794,8 @@ async function init(){
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? [];
+    // ✅ نعتبر التحميل ناجحاً فقط لو وصلنا هنا بدون خطأ. لو prods=null (مفتاح فاضي فعلاً) الحفظ يبقى محمياً بالحارس
+    DATA_LOADED = (prods !== null);
   } catch(e){
     document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
     return;
