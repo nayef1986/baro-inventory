@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تفريغ البيانات التالفة</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:20px;max-width:600px;margin:0 auto;direction:rtl}
+  h1{font-size:21px;margin-bottom:8px;color:#fff}
+  .sub{color:#94a3b8;font-size:13px;margin-bottom:18px}
+  .card{background:#0f1626;border:1px solid #2d3a52;border-radius:14px;padding:16px;margin-bottom:12px}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1f2940;font-size:14px}
+  .stat:last-child{border:none}
+  .stat b{font-size:16px}
+  .g{color:#4ade80}.r{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}
+  .warn{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:12px;padding:14px;font-size:13px;color:#fca5a5;margin-bottom:14px;line-height:1.7}
+  .safe{background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:12px;padding:12px;font-size:13px;color:#6ee7b7;margin-bottom:14px;line-height:1.7}
+  button{width:100%;padding:15px;border:none;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;margin-top:8px}
+  .btn-clear{background:#dc2626;color:#fff}
+  .btn-clear:disabled{background:#334155;cursor:default}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:12px;margin-top:14px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.7;min-height:50px}
+  .ok{color:#4ade80}.err{color:#f87171}.info2{color:#60a5fa}
+</style>
+</head>
+<body>
+<h1>🗑️ تفريغ البيانات التالفة</h1>
+<div class="sub">مسح المنتجات والفترات (ترجع فاضية) — النظام يشتغل من جديد</div>
+
+<div class="safe">
+✅ <b>آمن:</b> هذا يمسح فقط المنتجات والفترات. الصور والإعدادات والسجل <b>لن تُمَس</b> — تبقى سليمة.
+</div>
+
+<div class="warn">
+⚠️ بعد المسح: المنتجات والفترات تصير فاضية. ترفع ملفاتك من جديد من النظام (parsers المحصّن ينظّفها).
+</div>
+
+<div class="card">
+  <div class="stat"><span>📦 المنتجات الحالية</span><b id="np" class="y">…</b></div>
+  <div class="stat"><span>📅 الفترات الحالية</span><b id="nper" class="y">…</b></div>
+  <div class="stat"><span>🖼️ الصور (تبقى)</span><b id="nimg" class="g">…</b></div>
+  <div class="stat"><span>⚙️ الإعدادات (تبقى)</span><b id="nset" class="g">…</b></div>
+</div>
+
+<button class="btn-clear" id="goBtn" onclick="doClear()" disabled>⏳ جاري الفحص…</button>
+<div class="log" id="log">جاري قراءة الوضع الحالي…</div>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+
+const L = document.getElementById("log");
+function log(m,c){ L.innerHTML += `\n<span class="${c||''}">${m}</span>`; L.scrollTop=L.scrollHeight; }
+
+async function sbGet(key){
+  try {
+    const res = await fetch(`${U}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+      { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+    if(!res.ok) return null;
+    const j = await res.json();
+    const raw = j?.[0]?.value;
+    return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+  } catch(e){ return null; }
+}
+async function sbSet(key, value){
+  const res = await fetch(`${U}/rest/v1/${TABLE}`, {
+    method:"POST",
+    headers:{ apikey:K, Authorization:`Bearer ${K}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  });
+  return res.ok;
+}
+
+async function check(){
+  try {
+    const products = await sbGet("baro_products_v2");
+    const periods = await sbGet("baro_periods_v2");
+    const images = await sbGet("baro_images_v2");
+    const settings = await sbGet("baro_settings_v2");
+    document.getElementById("np").textContent = Array.isArray(products)?products.length:0;
+    document.getElementById("nper").textContent = Array.isArray(periods)?periods.length:0;
+    document.getElementById("nimg").textContent = images&&typeof images==="object"?Object.keys(images).length:0;
+    document.getElementById("nset").textContent = settings&&typeof settings==="object"?Object.keys(settings).length+" مفتاح":"فارغ";
+    L.innerHTML = "✅ تمت قراءة الوضع الحالي";
+    log("جاهز للتفريغ. اضغط الزر لمسح المنتجات والفترات.","info2");
+    const btn = document.getElementById("goBtn");
+    btn.disabled = false;
+    btn.textContent = "🗑️ فرّغ المنتجات والفترات";
+  } catch(e){
+    L.innerHTML = "❌ خطأ في القراءة: "+e.message;
+  }
+}
+
+async function doClear(){
+  const btn = document.getElementById("goBtn");
+  if(!confirm("متأكد؟ سيتم مسح المنتجات والفترات (تصير فاضية).\nالصور والإعدادات تبقى سليمة.")) return;
+  if(!confirm("تأكيد أخير: هل ترفع ملفاتك من جديد بعد المسح؟")) return;
+  btn.disabled = true;
+  L.innerHTML = "بدء التفريغ…";
+  try {
+    log("🗑️ مسح المنتجات…","info2");
+    const ok1 = await sbSet("baro_products_v2", []);
+    log(ok1?"✅ المنتجات صارت فاضية":"❌ فشل","" + (ok1?"ok":"err"));
+
+    log("🗑️ مسح الفترات…","info2");
+    const ok2 = await sbSet("baro_periods_v2", []);
+    log(ok2?"✅ الفترات صارت فاضية":"❌ فشل", ok2?"ok":"err");
+
+    // نتأكد
+    log("🔍 تأكيد…","info2");
+    const vp = await sbGet("baro_products_v2");
+    const vper = await sbGet("baro_periods_v2");
+    log(`✅ المنتجات: ${Array.isArray(vp)?vp.length:0} · الفترات: ${Array.isArray(vper)?vper.length:0}`,"ok");
+
+    log("\n🎉 تم التفريغ! النظام الآن يفتح فاضي وشغّال.","ok");
+    log("الخطوة الجاية: افتح النظام (يفتح فاضي) → ارفع ملفاتك من جديد.","info2");
+    log("⚠️ لا تفتح هذه الصفحة مرة أخرى.","err");
+  } catch(e){
+    log("❌ خطأ: "+e.message,"err");
+    btn.disabled = false;
+  }
+}
+
+check();
+</script>
+</body>
+</html>
