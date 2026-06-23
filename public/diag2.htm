@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تشخيص بيانات البارو</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,'Segoe UI',Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:18px;max-width:640px;margin:0 auto;direction:rtl}
+  h1{font-size:20px;margin-bottom:14px;color:#fff}
+  .card{background:#0f1626;border:1px solid #2d3a52;border-radius:14px;padding:16px;margin-bottom:12px}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1f2940;font-size:14px}
+  .stat:last-child{border:none}
+  .stat b{font-size:16px}
+  .g{color:#4ade80}.r{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}
+  .issue{background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:10px;margin:6px 0;font-size:12px}
+  .issue .bc{font-family:monospace;font-weight:900;color:#fca5a5}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.7;min-height:50px}
+  button{width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;margin-top:10px}
+  .b1{background:#2563eb;color:#fff}
+  h2{font-size:15px;margin:16px 0 8px;color:#cbd5e1}
+</style>
+</head>
+<body>
+<h1>🔬 تشخيص بيانات البارو</h1>
+<div class="log" id="log">جاري الفحص…</div>
+<div id="results"></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+
+const logEl = document.getElementById("log");
+const resEl = document.getElementById("results");
+function log(m,c){ logEl.innerHTML += `\n<span class="${c||''}">${m}</span>`; }
+
+async function sbGet(key){
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }});
+    if(!res.ok) return null;
+    const j = await res.json();
+    const raw = j?.[0]?.value;
+    if(raw==null) return null;
+    return typeof raw==="string" ? JSON.parse(raw) : raw;
+  } catch(e){ log("خطأ قراءة "+key+": "+e.message,"r"); return null; }
+}
+
+const num = v => Number(v)||0;
+
+async function diagnose(){
+  logEl.innerHTML = "🔍 قراءة البيانات من Supabase…";
+
+  const products = await sbGet("baro_products_v2");
+  const periods = await sbGet("baro_periods_v2");
+  const images = await sbGet("baro_images_v2");
+  const settings = await sbGet("baro_settings_v2");
+  const transfers = await sbGet("baro_transfers_v2");
+
+  log("\n✅ تمت القراءة","g");
+
+  // ─── إحصاء عام ───
+  const np = Array.isArray(products)?products.length:0;
+  const nper = Array.isArray(periods)?periods.length:0;
+  const nimg = images && typeof images==="object" ? Object.keys(images).length : 0;
+  const ntr = Array.isArray(transfers)?transfers.length:0;
+
+  let html = `<div class="card">
+    <div class="stat"><span>📦 المنتجات</span><b class="${np>0?'g':'r'}">${np}</b></div>
+    <div class="stat"><span>📅 الفترات (المبيعات)</span><b class="${nper>0?'g':'y'}">${nper}</b></div>
+    <div class="stat"><span>🖼️ الصور</span><b class="b">${nimg}</b></div>
+    <div class="stat"><span>🔄 السجل (transfers)</span><b class="b">${ntr}</b></div>
+  </div>`;
+
+  // ─── فحص سلامة المنتجات (نبحث عن اللي يكسر) ───
+  const issues = [];
+  const dupBarcodes = {};
+  let noBarcods=0, noPurch=0, badPrice=0, badPurch=0;
+
+  if(Array.isArray(products)){
+    products.forEach((p,i)=>{
+      // باركود مفقود
+      if(!p.barcode || typeof p.barcode!=="string"){ noBarcods++; issues.push({type:"باركود مفقود",idx:i,bc:p.barcode||"(فارغ)",name:p.name||""}); return; }
+      // تكرار
+      dupBarcodes[p.barcode] = (dupBarcodes[p.barcode]||0)+1;
+      // purchases مفقودة أو غير مصفوفة
+      if(!Array.isArray(p.purchases)){ noPurch++; issues.push({type:"purchases غير مصفوفة",idx:i,bc:p.barcode,name:p.name||""}); }
+      else {
+        // فحص كل عملية شراء
+        p.purchases.forEach((pur,j)=>{
+          if(typeof pur!=="object" || pur===null){ badPurch++; issues.push({type:"عملية شراء تالفة",idx:i,bc:p.barcode,name:p.name||""}); }
+          else if(isNaN(Number(pur.qty)) && pur.qty!=null){ badPurch++; issues.push({type:"كمية غير رقمية",idx:i,bc:p.barcode,name:(pur.qty)}); }
+        });
+      }
+      // سعر بيع غير رقمي (نص يكسر الحساب)
+      if(p.sellPrice!=null && isNaN(Number(p.sellPrice))){ badPrice++; issues.push({type:"سعر بيع غير رقمي",idx:i,bc:p.barcode,name:String(p.sellPrice)}); }
+    });
+  }
+
+  const dups = Object.entries(dupBarcodes).filter(([,c])=>c>1);
+
+  html += `<h2>🔎 فحص سلامة المنتجات</h2><div class="card">
+    <div class="stat"><span>باركودات مفقودة</span><b class="${noBarcods?'r':'g'}">${noBarcods}</b></div>
+    <div class="stat"><span>باركودات مكررة</span><b class="${dups.length?'y':'g'}">${dups.length}</b></div>
+    <div class="stat"><span>purchases تالفة</span><b class="${noPurch?'r':'g'}">${noPurch}</b></div>
+    <div class="stat"><span>عمليات شراء تالفة</span><b class="${badPurch?'r':'g'}">${badPurch}</b></div>
+    <div class="stat"><span>أسعار غير رقمية</span><b class="${badPrice?'r':'g'}">${badPrice}</b></div>
+  </div>`;
+
+  // ─── فحص الفترات ───
+  let badSales=0, branchCount=0;
+  if(Array.isArray(periods)){
+    periods.forEach(per=>{
+      if(per.sales && typeof per.sales==="object"){
+        branchCount = Math.max(branchCount, Object.keys(per.sales).length);
+        Object.values(per.sales).forEach(bd=>{
+          if(bd && typeof bd==="object"){
+            Object.values(bd).forEach(d=>{ if(d && isNaN(Number(d.qty)) && d.qty!=null) badSales++; });
+          }
+        });
+      }
+    });
+  }
+  html += `<h2>📅 فحص الفترات</h2><div class="card">
+    <div class="stat"><span>عدد الفترات</span><b class="b">${nper}</b></div>
+    <div class="stat"><span>أقصى عدد فروع</span><b class="b">${branchCount}</b></div>
+    <div class="stat"><span>كميات مبيعات تالفة</span><b class="${badSales?'r':'g'}">${badSales}</b></div>
+  </div>`;
+
+  // ─── محاكاة الحساب (نشوف وين ينهار) ───
+  log("\n🧮 محاكاة حساب المنتجات…","b");
+  let calcCrash = null;
+  try {
+    if(Array.isArray(products) && Array.isArray(periods)){
+      products.forEach((p,i)=>{
+        // نحاكي totalPurchases
+        const bought = (p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);
+        // نحاكي soldAllPeriods
+        let sold=0;
+        periods.forEach(per=>{
+          Object.values(per.sales||{}).forEach(bd=>{ sold += num(bd[p.barcode]?.qty); });
+        });
+      });
+      log("✅ الحساب يمر بدون انهيار — البيانات سليمة حسابياً","g");
+    }
+  } catch(e){
+    calcCrash = e.message;
+    log("❌ الحساب ينهار: "+e.message,"r");
+  }
+
+  // ─── عرض أول 15 مشكلة ───
+  if(issues.length){
+    html += `<h2>⚠️ المشاكل المكتشفة (${issues.length})</h2>`;
+    issues.slice(0,15).forEach(is=>{
+      html += `<div class="issue">[${is.type}] <span class="bc">${is.bc}</span> ${is.name?'· '+is.name:''} <span style="color:#64748b">(#${is.idx})</span></div>`;
+    });
+    if(issues.length>15) html += `<div style="color:#64748b;font-size:12px;padding:6px">…و ${issues.length-15} مشكلة أخرى</div>`;
+  }
+
+  // ─── الخلاصة ───
+  html += `<h2>📋 الخلاصة</h2><div class="card" style="font-size:13px;line-height:1.8">`;
+  if(np===0){
+    html += `<span class="r">🔴 المنتجات فاضية!</span>`;
+  } else if(issues.length===0 && !calcCrash){
+    html += `<span class="g">🟢 البيانات سليمة حسابياً.</span><br>المشكلة على الأرجح في <b>الحجم</b> (${np} منتج) أو في مكوّن العرض، مو في البيانات نفسها.`;
+  } else if(calcCrash){
+    html += `<span class="r">🔴 الحساب ينهار بسبب بيان تالف.</span><br>السبب: ${calcCrash}`;
+  } else {
+    html += `<span class="y">🟡 فيه ${issues.length} مشكلة في البيانات قد تكسر النظام.</span><br>شوف القائمة فوق.`;
+  }
+  html += `</div>`;
+
+  resEl.innerHTML = html;
+  log("\n✅ انتهى التشخيص","g");
+}
+
+diagnose();
+</script>
+</body>
+</html>
