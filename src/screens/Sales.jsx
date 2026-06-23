@@ -458,7 +458,7 @@ export default function SalesScreen({ products, periods, settings, images, onSav
 
     try {
       const buffer   = await file.arrayBuffer();
-      const periodLabel = label.trim() || new Date().toISOString().slice(0, 10);
+      const periodLabel = label.trim() || file.name.replace(/\.(xlsx|xls)$/i, "") || new Date().toISOString().slice(0, 10);
       const { periods: parsedPeriods, errors, warnings } = parseSalesFile(buffer, periodLabel);
 
       if (errors && errors.length > 0) {
