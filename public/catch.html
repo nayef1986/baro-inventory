@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ماسك الأخطاء — البارو</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:16px;max-width:680px;margin:0 auto;direction:rtl}
+  h1{font-size:19px;margin-bottom:6px;color:#fff}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:16px}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:14px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.8;min-height:200px;direction:ltr;text-align:left}
+  .err{color:#f87171}.ok{color:#4ade80}.info2{color:#60a5fa}.y{color:#fbbf24}.w{color:#fff;font-weight:bold}
+  button{width:100%;padding:13px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit;margin-top:10px;background:#2563eb;color:#fff}
+</style>
+</head>
+<body>
+<h1>🔍 ماسك أخطاء النظام</h1>
+<div class="sub">يحاكي حسابات النظام على بياناتك ويمسك أول خطأ يكسر</div>
+<div class="log" id="log">جاري الفحص…</div>
+<button onclick="location.reload()">🔄 إعادة الفحص</button>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const L = document.getElementById("log");
+function log(m,c){ L.innerHTML += `\n<span class="${c||''}">${m}</span>`; }
+
+async function getKey(key){
+  const res = await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) throw new Error("HTTP "+res.status+" على "+key);
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+
+const num = v => Number(v)||0;
+const pct = (part, whole) => whole>0 ? (part/whole)*100 : 0;
+
+async function run(){
+  L.innerHTML = "🔍 قراءة البيانات…";
+  let products, periods;
+  try {
+    products = await getKey("baro_products_v2") || [];
+    periods = await getKey("baro_periods_v2") || [];
+    log(`\n✅ المنتجات: ${products.length} · الفترات: ${periods.length}`,"w");
+  } catch(e){ log("\n❌ فشل القراءة: "+e.message,"err"); return; }
+
+  // نحاكي بالضبط ما يسويه App.jsx (branchSummary) + calc
+  log("\n🧮 محاكاة branchSummary (نفس App.jsx)…","info2");
+  try {
+    const productMap = {};
+    products.forEach(p => { productMap[p.barcode] = num(p.purchases?.slice(-1)[0]?.buyPrice); });
+    const allBranches = new Set();
+    periods.forEach(per => Object.keys(per.sales ?? {}).forEach(b => allBranches.add(b)));
+    let calcCount = 0;
+    allBranches.forEach(branch => {
+      periods.forEach(per => {
+        const data = per.sales?.[branch] ?? {};
+        Object.entries(data).forEach(([barcode, v]) => {
+          const q = num(v.qty); calcCount++;
+        });
+      });
+    });
+    log(`   ✅ branchSummary مرّ — ${allBranches.size} فرع · ${calcCount} سجل`,"ok");
+  } catch(e){
+    log("   ❌❌ هنا ينهار! branchSummary: "+e.message,"err");
+    log("   📍 السبب على الأرجح في حساب الفروع","y");
+    return;
+  }
+
+  // نحاكي calcProduct على كل منتج
+  log("\n🧮 محاكاة calcProduct على كل منتج…","info2");
+  let crashed = null;
+  for(let i=0;i<products.length;i++){
+    const p = products[i];
+    try {
+      const bought = (p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);
+      let sold = 0;
+      periods.forEach(per => {
+        Object.values(per.sales||{}).forEach(bd=>{ sold += num(bd[p.barcode]?.qty); });
+      });
+      const closingQty = Math.max(0, bought-sold);
+      const soldPct = pct(sold, bought);
+      // فحص النتائج الخطرة
+      if(!isFinite(soldPct)) throw new Error("soldPct = Infinity (قسمة على صفر)");
+      const fc = String(p.barcode).slice(0,5);
+    } catch(e){
+      crashed = { i, barcode:p.barcode, name:p.name, err:e.message };
+      break;
+    }
+  }
+  if(crashed){
+    log(`   ❌❌ ينهار عند المنتج #${crashed.i}`,"err");
+    log(`   باركود: ${crashed.barcode} · ${crashed.name||''}`,"y");
+    log(`   الخطأ: ${crashed.err}`,"err");
+  } else {
+    log("   ✅ calcProduct مرّ على كل المنتجات بسلام","ok");
+  }
+
+  // فحص: منتجات لها مبيعات بس bought=0 (قسمة على صفر)
+  log("\n🔎 فحص: مبيعات بدون مشتريات (bought=0)…","info2");
+  const soldByBc = {};
+  periods.forEach(per => Object.values(per.sales||{}).forEach(bd=>{
+    Object.entries(bd).forEach(([bc,v])=>{ soldByBc[bc]=(soldByBc[bc]||0)+num(v.qty); });
+  }));
+  const boughtByBc = {};
+  products.forEach(p=>{ boughtByBc[p.barcode]=(p.purchases||[]).reduce((s,x)=>s+num(x.qty),0); });
+  let zeroBoughtSold = 0, orphanSales = 0;
+  Object.keys(soldByBc).forEach(bc=>{
+    if(!(bc in boughtByBc)) orphanSales++;
+    else if(boughtByBc[bc]===0) zeroBoughtSold++;
+  });
+  log(`   مبيعات بدون منتج مطابق (يتيمة): ${orphanSales}`, orphanSales?"y":"ok");
+  log(`   منتجات مباعة بكمية شراء صفر: ${zeroBoughtSold}`, zeroBoughtSold?"y":"ok");
+
+  // فحص: كم منتج مشترياته صفر إجمالاً
+  const zeroBought = products.filter(p=>(p.purchases||[]).reduce((s,x)=>s+num(x.qty),0)===0).length;
+  log(`   منتجات كمية شرائها صفر: ${zeroBought} من ${products.length}`, zeroBought>products.length/2?"err":"y");
+
+  log("\n\n📋 الخلاصة:","w");
+  if(zeroBought > products.length*0.5){
+    log("🔴 أغلب المنتجات كميتها صفر! المشتريات دخلت غلط.","err");
+    log("هذا يسبب قسمة على صفر في الحسابات → تعليق.","y");
+  } else if(orphanSales > 0){
+    log(`🟡 ${orphanSales} مبيعات بدون منتج → قد تسبب مشاكل عرض.`,"y");
+  } else {
+    log("🟢 البيانات سليمة حسابياً. التعليق قد يكون في مكوّن عرض (صور/حجم).","ok");
+  }
+  log("\n✅ انتهى","ok");
+}
+
+run().catch(e=>log("\n❌ خطأ عام: "+e.message,"err"));
+</script>
+</body>
+</html>
