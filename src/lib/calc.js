@@ -13,19 +13,27 @@ export const pct = (part, total) =>
 
 export const safeDiv = (a, b) => (num(b) !== 0 ? num(a) / num(b) : 0);
 
+// ─── تنسيق الأرقام ──────────────────────────────────────────
+
+export const fmtN = (v) => {
+  const n = Number(v) || 0;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+};
+export const fmtM = (v) => {
+  const n = Number(v) || 0;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+};
+export const fmtPct = (v) => {
+  const n = Number(v) || 0;
+  return Math.round(n) + "%";
+};
+
 // ─── المشتريات ──────────────────────────────────────────────
 
-/**
- * إجمالي الكميات المشتراة لمنتج
- * product.purchases = [{ qty, buyPrice, container, date }]
- */
 export function totalPurchases(product) {
   return (product.purchases ?? []).reduce((s, p) => s + num(p.qty), 0);
 }
 
-/**
- * متوسط سعر الشراء (مرجح بالكمية)
- */
 export function avgBuyPrice(product) {
   const purchases = product.purchases ?? [];
   const totalQty = purchases.reduce((s, p) => s + num(p.qty), 0);
@@ -34,9 +42,6 @@ export function avgBuyPrice(product) {
   return totalCost / totalQty;
 }
 
-/**
- * تكلفة الكونتينر الكاملة
- */
 export function containerCost(products, containerName) {
   return products
     .filter((p) => p.container === containerName)
@@ -49,10 +54,6 @@ export function containerCost(products, containerName) {
 
 // ─── المبيعات ───────────────────────────────────────────────
 
-/**
- * مبيعات منتج في فترة واحدة — فرع اختياري
- * period.sales = { [branch]: { [barcode]: { qty, orders, totalPrice } } }
- */
 export function soldInPeriod(barcode, period, branch = null) {
   if (!period?.sales) return 0;
   if (branch) {
@@ -64,16 +65,10 @@ export function soldInPeriod(barcode, period, branch = null) {
   );
 }
 
-/**
- * إجمالي مبيعات منتج عبر فترات — فرع اختياري
- */
 export function soldAllPeriods(barcode, periods, branch = null) {
   return periods.reduce((s, period) => s + soldInPeriod(barcode, period, branch), 0);
 }
 
-/**
- * إجمالي إيرادات منتج — فرع اختياري
- */
 export function totalRevenue(barcode, periods, branch = null) {
   return periods.reduce((s, period) => {
     if (!period?.sales) return s;
@@ -90,9 +85,6 @@ export function totalRevenue(barcode, periods, branch = null) {
   }, 0);
 }
 
-/**
- * كل الفروع التي باعت منتجاً في فترة
- */
 export function branchesSoldProduct(barcode, period) {
   if (!period?.sales) return [];
   return Object.entries(period.sales)
@@ -105,21 +97,26 @@ export function branchesSoldProduct(barcode, period) {
     .sort((a, b) => b.qty - a.qty);
 }
 
+export function getSalesNames(periods) {
+  const names = {};
+  periods.forEach((period) => {
+    Object.values(period.sales ?? {}).forEach((branchData) => {
+      Object.entries(branchData).forEach(([barcode, d]) => {
+        if (d?.name && !names[barcode]) names[barcode] = d.name;
+      });
+    });
+  });
+  return names;
+}
+
 // ─── المخزون ────────────────────────────────────────────────
 
-/**
- * المتبقي = مشتريات − مباع في كل الفترات
- * لا يرجع أقل من 0
- */
 export function closing(product, periods) {
   const bought = totalPurchases(product);
   const sold = soldAllPeriods(product.barcode, periods);
   return Math.max(0, bought - sold);
 }
 
-/**
- * حالة المخزون
- */
 export function closingStatus(closingQty, purchased) {
   if (purchased === 0) return "بدون_مشتريات";
   if (closingQty === 0) return "نفد";
@@ -127,9 +124,6 @@ export function closingStatus(closingQty, purchased) {
   return "جيد";
 }
 
-/**
- * بيانات منتج كاملة محسوبة
- */
 export function calcProduct(product, periods) {
   const bought = totalPurchases(product);
   const sold = soldAllPeriods(product.barcode, periods);
@@ -144,25 +138,38 @@ export function calcProduct(product, periods) {
 
   return {
     ...product,
-    bought,
-    sold,
-    closing: closingQty,
+    bought, sold, closing: closingQty,
     status: closingStatus(closingQty, bought),
-    buyPrice,
-    sellPrice,
-    revenue,
-    cost,
-    profit,
-    marginPct,
-    soldPct,
+    buyPrice, sellPrice, revenue, cost, profit, marginPct, soldPct,
   };
 }
 
 // ─── الفروع ─────────────────────────────────────────────────
 
 /**
- * كل الفروع من مجموعة فترات
+ * المتبقي الفعلي لمنتج في فرع — يدعم 3 حالات:
+ * - لا تعديل: تقدير دزينة المبيعات ناقص المبيعات
+ * - تعديل رقم قديم: ثابت
+ * - تعديل كائن فيه qty و atPeriodCount: الكمية ناقص مبيعات الفترات الجديدة
  */
+export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12) {
+  const sold = soldAllPeriods(barcode, periods, branch);
+  const key = branch + "|" + barcode;
+  const ov = overrides[key];
+  if (ov === undefined || ov === null) {
+    const given = Math.ceil(sold / minStock) * minStock;
+    return Math.max(0, given - sold);
+  }
+  if (typeof ov === "number") {
+    return Math.max(0, ov);
+  }
+  const baseQty = num(ov.qty);
+  const atCount = num(ov.atPeriodCount);
+  const newPeriods = periods.slice(atCount);
+  const newSold = newPeriods.reduce((s, per) => s + soldInPeriod(barcode, per, branch), 0);
+  return Math.max(0, baseQty - newSold);
+}
+
 export function allBranches(periods) {
   const set = new Set();
   periods.forEach((period) => {
@@ -171,11 +178,6 @@ export function allBranches(periods) {
   return [...set].sort();
 }
 
-/**
- * تقييم منتج في فرع
- * mode: "sold" | "closing" | "both"
- * returns: { qty, closingQty, soldPct, closingPct, rank }
- */
 export function productStrengthInBranch(product, branch, periods, mode = "sold") {
   const sold = soldAllPeriods(product.barcode, periods, branch);
   const bought = totalPurchases(product);
@@ -191,11 +193,6 @@ export function productStrengthInBranch(product, branch, periods, mode = "sold")
   return { sold, closingQty, soldPct, closingPct, score };
 }
 
-/**
- * منتجات فرع مرتبة حسب القوة — مع فلترة كونتينر أو مصنع
- * sortBy: "sold" | "closing"
- * filter: { type: "container"|"factory"|"all", value: string }
- */
 export function branchProductsSorted(products, branch, periods, sortBy = "sold", filter = { type: "all" }) {
   let filtered = products;
 
@@ -221,9 +218,6 @@ export function branchProductsSorted(products, branch, periods, sortBy = "sold",
     });
 }
 
-/**
- * أقوى وأضعف N منتج في فرع
- */
 export function branchTopBottom(products, branch, periods, sortBy = "sold", n = 5) {
   const sorted = branchProductsSorted(products, branch, periods, sortBy);
   const withSales = sorted.filter((p) => p.sold > 0);
@@ -235,10 +229,6 @@ export function branchTopBottom(products, branch, periods, sortBy = "sold", n = 
   };
 }
 
-/**
- * احتياج فرع من آخر فترة
- * المنطق: أول المدة = 12، الاحتياج = 12 − (أُعطي − بيع)
- */
 export function branchNeed(products, branch, period) {
   if (!period?.sales) return [];
   const branchData = period.sales[branch] ?? {};
@@ -255,14 +245,7 @@ export function branchNeed(products, branch, period) {
 
       if (needQty === 0) return null;
 
-      return {
-        ...p,
-        sold,
-        given,
-        remaining,
-        needQty,
-        buyPrice: avgBuyPrice(p),
-      };
+      return { ...p, sold, given, remaining, needQty, buyPrice: avgBuyPrice(p) };
     })
     .filter(Boolean)
     .sort((a, b) => b.needQty - a.needQty);
@@ -270,16 +253,9 @@ export function branchNeed(products, branch, period) {
 
 // ─── الكونتينر ──────────────────────────────────────────────
 
-/**
- * ملخص كونتينر كامل
- */
 export function containerSummary(products, containerName, periods) {
   const contProducts = products.filter((p) => p.container === containerName);
-
-  const rows = contProducts.map((p) => {
-    const calc = calcProduct(p, periods);
-    return calc;
-  });
+  const rows = contProducts.map((p) => calcProduct(p, periods));
 
   const totalBought   = rows.reduce((s, r) => s + r.bought, 0);
   const totalSold     = rows.reduce((s, r) => s + r.sold, 0);
@@ -293,24 +269,14 @@ export function containerSummary(products, containerName, periods) {
   return {
     container: containerName,
     productCount: contProducts.length,
-    totalBought,
-    totalSold,
-    totalClosing,
-    totalCost,
-    totalRevenue: totalRevenue_,
-    totalProfit,
-    overallMargin,
-    soldPct,
+    totalBought, totalSold, totalClosing, totalCost,
+    totalRevenue: totalRevenue_, totalProfit, overallMargin, soldPct,
     products: rows,
   };
 }
 
 // ─── تقرير المصنع ───────────────────────────────────────────
 
-/**
- * منتجات مصنع مع نسب مبيعاتها — جاهز للتقرير
- * threshold: النسبة التي يحددها المستخدم (مثلاً 60)
- */
 export function factoryReport(products, factoryCode, periods, threshold) {
   const facProducts = products.filter(
     (p) => getFactoryCode(p.barcode) === factoryCode
@@ -325,21 +291,11 @@ export function factoryReport(products, factoryCode, periods, threshold) {
   const successful = threshold != null ? rows.filter((r) => r.repeat) : [];
   const weak       = threshold != null ? rows.filter((r) => !r.repeat) : [];
 
-  return {
-    factoryCode,
-    productCount: facProducts.length,
-    products: rows,
-    successful,
-    weak,
-    threshold,
-  };
+  return { factoryCode, productCount: facProducts.length, products: rows, successful, weak, threshold };
 }
 
-// ─── المقارنة بين فترتين ────────────────────────────────────
+// ─── المقارنة ───────────────────────────────────────────────
 
-/**
- * مقارنة فترتين — على مستوى المنتجات
- */
 export function comparePeriods(products, periodA, periodB) {
   return products.map((p) => {
     const soldA = soldInPeriod(p.barcode, periodA);
@@ -348,27 +304,15 @@ export function comparePeriods(products, periodA, periodB) {
     const revenueB = totalRevenue(p.barcode, [periodB]);
     const diff = soldB - soldA;
     const diffPct = soldA > 0 ? pct(diff, soldA) : null;
-    const trend =
-      diff > 0 ? "صاعد" : diff < 0 ? "هابط" : "ثابت";
+    const trend = diff > 0 ? "صاعد" : diff < 0 ? "هابط" : "ثابت";
 
     return {
-      barcode: p.barcode,
-      name: p.name,
-      container: p.container,
-      soldA,
-      soldB,
-      revenueA,
-      revenueB,
-      diff,
-      diffPct,
-      trend,
+      barcode: p.barcode, name: p.name, container: p.container,
+      soldA, soldB, revenueA, revenueB, diff, diffPct, trend,
     };
   });
 }
 
-/**
- * مقارنة فرعين في نفس الفترة
- */
 export function compareBranches(products, period, branchA, branchB) {
   return products.map((p) => {
     const soldA = soldInPeriod(p.barcode, period, branchA);
@@ -378,14 +322,8 @@ export function compareBranches(products, period, branchA, branchB) {
     const diff = soldB - soldA;
 
     return {
-      barcode: p.barcode,
-      name: p.name,
-      container: p.container,
-      soldA,
-      soldB,
-      revenueA,
-      revenueB,
-      diff,
+      barcode: p.barcode, name: p.name, container: p.container,
+      soldA, soldB, revenueA, revenueB, diff,
       winner: soldA > soldB ? branchA : soldB > soldA ? branchB : "متساوي",
     };
   });
@@ -393,32 +331,20 @@ export function compareBranches(products, period, branchA, branchB) {
 
 // ─── مساعدات عامة ───────────────────────────────────────────
 
-/**
- * كود المصنع = أول 5 أرقام من الباركود
- */
 export function getFactoryCode(barcode) {
   const str = String(barcode ?? "").trim();
   if (str.length < 5) return str;
   return str.slice(0, 5);
 }
 
-/**
- * كل كونتينرات المنتجات
- */
 export function allContainers(products) {
   return [...new Set(products.map((p) => p.container).filter(Boolean))].sort();
 }
 
-/**
- * كل كودات المصانع
- */
 export function allFactoryCodes(products) {
   return [...new Set(products.map((p) => getFactoryCode(p.barcode)).filter(Boolean))].sort();
 }
 
-/**
- * فلترة نص مع تطبيع الهمزة والألف
- */
 export function normalizeArabic(text) {
   return String(text ?? "")
     .replace(/[أإآا]/g, "ا")
@@ -432,38 +358,132 @@ export function arabicIncludes(text, query) {
   return normalizeArabic(text).includes(normalizeArabic(query));
 }
 
+// ─── تحليلات التقارير ───────────────────────────────────────
 
-// ─── تنسيق الأرقام (مطلوبة من exporters.js) ─────────────────
-export const fmtN = (v) => {
-  const n = Number(v) || 0;
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-};
-export const fmtM = (v) => {
-  const n = Number(v) || 0;
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-};
-export const fmtPct = (v) => {
-  const n = Number(v) || 0;
-  return Math.round(n) + "%";
-};
+export function analyzeReorder(product, periods) {
+  if (!periods || periods.length === 0) return null;
+  const bought = totalPurchases(product);
+  if (bought === 0) return null;
+  const sold = soldAllPeriods(product.barcode, periods);
+  const closingQty = Math.max(0, bought - sold);
 
-// ─── المتبقي في الفرع (مطلوبة من SmartRedistribution.jsx) ────
-export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12) {
-  const sold = soldAllPeriods(barcode, periods, branch);
-  const key = branch + "|" + barcode;
-  const ov = overrides[key];
-  if (ov === undefined || ov === null) {
-    const given = Math.ceil(sold / minStock) * minStock;
-    return Math.max(0, given - sold);
-  }
-  if (typeof ov === "number") {
-    return Math.max(0, ov);
-  }
-  const baseQty = num(ov.qty);
-  const atCount = num(ov.atPeriodCount);
-  const newPeriods = periods.slice(atCount);
-  const newSold = newPeriods.reduce((s, per) => s + soldInPeriod(barcode, per, branch), 0);
-  return Math.max(0, baseQty - newSold);
+  const perSales = periods.map(per => soldInPeriod(product.barcode, per));
+  const active = perSales.filter(q => q > 0);
+  if (active.length === 0) return null;
+  const avgSales = active.reduce((s, q) => s + q, 0) / active.length;
+  const lastSales = perSales[perSales.length - 1];
+
+  const monthsToEmpty = avgSales > 0 ? closingQty / avgSales : 999;
+  const daysToEmpty = Math.round(monthsToEmpty * 30);
+
+  let status = "ok";
+  if (closingQty === 0) status = "empty";
+  else if (daysToEmpty <= 30) status = "urgent";
+  else if (daysToEmpty <= 60) status = "soon";
+
+  let trend = "stable";
+  if (lastSales > avgSales * 1.2) trend = "rising";
+  else if (lastSales < avgSales * 0.8) trend = "falling";
+
+  let message = "";
+  if (status === "empty") message = "⛔ نفد المخزون";
+  else if (status === "urgent") message = `🔴 ينفد خلال ${daysToEmpty} يوم — اطلب الآن`;
+  else if (status === "soon") message = `🟡 ينفد خلال ${daysToEmpty} يوم`;
+
+  let trendMsg = "";
+  if (trend === "rising") trendMsg = "📈 الطلب يرتفع — زِد الكمية";
+  else if (trend === "falling") trendMsg = "📉 الطلب ينخفض";
+
+  return { status, trend, daysToEmpty, closing: closingQty, avgSales, lastSales, message, trendMsg };
+}
+
+export function getSmartAlerts(products, periods) {
+  if (!periods || periods.length < 2) return [];
+  const alerts = [];
+  const lastPer = periods[periods.length - 1];
+  const prevPer = periods[periods.length - 2];
+
+  products.forEach(p => {
+    const soldLast = soldInPeriod(p.barcode, lastPer);
+    const soldPrev = soldInPeriod(p.barcode, prevPer);
+    const bought = totalPurchases(p);
+    const closingQty = Math.max(0, bought - soldAllPeriods(p.barcode, periods));
+
+    if (soldPrev > 0 && soldLast >= soldPrev * 2 && soldLast >= 6) {
+      alerts.push({
+        icon: "🚀", title: p.name, barcode: p.barcode, color: "green",
+        message: `صاعد قوي +${Math.round(((soldLast - soldPrev) / soldPrev) * 100)}%`,
+        detail: `باع ${soldPrev} ← ${soldLast}`,
+      });
+    } else if (soldPrev >= 6 && soldLast <= soldPrev * 0.4) {
+      alerts.push({
+        icon: "📉", title: p.name, barcode: p.barcode, color: "red",
+        message: `هابط حاد -${Math.round(((soldPrev - soldLast) / soldPrev) * 100)}%`,
+        detail: `باع ${soldPrev} ← ${soldLast}`,
+      });
+    } else if (closingQty > 0 && closingQty <= MIN_STOCK && soldLast > 0) {
+      alerts.push({
+        icon: "🔔", title: p.name, barcode: p.barcode, color: "amber",
+        message: `يحتاج إعادة طلب`,
+        detail: `متبقي ${closingQty} · باع ${soldLast} آخر فترة`,
+      });
+    }
+  });
+
+  return alerts.sort((a, b) => {
+    const order = { red: 0, green: 1, amber: 2 };
+    return order[a.color] - order[b.color];
+  });
+}
+
+export function topProductsAnalysis(products, periods) {
+  const calc = products.map(p => {
+    const bought = totalPurchases(p);
+    const sold = soldAllPeriods(p.barcode, periods);
+    const buyPrice = avgBuyPrice(p);
+    const sellPrice = num(p.sellPrice);
+    const rev = totalRevenue(p.barcode, periods);
+    const cost = sold * buyPrice;
+    const profit = rev - cost;
+    const margin = cost > 0 ? (profit / cost) * 100 : 0;
+    const turnover = bought > 0 ? (sold / bought) * 100 : 0;
+    return { ...p, bought, sold, rev, profit, margin, turnover };
+  });
+
+  const profitable = [...calc].filter(p => p.profit > 0).sort((a, b) => b.profit - a.profit).slice(0, 30);
+  const fastest = [...calc].filter(p => p.sold > 0).sort((a, b) => b.turnover - a.turnover).slice(0, 30);
+
+  return { profitable, fastest };
+}
+
+export function branchTrendAnalysis(products, periods) {
+  if (!periods || periods.length === 0) return [];
+  const branches = allBranches(periods);
+  const lastPer = periods[periods.length - 1];
+  const prevPer = periods.length >= 2 ? periods[periods.length - 2] : null;
+
+  return branches.map(branch => {
+    let totalRev = 0;
+    Object.values(lastPer.sales?.[branch] ?? {}).forEach(d => { totalRev += num(d.totalPrice); });
+
+    let growth = 0;
+    if (prevPer) {
+      let revPrev = 0;
+      Object.values(prevPer.sales?.[branch] ?? {}).forEach(d => { revPrev += num(d.totalPrice); });
+      growth = revPrev > 0 ? ((totalRev - revPrev) / revPrev) * 100 : 0;
+    }
+
+    const branchSales = lastPer.sales?.[branch] ?? {};
+    const topProducts = Object.entries(branchSales)
+      .map(([barcode, d]) => {
+        const prod = products.find(p => p.barcode === barcode);
+        return { barcode, name: prod?.name ?? barcode, qty: num(d.qty) };
+      })
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 3);
+
+    return { branch, growth, totalRev, topProducts };
+  }).sort((a, b) => b.totalRev - a.totalRev);
 }
 
 export { MIN_STOCK };
