@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>المبيعات — البارو</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;direction:rtl;padding:14px;padding-bottom:90px;max-width:680px;margin:0 auto}
+  .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .hd h1{font-size:21px;font-weight:900;color:#fff}
+  .hd .sub{font-size:11px;color:#a855f7;margin-top:2px}
+  .hd a{background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#d8b4fe;border-radius:100px;padding:7px 13px;font-size:12px;font-weight:700;text-decoration:none}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+  .stat{background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:12px;text-align:center}
+  .stat .n{font-size:19px;font-weight:900}
+  .stat .l{font-size:10px;color:#94a3b8;margin-top:2px}
+  .upload{background:#0f1626;border:2px dashed #2d3a52;border-radius:16px;padding:24px;text-align:center;margin-bottom:14px;cursor:pointer}
+  .upload:active{border-color:#a855f7}
+  .upload .ic{font-size:36px;margin-bottom:8px}
+  .upload .t{font-size:15px;font-weight:700}
+  .upload .s{font-size:12px;color:#64748b;margin-top:4px}
+  input[type=file]{display:none}
+  .field{margin-bottom:12px}
+  .field label{font-size:12px;color:#94a3b8;font-weight:700;display:block;margin-bottom:5px}
+  .field input{width:100%;background:#0f1626;border:1px solid #2d3a52;border-radius:10px;padding:11px;color:#fff;font-family:'Cairo';font-size:14px}
+  .preview{background:#0f1626;border:1px solid #2d3a52;border-radius:16px;padding:14px;margin-bottom:14px}
+  .preview h2{font-size:15px;font-weight:900;color:#fff;margin-bottom:4px}
+  .preview .meta{font-size:12px;color:#94a3b8;margin-bottom:12px}
+  .pill{display:inline-block;border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700;margin:2px}
+  .pill.b{background:rgba(168,85,247,0.15);color:#d8b4fe}
+  .pill.ok{background:rgba(74,222,128,0.15);color:#6ee7b7}
+  .pill.warn{background:rgba(245,158,11,0.15);color:#fcd34d}
+  .period-box{background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:10px;margin:8px 0}
+  .period-box .pt{font-size:13px;font-weight:900;color:#d8b4fe}
+  .period-box .ps{font-size:11px;color:#94a3b8;margin-top:3px}
+  .btns{display:flex;gap:8px;margin-top:12px}
+  .btns button{flex:1;padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:900;cursor:pointer;font-family:'Cairo'}
+  .btn-save{background:#9333ea;color:#fff}
+  .btn-save:disabled{background:#334155;cursor:default}
+  .btn-cancel{background:#475569;color:#fff;flex:0 0 auto;padding:13px 20px}
+  .list-item{display:flex;align-items:center;gap:10px;background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:11px;margin-bottom:7px}
+  .list-item .ic{font-size:22px}
+  .list-item .info{flex:1;min-width:0}
+  .list-item .info .t{font-size:13px;font-weight:700;color:#e2e8f0}
+  .list-item .info .s{font-size:11px;color:#94a3b8;margin-top:2px}
+  .list-item .del{background:rgba(239,68,68,0.15);color:#fca5a5;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Cairo'}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.7;margin-top:10px;display:none}
+  .log.show{display:block}
+  .ok{color:#4ade80}.err{color:#f87171}.info2{color:#60a5fa}.y{color:#fbbf24}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#9333ea;color:#fff;padding:11px 22px;border-radius:100px;font-size:14px;font-weight:900;z-index:99;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.show{opacity:1}
+  h3.sec{font-size:14px;color:#cbd5e1;margin:18px 0 10px}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <div>
+    <h1>📊 المبيعات</h1>
+    <div class="sub">رفع فترات المبيعات (يكتشف الشهري تلقائياً)</div>
+  </div>
+  <a href="https://baro-inventory-qmpp.vercel.app">النظام ←</a>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="n" id="sPeriods" style="color:#a855f7">…</div><div class="l">فترة</div></div>
+  <div class="stat"><div class="n" id="sBranches" style="color:#60a5fa">…</div><div class="l">فرع</div></div>
+  <div class="stat"><div class="n" id="sUnits" style="color:#4ade80">…</div><div class="l">قطعة مباعة</div></div>
+</div>
+
+<label class="upload" for="fileInput">
+  <div class="ic">📤</div>
+  <div class="t">اختر ملف مبيعات (Excel)</div>
+  <div class="s">عادي أو شهري · الاسم تلقائي من الملف</div>
+</label>
+<input type="file" id="fileInput" accept=".xlsx,.xls">
+
+<div id="previewArea"></div>
+
+<h3 class="sec" id="periodsTitle" style="display:none">الفترات المرفوعة</h3>
+<div id="periodsList"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+const PERKEY = "baro_periods_v2";
+
+let PERIODS = [];
+let LOADED = false;
+let pending = null;
+
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+async function sbSet(key, value){
+  const res = await fetch(`${U}/rest/v1/${TABLE}`, {
+    method:"POST",
+    headers:{ apikey:K, Authorization:`Bearer ${K}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  });
+  return res.ok;
+}
+
+const num = v => { const n = parseFloat(String(v??"").replace(/,/g,"")); return isNaN(n)?0:n; };
+
+function cleanBarcode(raw){
+  if(raw instanceof Date) return "X" + raw.getTime().toString(36).toUpperCase();
+  let s = String(raw ?? "").trim().replace(/了/g,"B").replace(/\s+/g,"");
+  if(/^\d{4}-\d{2}-\d{2}/.test(s) || /\d{2}:\d{2}:\d{2}/.test(s)) s = "X" + s.replace(/[^0-9]/g,"").slice(0,12);
+  s = s.replace(/[^A-Za-z0-9\-]/g,"");
+  return s;
+}
+function cleanBranch(raw){ return String(raw ?? "").trim().replace(/\s+/g," "); }
+function uuid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+function fingerprint(sales){
+  const total = Object.values(sales).reduce((s,b)=>s+Object.values(b).reduce((ss,v)=>ss+num(v.qty),0),0);
+  const bcs = [...new Set(Object.values(sales).flatMap(b=>Object.keys(b)))].sort();
+  const branchCount = Object.keys(sales).length;
+  return `${total}_${bcs.length}_${branchCount}`;
+}
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 1800);
+}
+
+const MONTH_KW = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
+
+// ─── قراءة عادية (شهر واحد، فروع صف 1) ───
+function parseRegular(rows, label){
+  const branchRow = rows[1] ?? [];
+  const branches = {};
+  branchRow.forEach((val,ci)=>{
+    if(!val || typeof val!=="string") return;
+    let name = val.replace(/\s*\(.*$/,"").trim();
+    if(!name) name = val.trim();
+    name = cleanBranch(name);
+    if(!name) return;
+    if(Object.values(branches).some(b=>b===name)) return;
+    branches[ci] = name;
+  });
+  if(!Object.keys(branches).length) return null;
+
+  const sales = {};
+  Object.values(branches).forEach(b=>{ sales[b]={}; });
+
+  for(let i=4;i<rows.length;i++){
+    const row = rows[i];
+    const rawKey = String(row[0] ?? "").trim();
+    if(!rawKey || ["الإجمالي","Total","المجموع"].includes(rawKey)) continue;
+    const m = rawKey.match(/\[([^\]]+)\]/);
+    if(!m) continue;
+    const barcode = cleanBarcode(m.group?.(1) ?? m[1]);
+    if(!barcode) continue;
+    const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/,"").trim();
+    Object.entries(branches).forEach(([cs,bn])=>{
+      const col = parseInt(cs);
+      const qty = num(row[col+1]);
+      const tp = num(row[col+2]);
+      if(qty<=0) return;
+      if(sales[bn][barcode]){
+        sales[bn][barcode].qty += qty;
+        sales[bn][barcode].totalPrice += tp;
+      } else {
+        sales[bn][barcode] = { qty, totalPrice:tp, salesNames: salesName?[salesName]:[] };
+      }
+    });
+  }
+  const records = Object.values(sales).reduce((s,d)=>s+Object.keys(d).length,0);
+  if(!records) return null;
+  return [{ id:uuid(), label:label||todayStr(), uploadDate:todayStr(), sales, fingerprint:fingerprint(sales) }];
+}
+
+// ─── قراءة شهرية (شهور صف1، فروع صف2، بيانات صف5) ───
+function parseMonthly(rows){
+  const monthRow = rows[1] ?? [];
+  const branchRow = rows[2] ?? [];
+  const monthCols = [];
+  monthRow.forEach((val,ci)=>{
+    if(!val || typeof val!=="string") return;
+    const s = val.trim();
+    if(!s || s==="الإجمالي" || s==="Total") return;
+    monthCols.push({ col:ci, name:s });
+  });
+  if(!monthCols.length) return null;
+
+  const periods = [];
+  monthCols.forEach((m,idx)=>{
+    const start = m.col;
+    const end = idx+1<monthCols.length ? monthCols[idx+1].col : branchRow.length;
+    const branches = {};
+    for(let col=start;col<end;col++){
+      const val = branchRow[col];
+      if(!val || typeof val!=="string") continue;
+      let name = val.replace(/\s*\(.*$/,"").trim();
+      if(!name) name = val.trim();
+      name = cleanBranch(name);
+      if(!name) continue;
+      branches[col] = name;
+    }
+    const sales = {};
+    Object.values(branches).forEach(b=>{ sales[b]={}; });
+    for(let i=5;i<rows.length;i++){
+      const row = rows[i];
+      const rawKey = String(row[0] ?? "").trim();
+      if(!rawKey || ["الإجمالي","Total"].includes(rawKey)) continue;
+      const mm = rawKey.match(/\[([^\]]+)\]/);
+      if(!mm) continue;
+      const barcode = cleanBarcode(mm[1]);
+      if(!barcode) continue;
+      const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/,"").trim();
+      Object.entries(branches).forEach(([cs,bn])=>{
+        const col = parseInt(cs);
+        const qty = num(row[col+1]);
+        const tp = num(row[col+2]);
+        if(qty<=0) return;
+        if(sales[bn][barcode]){
+          sales[bn][barcode].qty += qty;
+          sales[bn][barcode].totalPrice += tp;
+        } else {
+          sales[bn][barcode] = { qty, totalPrice:tp, salesNames: salesName?[salesName]:[] };
+        }
+      });
+    }
+    const records = Object.values(sales).reduce((s,d)=>s+Object.keys(d).length,0);
+    if(records>0){
+      periods.push({ id:`monthly_${m.name.replace(/\s+/g,"_")}`, label:m.name, uploadDate:todayStr(), sales, fingerprint:fingerprint(sales) });
+    }
+  });
+  return periods.length ? periods : null;
+}
+
+// ─── عند اختيار ملف ───
+document.getElementById("fileInput").addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:"array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+
+    const monthRow = rows[1] ?? [];
+    const hasMonths = monthRow.some(v => typeof v==="string" && MONTH_KW.test(v) && v.trim()!=="الإجمالي");
+
+    const defaultLabel = file.name.replace(/\.(xlsx|xls)$/i,"");
+    let periods;
+    if(hasMonths){ periods = parseMonthly(rows); }
+    else { periods = parseRegular(rows, defaultLabel); }
+
+    if(!periods || !periods.length){ toast("⚠️ ما لقيت مبيعات صالحة"); e.target.value=""; return; }
+
+    pending = { periods, fileName:file.name, isMonthly:hasMonths, defaultLabel };
+    renderPreview();
+  } catch(err){
+    toast("⚠️ تعذّر قراءة الملف");
+  }
+  e.target.value = "";
+});
+
+// ─── معاينة ───
+function renderPreview(){
+  const p = pending;
+  if(!p){ document.getElementById("previewArea").innerHTML=""; return; }
+
+  let totalUnits = 0, maxBranches = 0;
+  p.periods.forEach(per=>{
+    Object.values(per.sales).forEach(bd=>Object.values(bd).forEach(v=>totalUnits+=num(v.qty)));
+    maxBranches = Math.max(maxBranches, Object.keys(per.sales).length);
+  });
+
+  let h = `<div class="preview">
+    <h2>📋 مراجعة المبيعات</h2>
+    <div class="meta">${p.fileName}</div>
+    <div>
+      <span class="pill ${p.isMonthly?'b':'ok'}">${p.isMonthly?'📅 شهري ('+p.periods.length+' فترة)':'فترة واحدة'}</span>
+      <span class="pill b">${maxBranches} فرع</span>
+      <span class="pill ok">${totalUnits.toLocaleString()} قطعة</span>
+    </div>`;
+
+  // اسم الفترة (للعادي فقط — قابل للتعديل)
+  if(!p.isMonthly){
+    h += `<div class="field" style="margin-top:12px">
+      <label>اسم الفترة (فاضي = اسم الملف)</label>
+      <input type="text" id="labelInput" value="${p.periods[0].label}" placeholder="${p.defaultLabel}">
+    </div>`;
+  }
+
+  // عرض الفترات
+  p.periods.forEach(per=>{
+    const units = Object.values(per.sales).reduce((s,bd)=>s+Object.values(bd).reduce((ss,v)=>ss+num(v.qty),0),0);
+    const records = Object.values(per.sales).reduce((s,d)=>s+Object.keys(d).length,0);
+    const dup = PERIODS.some(ep=>ep.fingerprint===per.fingerprint || ep.label===per.label);
+    h += `<div class="period-box">
+      <div class="pt">📅 ${per.label} ${dup?'<span class="pill warn">مكرر</span>':''}</div>
+      <div class="ps">${Object.keys(per.sales).length} فرع · ${records} منتج · ${units.toLocaleString()} قطعة</div>
+    </div>`;
+  });
+
+  h += `<div class="btns">
+    <button class="btn-save" id="confirmBtn" onclick="confirmSave()">✅ اعتمد واحفظ</button>
+    <button class="btn-cancel" onclick="cancelPreview()">إلغاء</button>
+  </div>
+  <div class="log" id="saveLog"></div>
+  </div>`;
+
+  document.getElementById("previewArea").innerHTML = h;
+}
+
+window.cancelPreview = ()=>{ pending=null; renderPreview(); };
+
+// ─── اعتماد وحفظ ───
+window.confirmSave = async ()=>{
+  if(!pending) return;
+  if(!LOADED){ toast("⚠️ انتظر اكتمال التحميل"); return; }
+  const btn = document.getElementById("confirmBtn");
+  const log = document.getElementById("saveLog");
+  log.classList.add("show");
+  btn.disabled = true;
+  log.innerHTML = "";
+  const lg = (m,c)=>{ log.innerHTML += `<span class="${c||''}">${m}</span>\n`; };
+
+  // اسم مخصص للعادي
+  if(!pending.isMonthly){
+    const inp = document.getElementById("labelInput");
+    if(inp){ pending.periods[0].label = inp.value.trim() || pending.defaultLabel; }
+  }
+
+  try {
+    lg("⬇️ جلب آخر نسخة من الفترات…","info2");
+    const fresh = await sbGet(PERKEY);
+    const base = Array.isArray(fresh) ? fresh : PERIODS;
+
+    lg("🔗 إضافة الفترات…","info2");
+    const updated = [...base, ...pending.periods];
+
+    if(!updated.length){ lg("❌ نتيجة فاضية","err"); btn.disabled=false; return; }
+
+    lg(`💾 حفظ ${updated.length} فترة…`,"info2");
+    const ok = await sbSet(PERKEY, updated);
+    if(!ok){ lg("❌ فشل الحفظ","err"); btn.disabled=false; return; }
+
+    PERIODS = updated;
+    lg(`✅ تم! إجمالي الفترات الآن: ${updated.length}`,"ok");
+    toast("✅ اعتُمدت المبيعات");
+    pending = null;
+    setTimeout(()=>{ renderPreview(); refreshStats(); renderPeriods(); }, 800);
+  } catch(e){
+    lg("❌ خطأ: "+e.message,"err");
+    btn.disabled = false;
+  }
+};
+
+// ─── الإحصاء ───
+function refreshStats(){
+  let units=0; const branches=new Set();
+  PERIODS.forEach(per=>{
+    Object.entries(per.sales||{}).forEach(([b,bd])=>{
+      branches.add(b);
+      Object.values(bd).forEach(v=>units+=num(v.qty));
+    });
+  });
+  document.getElementById("sPeriods").textContent = PERIODS.length;
+  document.getElementById("sBranches").textContent = branches.size;
+  document.getElementById("sUnits").textContent = units.toLocaleString();
+}
+
+// ─── قائمة الفترات ───
+function renderPeriods(){
+  document.getElementById("periodsTitle").style.display = PERIODS.length ? "block":"none";
+  if(!PERIODS.length){ document.getElementById("periodsList").innerHTML=""; return; }
+  let h = "";
+  PERIODS.forEach(per=>{
+    const units = Object.values(per.sales||{}).reduce((s,bd)=>s+Object.values(bd).reduce((ss,v)=>ss+num(v.qty),0),0);
+    const branches = Object.keys(per.sales||{}).length;
+    h += `<div class="list-item">
+      <div class="ic">📅</div>
+      <div class="info">
+        <div class="t">${per.label}</div>
+        <div class="s">${branches} فرع · ${units.toLocaleString()} قطعة</div>
+      </div>
+      <button class="del" onclick="delPeriod('${per.id}')">🗑️ حذف</button>
+    </div>`;
+  });
+  document.getElementById("periodsList").innerHTML = h;
+}
+
+// ─── حذف فترة ───
+window.delPeriod = async (id)=>{
+  const per = PERIODS.find(p=>p.id===id);
+  if(!per) return;
+  if(!confirm(`حذف فترة "${per.label}"؟`)) return;
+  if(!LOADED){ toast("انتظر التحميل"); return; }
+  try {
+    const fresh = await sbGet(PERKEY);
+    const base = Array.isArray(fresh) ? fresh : PERIODS;
+    const result = base.filter(p=>p.id!==id);
+    const ok = await sbSet(PERKEY, result);
+    if(ok){ PERIODS = result; toast("🗑️ حُذفت الفترة"); refreshStats(); renderPeriods(); }
+    else toast("فشل الحذف");
+  } catch(e){ toast("خطأ: "+e.message); }
+};
+
+// ─── البوابة ───
+async function init(){
+  try {
+    const pers = await sbGet(PERKEY);
+    PERIODS = Array.isArray(pers) ? pers : [];
+    LOADED = true;
+    refreshStats();
+    renderPeriods();
+  } catch(e){
+    document.getElementById("sPeriods").textContent = "!";
+    toast("تعذّر الاتصال — حدّث الصفحة");
+  }
+}
+init();
+</script>
+</body>
+</html>
