@@ -278,7 +278,7 @@ export const ProductImage = memo(({ barcode, images = {}, onSave, onRemove, size
           onClick={() => setPreview(true)}
           className={`${SIZES[size]} rounded-xl overflow-hidden border-2 border-slate-600 hover:border-blue-500 transition-colors`}
         >
-          <img src={imgSrc} alt={name} className="w-full h-full object-cover" />
+          <img src={imgSrc} alt={name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
         </button>
 
         {/* أزرار التحكم */}
@@ -352,7 +352,7 @@ export const ProductImage = memo(({ barcode, images = {}, onSave, onRemove, size
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
           onClick={() => setPreview(false)}>
           <div className="relative max-w-sm w-full">
-            <img src={imgSrc} alt={name} className="w-full rounded-2xl object-contain max-h-96" />
+            <img src={imgSrc} alt={name} className="w-full rounded-2xl object-contain max-h-96" decoding="async" />
             <div className="text-center mt-3 text-slate-300 font-bold">{name}</div>
             <button className="absolute top-2 left-2 w-8 h-8 bg-black/50 text-white rounded-full text-lg flex items-center justify-center">✕</button>
           </div>
