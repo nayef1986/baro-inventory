@@ -2,7 +2,7 @@
 // App.jsx — التطبيق الرئيسي
 // ============================================================
 
-import { useState, useEffect, useCallback, useMemo, useReducer } from "react";
+import { useState, useEffect, useCallback, useMemo, useReducer, Component } from "react";
 import {
   initStorage, loadAll,
   saveProducts, addPeriod, deletePeriod, deleteAllPeriods,
@@ -18,6 +18,36 @@ import ReportsScreen    from "./screens/Reports.jsx";
 import SettingsScreen   from "./screens/Settings.jsx";
 import AIChat           from "./components/AIChat.jsx";
 import { LoadingSpinner, NavBar } from "./components/UI.jsx";
+
+// ─── Error Boundary — يعرض الخطأ بدل الشاشة السوداء ─────────
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { this.setState({ info }); }
+  render() {
+    if (this.state.error) {
+      const msg = String(this.state.error?.message || this.state.error);
+      const stack = String(this.state.info?.componentStack || "").split("\n").slice(0,6).join("\n");
+      return (
+        <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#e2e8f0",padding:"20px",direction:"ltr",textAlign:"left",fontFamily:"monospace"}}>
+          <div style={{fontSize:"18px",fontWeight:"bold",color:"#f87171",marginBottom:"12px",direction:"rtl",textAlign:"right",fontFamily:"system-ui"}}>
+            ⚠️ النظام واجه خطأ — هذي رسالته:
+          </div>
+          <div style={{background:"#1a0e0e",border:"1px solid #f87171",borderRadius:"10px",padding:"14px",fontSize:"13px",color:"#fca5a5",whiteSpace:"pre-wrap",lineHeight:"1.7",wordBreak:"break-word"}}>
+            {msg}
+          </div>
+          <div style={{background:"#060a12",border:"1px solid #1f2940",borderRadius:"10px",padding:"14px",fontSize:"11px",color:"#94a3b8",whiteSpace:"pre-wrap",marginTop:"10px",lineHeight:"1.6"}}>
+            {stack}
+          </div>
+          <button onClick={()=>window.location.reload()} style={{width:"100%",padding:"13px",marginTop:"14px",background:"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"14px",fontWeight:"bold",fontFamily:"system-ui"}}>
+            🔄 إعادة المحاولة
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── State ───────────────────────────────────────────────────
 
@@ -239,6 +269,7 @@ export default function App() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-slate-900 text-slate-100">
       {/* هيدر */}
       <header style={{
@@ -407,5 +438,6 @@ export default function App() {
       {/* شريط التنقل */}
       <NavBar active={screen} onChange={setScreen} />
     </div>
+    </ErrorBoundary>
   );
 }
