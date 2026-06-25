@@ -17,7 +17,168 @@ import {
 } from "../lib/calc.js";
 import { exportContainerReport, printContainerReport } from "../lib/exporters.js";
 
-// ─── رفع الكونتينر ───────────────────────────────────────────
+// ─── نافذة تعديل منتج ────────────────────────────────────────
+
+const ProductEditModal = memo(({ product, products, container, onSave, onClose }) => {
+  const [barcode,   setBarcode]   = useState(product.barcode);
+  const [name,      setName]      = useState(product.name);
+  const [sellPrice, setSellPrice] = useState(product.sellPrice ?? 0);
+  const [disabled,  setDisabled]  = useState(!!product.disabled);
+  const [saving,    setSaving]    = useState(false);
+  const [err,       setErr]       = useState("");
+
+  const handleSave = async () => {
+    const newBc = String(barcode).trim();
+    if (!newBc) { setErr("الباركود مطلوب"); return; }
+    if (!name.trim()) { setErr("الاسم مطلوب"); return; }
+    // لو الباركود تغيّر، نتأكد ما يتعارض مع منتج آخر
+    if (newBc !== product.barcode && products.some(p => p.barcode === newBc)) {
+      setErr("الباركود موجود مسبقاً لمنتج آخر");
+      return;
+    }
+    setSaving(true);
+    const updated = products.map(p => {
+      if (p.barcode !== product.barcode) return p;
+      return { ...p, barcode: newBc, name: name.trim(), sellPrice: num(sellPrice), disabled };
+    });
+    await onSave(updated);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+      <div className="bg-slate-800 border border-slate-600 rounded-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <div className="font-black text-slate-100 text-lg mb-4">✏️ تعديل المنتج</div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">الباركود</label>
+            <input value={barcode} onChange={e => setBarcode(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">الاسm</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">سعر البيع</label>
+            <input type="number" value={sellPrice} onChange={e => setSellPrice(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+
+          {/* إطفاء/تشغيل */}
+          <button onClick={() => setDisabled(d => !d)}
+            className={`w-full py-3 rounded-xl text-sm font-bold border transition-colors flex items-center justify-center gap-2
+              ${disabled
+                ? "bg-amber-900/30 border-amber-700/50 text-amber-300"
+                : "bg-emerald-900/30 border-emerald-700/50 text-emerald-300"}`}>
+            {disabled ? "⏸️ المنتج مطفي (اضغط للتشغيل)" : "✅ المنتج شغّال (اضغط للإطفاء)"}
+          </button>
+          <div className="text-xs text-slate-500 text-center -mt-1">
+            المطفي يبقى محفوظاً لكن يُستبعد من الحسابات والعرض
+          </div>
+        </div>
+
+        {err && <div className="text-red-400 text-xs mt-3 text-center">{err}</div>}
+
+        <div className="grid grid-cols-2 gap-2 mt-5">
+          <button onClick={onClose}
+            className="py-3 rounded-xl border border-slate-600 bg-slate-700 text-slate-200 font-bold text-sm">إلغاء</button>
+          <button onClick={handleSave} disabled={saving}
+            className="py-3 rounded-xl bg-blue-600 text-white font-black text-sm disabled:opacity-50">
+            {saving ? "⏳ حفظ…" : "💾 حفظ"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ─── نافذة إضافة منتج جديد ───────────────────────────────────
+
+const AddProductModal = memo(({ products, container, onSave, onClose }) => {
+  const [barcode,   setBarcode]   = useState("");
+  const [name,      setName]      = useState("");
+  const [qty,       setQty]       = useState("");
+  const [buyPrice,  setBuyPrice]  = useState("");
+  const [sellPrice, setSellPrice] = useState("");
+  const [saving,    setSaving]    = useState(false);
+  const [err,       setErr]       = useState("");
+
+  const handleSave = async () => {
+    const bc = String(barcode).trim();
+    if (!bc) { setErr("الباركود مطلوب"); return; }
+    if (!name.trim()) { setErr("الاسم مطلوب"); return; }
+    if (products.some(p => p.barcode === bc)) {
+      setErr("الباركود موجود مسبقاً");
+      return;
+    }
+    setSaving(true);
+    const date = new Date().toISOString().slice(0, 10);
+    const newProduct = {
+      barcode: bc,
+      name: name.trim(),
+      sellPrice: num(sellPrice),
+      container,
+      purchases: [{ container, qty: num(qty), buyPrice: num(buyPrice), date }],
+    };
+    await onSave([...products, newProduct]);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+      <div className="bg-slate-800 border border-slate-600 rounded-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <div className="font-black text-slate-100 text-lg mb-1">➕ إضافة منتج جديد</div>
+        <div className="text-xs text-slate-400 mb-4">للكونتينر: {container}</div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">الباركود *</label>
+            <input value={barcode} onChange={e => setBarcode(e.target.value)} placeholder="مثال: 26068616B005"
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">الاسم *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="اسم المنتج"
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-slate-400 font-bold block mb-1">الكمية</label>
+              <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-bold block mb-1">شراء</label>
+              <input type="number" value={buyPrice} onChange={e => setBuyPrice(e.target.value)} placeholder="0"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-bold block mb-1">بيع</label>
+              <input type="number" value={sellPrice} onChange={e => setSellPrice(e.target.value)} placeholder="0"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-2 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+        </div>
+
+        {err && <div className="text-red-400 text-xs mt-3 text-center">{err}</div>}
+
+        <div className="grid grid-cols-2 gap-2 mt-5">
+          <button onClick={onClose}
+            className="py-3 rounded-xl border border-slate-600 bg-slate-700 text-slate-200 font-bold text-sm">إلغاء</button>
+          <button onClick={handleSave} disabled={saving}
+            className="py-3 rounded-xl bg-emerald-600 text-white font-black text-sm disabled:opacity-50">
+            {saving ? "⏳ حفظ…" : "➕ إضافة"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 // ─── معاينة فاتورة الشراء ────────────────────────────────────
 
@@ -198,10 +359,12 @@ const UploadSection = memo(({ products, onUpdate }) => {
 
 // ─── تبويب الملخص ────────────────────────────────────────────
 
-const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings }) => {
+const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings, products, container, onUpdateProducts }) => {
   const [search,    setSearch]    = useState("");
   const [sortBy,    setSortBy]    = useState("invoice");
   const [filterFac, setFilterFac] = useState("");
+  const [editProd,  setEditProd]  = useState(null);
+  const [showAdd,   setShowAdd]   = useState(false);
   const { show, ToastContainer } = useToast();
 
   const factories = useMemo(
@@ -211,22 +374,53 @@ const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings
 
   const sorted = useMemo(() => {
     let list = [...summary.products];
+    // نستبعد المطفي من العرض (يبقى محفوظاً)
+    const disabledSet = new Set((products ?? []).filter(p => p.disabled).map(p => p.barcode));
+    list = list.filter(p => !disabledSet.has(p.barcode));
     if (filterFac) list = list.filter(p => getFactoryCode(p.barcode) === filterFac);
     if (search)    list = list.filter(p => arabicIncludes(p.name, search) || p.barcode.includes(search));
     if (sortBy === "sold")    return list.sort((a,b) => b.sold - a.sold);
     if (sortBy === "margin")  return list.sort((a,b) => b.marginPct - a.marginPct);
     if (sortBy === "closing") return list.sort((a,b) => a.closing - b.closing);
     return list;
-  }, [summary.products, sortBy, filterFac, search]);
+  }, [summary.products, sortBy, filterFac, search, products]);
+
+  // المنتجات المطفية (لعرضها منفصلة مع زر تشغيل)
+  const disabledProducts = useMemo(
+    () => (products ?? []).filter(p => p.disabled && p.container === container),
+    [products, container]
+  );
 
   const cost = summary.products.reduce((s,p) => s + p.bought * p.buyPrice, 0);
   const closingVal = summary.products.reduce((s,p) => s + p.closing * p.buyPrice, 0);
 
   const STATUS_COLOR = { جيد: "text-emerald-400", منخفض: "text-amber-400", نفد: "text-red-400" };
 
+  // المنتج الأصلي (مع disabled) للتعديل
+  const rawProduct = (barcode) => products?.find(p => p.barcode === barcode) ?? null;
+
   return (
     <div className="space-y-4">
       <ToastContainer />
+
+      {/* نوافذ التعديل والإضافة */}
+      {editProd && (
+        <ProductEditModal
+          product={editProd}
+          products={products}
+          container={container}
+          onSave={async (updated) => { await onUpdateProducts(updated); show("✅ تم الحفظ"); }}
+          onClose={() => setEditProd(null)}
+        />
+      )}
+      {showAdd && (
+        <AddProductModal
+          products={products}
+          container={container}
+          onSave={async (updated) => { await onUpdateProducts(updated); show("✅ تمت الإضافة"); }}
+          onClose={() => setShowAdd(false)}
+        />
+      )}
 
       {/* الأرقام */}
       <div className="space-y-2">
@@ -257,7 +451,11 @@ const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings
         </div>
       </div>
 
-      {/* Excel وطباعة */}
+      {/* أزرار: إضافة منتج + Excel + طباعة */}
+      <button onClick={() => setShowAdd(true)}
+        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-black flex items-center justify-center gap-2">
+        ➕ إضافة منتج جديد للكونتينر
+      </button>
       <div className="flex gap-2">
         <button onClick={() => { const r = exportContainerReport(summary); if (!r.ok) show(r.error, "error"); else show("تم التصدير ✓"); }}
           className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-sm font-bold">📊 Excel</button>
@@ -267,27 +465,7 @@ const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings
 
       {/* فلاتر */}
       <div className="space-y-2">
-        {/* Excel وطباعة */}
-      <div className="flex gap-2">
-        <Btn color="green" onClick={() => {
-          const data = filtered.map(p => ({
-            "الباركود": p.barcode, "الاسم": p.name,
-            "المصنع": getFactoryCode(p.barcode),
-            "مشتريات": p.bought, "مباع": p.sold, "متبقي": p.closing,
-            "نسبة البيع%": p.soldPct.toFixed(1), "الحالة": p.status,
-          }));
-          import("../lib/exporters.js").then(({ exportGeneric }) =>
-            exportGeneric(data, `نسبة البيع: ${summary.container}`, `نسبة_البيع_${summary.container}`)
-          );
-        }} className="flex-1">📊 Excel</Btn>
-        <Btn color="ghost" onClick={() => {
-          import("../lib/exporters.js").then(({ printContainerReport }) =>
-            printContainerReport(summary, settings?.brandName, images)
-          );
-        }} className="flex-1">🖨️ طباعة</Btn>
-      </div>
-
-      <SearchBar value={search} onChange={e => setSearch(e.target.value)} />
+        <SearchBar value={search} onChange={e => setSearch(e.target.value)} />
         {factories.length > 1 && (
           <select value={filterFac} onChange={e => setFilterFac(e.target.value)}
             className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none">
@@ -303,9 +481,36 @@ const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings
         <div className="text-xs text-slate-500">{sorted.length} منتج</div>
       </div>
 
+      {/* المنتجات المطفية */}
+      {disabledProducts.length > 0 && (
+        <div className="bg-amber-900/10 border border-amber-800/30 rounded-xl p-3">
+          <div className="text-xs text-amber-300 font-bold mb-2">⏸️ منتجات مطفية ({disabledProducts.length})</div>
+          <div className="space-y-1.5">
+            {disabledProducts.map(p => (
+              <div key={p.barcode} className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-slate-300 truncate">{p.name}</div>
+                  <div className="text-xs text-slate-500 font-mono">{p.barcode}</div>
+                </div>
+                <button onClick={async () => {
+                  const updated = products.map(x => x.barcode === p.barcode ? { ...x, disabled: false } : x);
+                  await onUpdateProducts(updated);
+                  show("✅ تم التشغيل");
+                }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shrink-0">
+                  ▶️ تشغيل
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* المنتجات */}
       <div className="space-y-2">
-        {sorted.map(p => (
+        {sorted.map(p => {
+          const raw = rawProduct(p.barcode);
+          return (
           <Card key={p.barcode} className="!p-3">
             <div className="flex items-start gap-3 mb-2">
               <ProductImage barcode={p.barcode} images={images} onSave={onSaveImage} onRemove={onRemoveImage} size="lg" name={p.name} />
@@ -319,9 +524,13 @@ const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings
                   <span className="text-amber-300">هامش: {fmtPct(p.marginPct)}</span>
                 </div>
               </div>
-              <div className="text-right shrink-0">
+              <div className="text-right shrink-0 flex flex-col items-end gap-1">
                 <div className={`text-xl font-black tabular-nums ${STATUS_COLOR[p.status] ?? "text-slate-300"}`}>{fmtPct(p.soldPct)}</div>
                 <div className={`text-xs font-bold ${STATUS_COLOR[p.status] ?? "text-slate-400"}`}>{p.status}</div>
+                <button onClick={() => raw && setEditProd(raw)}
+                  className="mt-1 px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-blue-600 border border-slate-600 text-slate-300 text-xs font-bold">
+                  ✏️ تعديل
+                </button>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-1">
@@ -330,7 +539,8 @@ const SummaryTab = memo(({ summary, images, onSaveImage, onRemoveImage, settings
               <StatPill label="متبقي"   value={fmtN(p.closing)} color={p.closing===0?"text-red-400":p.closing<12?"text-amber-400":"text-slate-300"} />
             </div>
           </Card>
-        ))}
+          );
+        })}
         {sorted.length === 0 && <EmptyState icon="📭" title="لا توجد نتائج" />}
       </div>
     </div>
@@ -375,8 +585,6 @@ const FactoriesTab = memo(({ summary, images, onSaveImage, onRemoveImage, settin
           </div>
           <div className="flex gap-2">
             <Btn sm color="green" onClick={() => {
-              const headers = ["الباركود","الاسم","مشتريات","مباع","متبقي","سعر شراء","سعر بيع","هامش%","نسبة%","الحالة"];
-              const rows = fac.prods.map(p => [p.barcode,p.name,fmtN(p.bought),fmtN(p.sold),fmtN(p.closing),fmtM(p.buyPrice),fmtM(p.sellPrice),fmtPct(p.marginPct),fmtPct(p.soldPct),p.status]);
               import("../lib/exporters.js").then(({exportGeneric}) => exportGeneric(fac.prods.map(p=>({الباركود:p.barcode,الاسم:p.name,مشتريات:p.bought,مباع:p.sold,متبقي:p.closing,"نسبة%":p.soldPct.toFixed(1)})),`مصنع ${fac.code}`,`مصنع_${fac.code}`));
             }}>📊 Excel</Btn>
             <Btn sm color="ghost" onClick={() => window.print()}>🖨️ طباعة</Btn>
@@ -604,7 +812,7 @@ const ContainerDetail = memo(({ container, products, periods, images, onSaveImag
       </div>
 
       {/* المحتوى */}
-      {tab === "summary"   && <SummaryTab   summary={summary} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
+      {tab === "summary"   && <SummaryTab   summary={summary} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} products={products} container={container} onUpdateProducts={onUpdateProducts} />}
       {tab === "factories" && <FactoriesTab summary={summary} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
       {tab === "need"      && <SalesRateTab summary={summary} images={images} onSaveImage={onSaveImage} onRemoveImage={onRemoveImage} settings={settings} />}
     </div>
