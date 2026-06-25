@@ -253,7 +253,7 @@ export function branchNeed(products, branch, period) {
 
 // ─── الكونتينر ──────────────────────────────────────────────
 
-export function containerSummary(products, containerName, periods) {
+export function containerSummary(products, periods, containerName) {
   const contProducts = products.filter((p) => p.container === containerName);
   const rows = contProducts.map((p) => calcProduct(p, periods));
 
@@ -277,7 +277,7 @@ export function containerSummary(products, containerName, periods) {
 
 // ─── تقرير المصنع ───────────────────────────────────────────
 
-export function factoryReport(products, factoryCode, periods, threshold) {
+export function factoryReport(products, periods, factoryCode, threshold) {
   const facProducts = products.filter(
     (p) => getFactoryCode(p.barcode) === factoryCode
   );
