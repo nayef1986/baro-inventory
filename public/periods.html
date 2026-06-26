@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>كل الفترات — إدارة</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:16px;max-width:700px;margin:0 auto;direction:rtl;padding-bottom:60px}
+  h1{font-size:19px;font-weight:900;color:#fff;margin-bottom:6px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:16px}
+  .summary{background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.8}
+  .summary b{color:#fff}
+  .period{background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:12px;margin-bottom:8px}
+  .period.dup{border-color:rgba(248,113,113,0.5);background:rgba(248,113,113,0.06)}
+  .period .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .period .name{font-size:15px;font-weight:900;color:#fff}
+  .period.dup .name{color:#fca5a5}
+  .period .meta{font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.6}
+  .period .qty{font-size:18px;font-weight:900;color:#4ade80;white-space:nowrap}
+  .dupbadge{display:inline-block;background:rgba(248,113,113,0.2);color:#fca5a5;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px}
+  .delbtn{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:900;cursor:pointer;margin-top:8px;font-family:inherit}
+  .refresh{width:100%;padding:13px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;margin-top:12px;background:#2563eb;color:#fff;font-family:inherit}
+  .ok{color:#4ade80}.err{color:#f87171}.y{color:#fbbf24}
+</style>
+</head>
+<body>
+<h1>📅 كل الفترات</h1>
+<div class="sub">شوف كل فترة بالتفصيل · المكررة بالأحمر · احذف اللي تبي</div>
+<div id="summary"></div>
+<div id="list">جاري التحميل…</div>
+<button class="refresh" onclick="location.reload()">🔄 تحديث</button>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const PERKEY = "baro_periods_v2";
+const num = v => Number(v)||0;
+
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+async function sbSet(key, value){
+  const res = await fetch(`${U}/rest/v1/baro_store`, {
+    method:"POST",
+    headers:{ apikey:K, Authorization:`Bearer ${K}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  });
+  return res.ok;
+}
+
+let PERIODS = [];
+
+function periodInfo(per){
+  let qty = 0; const bcs = new Set();
+  Object.values(per.sales||{}).forEach(bd =>
+    Object.entries(bd).forEach(([bc,v]) => { qty += num(v.qty); bcs.add(bc); }));
+  return { qty, products: bcs.size, branches: Object.keys(per.sales||{}).length };
+}
+
+async function run(){
+  PERIODS = await sbGet(PERKEY) || [];
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  // نحسب معلومات كل فترة
+  const infos = PERIODS.map(per => ({ per, ...periodInfo(per) }));
+
+  // نكشف المكرر: نفس label أو نفس (qty قريب + نفس products)
+  const labelCount = {};
+  infos.forEach(i => { const l = i.per.label; labelCount[l] = (labelCount[l]||0)+1; });
+
+  // نجمع حسب التشابه (نفس qty تقريباً + نفس عدد المنتجات)
+  const simKey = i => `${Math.round(i.qty/10)}_${i.products}`;
+  const simCount = {};
+  infos.forEach(i => { const k = simKey(i); simCount[k] = (simCount[k]||0)+1; });
+
+  let totalQty = 0, suspectDups = 0;
+  infos.forEach(i => totalQty += i.qty);
+
+  // عرض
+  infos.forEach((info, idx) => {
+    const isDupLabel = labelCount[info.per.label] > 1;
+    const isDupContent = simCount[simKey(info)] > 1;
+    const isDup = isDupLabel || isDupContent;
+    if(isDup) suspectDups++;
+
+    const div = document.createElement("div");
+    div.className = "period" + (isDup ? " dup" : "");
+    div.innerHTML = `
+      <div class="top">
+        <div style="flex:1;min-width:0">
+          <div class="name">
+            ${isDupLabel ? '<span class="dupbadge">اسم مكرر</span>' : ''}
+            ${!isDupLabel && isDupContent ? '<span class="dupbadge">محتوى مشابه</span>' : ''}
+            ${info.per.label}
+          </div>
+          <div class="meta">
+            📅 رُفعت: ${info.per.uploadDate || '؟'} · 🏪 ${info.branches} فرع · 📦 ${info.products} منتج
+            <br>🆔 ${(info.per.id||'').slice(0,20)}
+          </div>
+        </div>
+        <div class="qty">${info.qty.toLocaleString()}</div>
+      </div>
+      <button class="delbtn" onclick="delPeriod('${info.per.id}','${info.per.label.replace(/'/g,"")}')">🗑️ حذف هذه الفترة</button>
+    `;
+    list.appendChild(div);
+  });
+
+  document.getElementById("summary").innerHTML = `
+    <div>📅 إجمالي الفترات: <b>${PERIODS.length}</b></div>
+    <div>📦 إجمالي القطع المباعة: <b>${totalQty.toLocaleString()}</b></div>
+    <div class="${suspectDups?'err':'ok'}">${suspectDups ? '🔴 فترات مشبوهة (مكررة): <b>'+suspectDups+'</b>' : '🟢 ما فيه تكرار واضح'}</div>
+  `;
+}
+
+window.delPeriod = async (id, label) => {
+  if(!confirm(`حذف فترة "${label}"؟\nلا يمكن التراجع.`)) return;
+  const kept = PERIODS.filter(p => p.id !== id);
+  const ok = await sbSet(PERKEY, kept);
+  if(ok){ alert(`✅ حُذفت. الفترات الآن: ${kept.length}`); location.reload(); }
+  else alert("❌ فشل الحذف");
+};
+
+run().catch(e => { document.getElementById("list").innerHTML = "❌ خطأ: "+e.message; });
+</script>
+</body>
+</html>
