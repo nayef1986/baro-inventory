@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>فحص تداخل الفترات</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:16px;max-width:700px;margin:0 auto;direction:rtl;padding-bottom:40px}
+  h1{font-size:19px;font-weight:900;color:#fff;margin-bottom:6px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:16px}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:14px;font-size:13px;line-height:1.9}
+  .ok{color:#4ade80}.err{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}.w{color:#fff;font-weight:bold}
+  .prod{background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:9px;padding:10px;margin:6px 0;font-size:12px}
+  .prod .bc{font-family:monospace;font-weight:bold;color:#fca5a5}
+  .prod .det{color:#94a3b8;margin-top:4px;line-height:1.7}
+  .refresh{width:100%;padding:13px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;margin-top:12px;background:#2563eb;color:#fff;font-family:inherit}
+</style>
+</head>
+<body>
+<h1>🔍 فحص تداخل الفترات</h1>
+<div class="sub">يكشف منتجات مباعها أكبر من مشترياتها (تدبيل محتمل)</div>
+<div class="log" id="log">جاري الفحص…</div>
+<button class="refresh" onclick="location.reload()">🔄 إعادة الفحص</button>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const L = document.getElementById("log");
+function log(m,c){ L.innerHTML += `<div class="${c||''}">${m}</div>`; }
+const num = v => Number(v)||0;
+
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+
+async function run(){
+  L.innerHTML = "🔍 قراءة البيانات…";
+  const products = await sbGet("baro_products_v2") || [];
+  const periods = await sbGet("baro_periods_v2") || [];
+  L.innerHTML = "";
+
+  // مبيعات كل باركود
+  const soldByBc = {};
+  periods.forEach(per => Object.values(per.sales||{}).forEach(bd =>
+    Object.entries(bd).forEach(([bc,v]) => { soldByBc[bc] = (soldByBc[bc]||0) + num(v.qty); })));
+
+  // مشتريات كل منتج
+  let oversold = [];
+  products.forEach(p => {
+    const bought = (p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);
+    const sold = soldByBc[p.barcode] || 0;
+    if(sold > bought && bought > 0){
+      oversold.push({ barcode:p.barcode, name:p.name, bought, sold, ratio: sold/bought });
+    }
+  });
+  oversold.sort((a,b)=>b.ratio-a.ratio);
+
+  log(`✅ المنتجات: <b>${products.length}</b> · الفترات: <b>${periods.length}</b>`, "w");
+  log(`\n🔴 منتجات مباعها أكبر من مشترياتها: <b>${oversold.length}</b>`, oversold.length?"err":"ok");
+
+  if(oversold.length === 0){
+    log("\n🟢 ما فيه منتج مباعه أكبر من مشترياته — الأرقام منطقية.", "ok");
+    return;
+  }
+
+  // كم منها قريبة من الضعف (2x) — علامة التدبيل
+  const near2x = oversold.filter(p => p.ratio >= 1.7 && p.ratio <= 2.3).length;
+  log(`🎯 منها قريبة من الضعف (2x): <b>${near2x}</b> — علامة تدبيل قوية`, near2x?"y":"b");
+
+  log(`\nأمثلة (أعلى نسبة):`, "w");
+  oversold.slice(0,25).forEach(p => {
+    L.innerHTML += `<div class="prod">
+      <span class="bc">${p.barcode}</span> · ${p.name}
+      <div class="det">جاء: ${p.bought.toLocaleString()} · باع: ${p.sold.toLocaleString()} · النسبة: <b style="color:#fca5a5">${p.ratio.toFixed(1)}x</b></div>
+    </div>`;
+  });
+  if(oversold.length>25) log(`\n…و ${oversold.length-25} منتج آخر`, "y");
+
+  log(`\n💡 لو أغلبها قريبة من 2x → السبب فترات متداخلة (شهري + عادي لنفس الشهر).`, "b");
+  log(`الحل: نحدد الفترات المتداخلة ونحذف الزيادة.`, "b");
+}
+
+run().catch(e => log("❌ خطأ: "+e.message, "err"));
+</script>
+</body>
+</html>
