@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>فحص الباركودات المكررة</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:16px;max-width:700px;margin:0 auto;direction:rtl;padding-bottom:40px}
+  h1{font-size:19px;font-weight:900;color:#fff;margin-bottom:6px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:16px}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:14px;font-size:13px;line-height:1.9;min-height:120px}
+  .ok{color:#4ade80}.err{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}.w{color:#fff;font-weight:bold}
+  .item{background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:9px;padding:9px;margin:5px 0;font-size:12px}
+  .item .bc{font-family:monospace;font-weight:bold;color:#fca5a5}
+  .refresh{width:100%;padding:13px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;margin-top:12px;background:#2563eb;color:#fff;font-family:inherit}
+</style>
+</head>
+<body>
+<h1>🔍 فحص الباركودات المكررة عبر الكونتينرات</h1>
+<div class="sub">يكشف إذا نفس الباركود موجود في عدة كونتينرات (يسبب تدبيل المبيعات)</div>
+<div class="log" id="log">جاري الفحص…</div>
+<button class="refresh" onclick="location.reload()">🔄 إعادة الفحص</button>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const L = document.getElementById("log");
+function log(m,c){ L.innerHTML += `<div class="${c||''}">${m}</div>`; }
+const num = v => Number(v)||0;
+
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+
+async function run(){
+  L.innerHTML = "🔍 قراءة المنتجات…";
+  const products = await sbGet("baro_products_v2") || [];
+  const periods = await sbGet("baro_periods_v2") || [];
+  L.innerHTML = "";
+  log(`✅ المنتجات: <b>${products.length}</b> · الفترات: <b>${periods.length}</b>`, "w");
+
+  // نجمع المنتجات حسب الباركود
+  const byBarcode = {};
+  products.forEach(p => {
+    if(!byBarcode[p.barcode]) byBarcode[p.barcode] = [];
+    byBarcode[p.barcode].push(p);
+  });
+
+  // الباركودات المكررة (في أكثر من سجل منتج)
+  const dupBc = Object.entries(byBarcode).filter(([bc,arr]) => arr.length > 1);
+
+  log(`\n📊 باركودات فريدة: <b>${Object.keys(byBarcode).length}</b>`, "b");
+  log(`🔁 باركودات مكررة (في أكثر من منتج): <b>${dupBc.length}</b>`, dupBc.length?"err":"ok");
+
+  if(dupBc.length === 0){
+    log("\n🟢 ما فيه باركود مكرر — كل منتج فريد.", "ok");
+    log("التدبيل سببه ثاني. نكمل الفحص.", "y");
+
+    // فحص ثاني: مجموع المبيعات من الفترات مباشرة
+    let directSold = 0;
+    periods.forEach(per => Object.values(per.sales||{}).forEach(bd =>
+      Object.values(bd).forEach(v => directSold += num(v.qty))));
+    log(`\n📦 إجمالي المبيعات (مباشر من الفترات): <b>${directSold.toLocaleString()}</b> قطعة`, "w");
+
+    // مجموع لو حسبناه بطريقة النظام (calcProduct لكل منتج)
+    let systemSold = 0;
+    const soldByBc = {};
+    periods.forEach(per => Object.values(per.sales||{}).forEach(bd =>
+      Object.entries(bd).forEach(([bc,v]) => { soldByBc[bc] = (soldByBc[bc]||0) + num(v.qty); })));
+    products.forEach(p => { systemSold += (soldByBc[p.barcode] || 0); });
+    log(`🧮 إجمالي المبيعات (طريقة النظام لكل منتج): <b>${systemSold.toLocaleString()}</b> قطعة`, "w");
+
+    if(systemSold > directSold * 1.5){
+      const ratio = (systemSold/directSold).toFixed(1);
+      log(`\n🔴 النظام يحسب <b>${ratio}x</b> ضعف الحقيقة!`, "err");
+      log("السبب: نفس الباركود في عدة كونتينرات → مبيعاته تنحسب لكل كونتينر.", "y");
+    } else {
+      log(`\n🟢 الحسابان متقاربان — ما فيه تدبيل واضح في الإجمالي.`, "ok");
+    }
+    return;
+  }
+
+  // فيه باركودات مكررة — نعرض أمثلة
+  log(`\n🔴 السبب: نفس الباركود في عدة سجلات منتج!`, "err");
+  log("مبيعات هذا الباركود تنحسب لكل سجل → تدبيل.\n", "y");
+
+  let totalDupSold = 0;
+  const soldByBc = {};
+  periods.forEach(per => Object.values(per.sales||{}).forEach(bd =>
+    Object.entries(bd).forEach(([bc,v]) => { soldByBc[bc] = (soldByBc[bc]||0) + num(v.qty); })));
+
+  dupBc.slice(0,30).forEach(([bc, arr]) => {
+    const conts = arr.map(p => p.container || "؟").join(" · ");
+    const sold = soldByBc[bc] || 0;
+    const extraCounting = sold * (arr.length - 1);
+    totalDupSold += extraCounting;
+    L.innerHTML += `<div class="item">
+      <span class="bc">${bc}</span> — في ${arr.length} كونتينر: ${conts}<br>
+      مبيعاته ${sold.toLocaleString()} قطعة × ${arr.length} = محسوبة ${(sold*arr.length).toLocaleString()} (زيادة ${extraCounting.toLocaleString()})
+    </div>`;
+  });
+
+  if(dupBc.length > 30) log(`\n…و ${dupBc.length-30} باركود مكرر آخر`, "y");
+  log(`\n🔴 إجمالي الزيادة الوهمية: ~<b>${totalDupSold.toLocaleString()}</b> قطعة`, "err");
+  log(`\n💡 الحل: نوحّد المنتجات المكررة (نفس الباركود = منتج واحد) أو نصلّح طريقة حساب الكونتينر.`, "b");
+}
+
+run().catch(e => log("❌ خطأ: "+e.message, "err"));
+</script>
+</body>
+</html>
