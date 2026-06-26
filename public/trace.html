@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تتبع مبيعات منتج</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:16px;max-width:700px;margin:0 auto;direction:rtl;padding-bottom:40px}
+  h1{font-size:19px;font-weight:900;color:#fff;margin-bottom:6px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:14px}
+  input{width:100%;background:#0f1626;border:1px solid #2d3a52;color:#fff;border-radius:10px;padding:12px;font-size:14px;font-family:monospace;margin-bottom:10px}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:14px;font-size:13px;line-height:1.9}
+  .ok{color:#4ade80}.err{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}.w{color:#fff;font-weight:bold}
+  .per{background:#0f1626;border:1px solid #2d3a52;border-radius:9px;padding:9px;margin:5px 0;font-size:12px;display:flex;justify-content:space-between}
+  .per .nm{color:#e2e8f0}
+  .per .q{font-weight:900;color:#4ade80}
+  .btn{width:100%;padding:12px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;background:#2563eb;color:#fff;font-family:inherit}
+</style>
+</head>
+<body>
+<h1>🔍 تتبع مبيعات منتج</h1>
+<div class="sub">اكتب الباركود وشوف مبيعاته في كل فترة</div>
+<input id="bc" placeholder="مثال: 26132401B001" value="26132401B001">
+<button class="btn" onclick="trace()">🔍 تتبع</button>
+<div class="log" id="log" style="margin-top:12px">اكتب الباركود واضغط تتبع</div>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const L = document.getElementById("log");
+function log(m,c){ L.innerHTML += `<div class="${c||''}">${m}</div>`; }
+const num = v => Number(v)||0;
+
+let PERIODS = null, PRODUCTS = null;
+
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+
+async function trace(){
+  const bc = document.getElementById("bc").value.trim();
+  if(!bc){ L.innerHTML = "اكتب الباركود"; return; }
+  L.innerHTML = "🔍 قراءة…";
+
+  if(!PERIODS){ PERIODS = await sbGet("baro_periods_v2") || []; }
+  if(!PRODUCTS){ PRODUCTS = await sbGet("baro_products_v2") || []; }
+  L.innerHTML = "";
+
+  // المنتج
+  const prods = PRODUCTS.filter(p => p.barcode === bc);
+  log(`📦 الباركود: <b>${bc}</b>`, "w");
+  log(`عدد سجلات المنتج بهذا الباركود: <b>${prods.length}</b>`, prods.length>1?"err":"ok");
+  prods.forEach(p => {
+    const bought = (p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);
+    log(`  • ${p.name} · كونتينر ${p.container} · مشتريات ${bought} (${(p.purchases||[]).length} دفعة)`, "b");
+  });
+
+  // المبيعات في كل فترة
+  log(`\n📅 المبيعات في كل فترة:`, "w");
+  let total = 0;
+  let appearCount = 0;
+  PERIODS.forEach(per => {
+    let perQty = 0;
+    Object.values(per.sales||{}).forEach(bd => { perQty += num(bd[bc]?.qty); });
+    if(perQty > 0){
+      appearCount++;
+      total += perQty;
+      L.innerHTML += `<div class="per"><span class="nm">${per.label} <span style="color:#64748b">(${per.uploadDate||''})</span></span><span class="q">${perQty.toLocaleString()}</span></div>`;
+    }
+  });
+
+  log(`\n📊 ظهر في <b>${appearCount}</b> فترة · إجمالي المباع: <b>${total.toLocaleString()}</b>`, "w");
+
+  // تحليل: فترات بنفس الكمية = تكرار محتمل
+  const qtyMap = {};
+  PERIODS.forEach(per => {
+    let perQty = 0;
+    Object.values(per.sales||{}).forEach(bd => { perQty += num(bd[bc]?.qty); });
+    if(perQty>0){ qtyMap[perQty] = (qtyMap[perQty]||0)+1; }
+  });
+  const repeated = Object.entries(qtyMap).filter(([q,c])=>c>1);
+  if(repeated.length){
+    log(`\n🔴 فترات بنفس الكمية بالضبط (تكرار محتمل):`, "err");
+    repeated.forEach(([q,c]) => log(`  ${Number(q).toLocaleString()} قطعة × ${c} فترات`, "y"));
+  }
+}
+
+trace();
+</script>
+</body>
+</html>
