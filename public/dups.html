@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>كشف الفترات المكررة</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:16px;max-width:700px;margin:0 auto;direction:rtl;padding-bottom:40px}
+  h1{font-size:19px;font-weight:900;color:#fff;margin-bottom:6px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:16px}
+  .log{background:#060a12;border:1px solid #1f2940;border-radius:10px;padding:14px;font-size:13px;line-height:1.9;min-height:120px}
+  .ok{color:#4ade80}.err{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}.w{color:#fff;font-weight:bold}
+  .dup{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:11px;margin:7px 0}
+  .dup .names{font-weight:bold;color:#fca5a5;font-size:14px}
+  .dup .info{font-size:12px;color:#94a3b8;margin-top:4px}
+  .delbtn{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:900;cursor:pointer;margin-top:8px;font-family:inherit}
+  button{font-family:inherit}
+  .refresh{width:100%;padding:13px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;margin-top:12px;background:#2563eb;color:#fff}
+</style>
+</head>
+<body>
+<h1>🔍 كشف الفترات المكررة</h1>
+<div class="sub">يكشف الفترات اللي محتواها متطابق (نفس المبيعات بأسماء مختلفة)</div>
+<div class="log" id="log">جاري الفحص…</div>
+<button class="refresh" onclick="location.reload()">🔄 إعادة الفحص</button>
+
+<script>
+const U = "https://tvxxprynqeufzlgleurm.supabase.co";
+const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const PERKEY = "baro_periods_v2";
+const L = document.getElementById("log");
+function log(m,c){ L.innerHTML += `<div class="${c||''}">${m}</div>`; }
+
+const num = v => Number(v)||0;
+
+async function sbGet(key){
+  const res = await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,
+    { headers:{ apikey:K, Authorization:`Bearer ${K}` }});
+  if(!res.ok) return null;
+  const j = await res.json();
+  const raw = j?.[0]?.value;
+  return raw==null ? null : (typeof raw==="string"?JSON.parse(raw):raw);
+}
+async function sbSet(key, value){
+  const res = await fetch(`${U}/rest/v1/baro_store`, {
+    method:"POST",
+    headers:{ apikey:K, Authorization:`Bearer ${K}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  });
+  return res.ok;
+}
+
+// بصمة محتوى الفترة (مجموع الكميات + عدد المنتجات + الفروع)
+function contentKey(per){
+  let totalQty = 0, bcs = new Set();
+  const branches = Object.keys(per.sales||{}).sort();
+  Object.values(per.sales||{}).forEach(bd=>{
+    Object.entries(bd).forEach(([bc,v])=>{ totalQty += num(v.qty); bcs.add(bc); });
+  });
+  return `${totalQty}_${bcs.size}_${branches.length}`;
+}
+
+let PERIODS = [];
+
+async function run(){
+  L.innerHTML = "🔍 قراءة الفترات…";
+  PERIODS = await sbGet(PERKEY) || [];
+  L.innerHTML = "";
+  log(`✅ عدد الفترات: <b>${PERIODS.length}</b>`, "w");
+
+  // نجمع الفترات حسب بصمة المحتوى
+  const groups = {};
+  PERIODS.forEach(per => {
+    const key = contentKey(per);
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(per);
+  });
+
+  const dups = Object.entries(groups).filter(([k,arr]) => arr.length > 1);
+
+  if(dups.length === 0){
+    log("\n🟢 ما فيه فترات مكررة بالمحتوى — كل فترة فريدة.", "ok");
+    log("التدبيل قد يكون من سبب آخر. أرسل لي screenshot.", "y");
+    return;
+  }
+
+  log(`\n🔴 لقيت <b>${dups.length}</b> مجموعة مكررة (نفس المحتوى):`, "err");
+
+  let totalDupQty = 0;
+  dups.forEach(([key, arr], gi) => {
+    const totalQty = key.split("_")[0];
+    const names = arr.map(p => p.label).join(" = ");
+    const html = `<div class="dup">
+      <div class="names">🔁 ${names}</div>
+      <div class="info">${arr.length} فترات بنفس المحتوى · كل وحدة ${Number(totalQty).toLocaleString()} قطعة · ${arr[0].productCount||Object.values(arr[0].sales||{}).reduce((s,b)=>s+Object.keys(b).length,0)} منتج</div>
+      <div class="info" style="color:#fbbf24">سنبقي الأولى ونحذف ${arr.length-1} مكررة</div>
+      <button class="delbtn" onclick="delDups('${key}')">🗑️ احذف المكررة (أبقِ وحدة)</button>
+    </div>`;
+    L.innerHTML += html;
+  });
+}
+
+window.delDups = async (key) => {
+  if(!confirm("حذف الفترات المكررة؟ سنبقي نسخة واحدة فقط.")) return;
+  // نبني قائمة جديدة: نبقي أول فترة من كل مجموعة مكررة، نحذف الباقي بنفس البصمة
+  const seen = new Set();
+  const kept = [];
+  PERIODS.forEach(per => {
+    const k = contentKey(per);
+    if(k === key){
+      if(!seen.has(k)){ seen.add(k); kept.push(per); }
+      // else: نحذفها (مكررة)
+    } else {
+      kept.push(per);
+    }
+  });
+  const ok = await sbSet(PERKEY, kept);
+  if(ok){
+    alert(`✅ تم! الفترات الآن: ${kept.length} (كانت ${PERIODS.length})`);
+    location.reload();
+  } else {
+    alert("❌ فشل الحذف");
+  }
+};
+
+run().catch(e => log("❌ خطأ: "+e.message, "err"));
+</script>
+</body>
+</html>
