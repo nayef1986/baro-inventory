@@ -3,153 +3,161 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>تشخيص البارو</title>
+<title>لوحة تشخيص البارو</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
-  body{background:#0a0e1a;color:#e2e8f0;direction:rtl;padding:14px;max-width:600px;margin:0 auto}
-  h1{font-size:20px;font-weight:900;color:#fff;margin-bottom:14px}
-  .box{background:#0f1626;border:1px solid #2d3a52;border-radius:12px;padding:14px;margin-bottom:10px}
-  .box h2{font-size:15px;color:#60a5fa;margin-bottom:8px}
-  .ok{color:#6ee7b7}.bad{color:#fca5a5;font-weight:900}.warn{color:#fcd34d}
-  .row{font-size:13px;margin:4px 0;line-height:1.6}
-  pre{background:#020617;border-radius:8px;padding:10px;font-size:11px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;color:#94a3b8;max-height:200px;overflow-y:auto}
-  button{background:#3b82f6;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:900;cursor:pointer;font-family:Cairo;width:100%;margin-bottom:10px}
-  .fix{background:#16a34a}
-  .copy{background:#475569;font-size:12px;padding:8px}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Tahoma,sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;padding:14px;max-width:720px;margin:0 auto;direction:rtl;padding-bottom:50px}
+  h1{font-size:20px;font-weight:900;color:#fff;margin-bottom:4px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:14px}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{flex:1;min-width:90px;padding:10px 6px;border-radius:10px;border:1px solid #2d3a52;background:#0f1626;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;text-align:center;font-family:inherit}
+  .tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
+  .panel{background:#060a12;border:1px solid #1f2940;border-radius:12px;padding:14px;font-size:13px;line-height:1.9;min-height:140px}
+  .ok{color:#4ade80}.err{color:#f87171}.y{color:#fbbf24}.b{color:#60a5fa}.w{color:#fff;font-weight:bold}
+  .item{background:rgba(255,255,255,0.03);border:1px solid #1f2940;border-radius:9px;padding:9px;margin:5px 0;font-size:12px}
+  .item.bad{background:rgba(248,113,113,0.07);border-color:rgba(248,113,113,0.25)}
+  .item .bc{font-family:monospace;font-weight:bold;color:#fca5a5}
+  .item .det{color:#94a3b8;margin-top:3px;line-height:1.6}
+  input{width:100%;background:#0f1626;border:1px solid #2d3a52;color:#fff;border-radius:10px;padding:11px;font-size:14px;font-family:monospace;margin-bottom:10px}
+  .btn{width:100%;padding:11px;border:none;border-radius:10px;font-size:14px;font-weight:900;cursor:pointer;background:#2563eb;color:#fff;font-family:inherit;margin-top:8px}
+  .delbtn{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:900;cursor:pointer;margin-top:7px;font-family:inherit}
+  .per{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1f2940;font-size:12px}
+  .per .q{font-weight:900;color:#4ade80}
 </style>
 </head>
 <body>
-<h1>🔬 تشخيص البارو</h1>
-<div id="out"><div class="box">⏳ جاري الفحص…</div></div>
-
+<h1>🔧 لوحة تشخيص البارو</h1>
+<div class="sub">كل الفحوصات في مكان واحد · قراءة آمنة (الحذف فقط بطلبك)</div>
+<div class="tabs">
+  <button class="tab active" onclick="show('overview',this)">📊 نظرة عامة</button>
+  <button class="tab" onclick="show('oversold',this)">🔴 مدبّل</button>
+  <button class="tab" onclick="show('warehouse',this)">🏬 المستودع</button>
+  <button class="tab" onclick="show('periods',this)">📅 الفترات</button>
+  <button class="tab" onclick="show('trace',this)">🔍 تتبع</button>
+  <button class="tab" onclick="show('dups',this)">🔁 مكرر</button>
+</div>
+<div class="panel" id="panel">جاري التحميل…</div>
 <script>
-const SUPABASE_URL="https://tvxxprynqeufzlgleurm.supabase.co";
-const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
-const TABLE="baro_store";
-const KEYS={PRODUCTS:"baro_products_v2",PERIODS:"baro_periods_v2",SETTINGS:"baro_settings_v2",IMAGES:"baro_images_v2",FILL:"baro_fill_v2"};
-const out=document.getElementById("out");
-
+const U="https://tvxxprynqeufzlgleurm.supabase.co";
+const K="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const num=v=>Number(v)||0;
+const P=document.getElementById("panel");
+let PRODUCTS=null,PERIODS=null;
 async function sbGet(key){
-  try{
-    const res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}&select=value`,{headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`}});
-    if(!res.ok) return {error:`HTTP ${res.status}`};
-    const rows=await res.json();
-    if(!rows?.length) return {empty:true};
-    return {value:JSON.parse(rows[0].value), raw:rows[0].value};
-  }catch(e){ return {error:String(e.message||e)}; }
+  const res=await fetch(`${U}/rest/v1/baro_store?key=eq.${key}&select=value`,{headers:{apikey:K,Authorization:`Bearer ${K}`}});
+  if(!res.ok)return null;
+  const j=await res.json();const raw=j?.[0]?.value;
+  return raw==null?null:(typeof raw==="string"?JSON.parse(raw):raw);
 }
 async function sbSet(key,value){
-  const res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`,{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify({key,value:JSON.stringify(value),updated_at:new Date().toISOString()})});
+  const res=await fetch(`${U}/rest/v1/baro_store`,{method:"POST",headers:{apikey:K,Authorization:`Bearer ${K}`,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify({key,value:JSON.stringify(value),updated_at:new Date().toISOString()})});
   return res.ok;
 }
-const num=v=>Number(v)||0;
-
-let report="";
-async function run(){
-  let h="";
-
-  // 1. الاتصal + كل مفتاح
-  for(const [name,key] of Object.entries(KEYS)){
-    const r=await sbGet(key);
-    h+=`<div class="box"><h2>${name} (${key})</h2>`;
-    if(r.error){ h+=`<div class="row bad">❌ خطأ: ${r.error}</div>`; report+=`${name}: ERROR ${r.error}\n`; }
-    else if(r.empty){ h+=`<div class="row warn">⚠️ فارغ</div>`; report+=`${name}: EMPTY\n`; }
-    else {
-      const v=r.value;
-      const size=(r.raw.length/1024).toFixed(1);
-      h+=`<div class="row ok">✅ موجود · الحجم ${size} KB</div>`;
-      report+=`${name}: OK ${size}KB`;
-      if(Array.isArray(v)){ h+=`<div class="row">📊 عدد العناصر: ${v.length}</div>`; report+=` items=${v.length}`; }
-      else if(typeof v==="object"){ h+=`<div class="row">🔑 المفاتيح: ${Object.keys(v).join(", ")||"(لا شيء)"}</div>`; report+=` keys=${Object.keys(v).join("|")}`; }
-      report+="\n";
-
-      // فحص settings بالذات
-      if(key===KEYS.SETTINGS){
-        h+=`<div class="row" style="margin-top:8px;border-top:1px solid #2d3a52;padding-top:8px"><b>فحص settings:</b></div>`;
-        // stockOverrides
-        const so=v.stockOverrides;
-        if(so){
-          const objs=Object.entries(so).filter(([,x])=>x&&typeof x==="object");
-          if(objs.length){ h+=`<div class="row bad">❌ stockOverrides فيه ${objs.length} كائن (يكسر النظام!)</div>`; report+=`  BAD: stockOverrides has ${objs.length} objects\n`; }
-          else { h+=`<div class="row ok">✅ stockOverrides أرقام (${Object.keys(so).length})</div>`; }
-        } else h+=`<div class="row">stockOverrides: لا يوجd</div>`;
-        // الثقيل
-        ["transferred","editLog","stockMeta"].forEach(k=>{
-          if(v[k]!==undefined){ const sz=JSON.stringify(v[k]).length; h+=`<div class="row bad">❌ settings فيه ${k} (${sz} حرف) — يجب أن يكون في FILL!</div>`; report+=`  BAD: settings has ${k} (${sz}ch)\n`; }
-        });
-      }
-    }
-    h+=`</div>`;
-  }
-
-  // ملخص + أزرار
-  h+=`<button class="copy" onclick="copyReport()">📋 نسخ التقرير</button>`;
-  h+=`<button class="fix" onclick="cleanFix()">🧹 تنظيف settings (نقل stockMeta لـFILL)</button>`;
-  h+=`<div class="box"><h2>🧪 أزرار اختبار السبب</h2>
-    <div class="row" style="color:#94a3b8;margin-bottom:8px">جرّب واحد، افتح النظام. لو اشتغل = هذا السبب. كلها تنشئ نسخة احتياطية أولاً.</div>
-    <button onclick="testRemove('stockOverrides')" style="background:#7c2d12">1️⃣ احذف stockOverrides واختبر</button>
-    <button onclick="testRemove('stockMeta')" style="background:#7c2d12">2️⃣ احذف stockMeta واختبر</button>
-    <button onclick="testRemove('transfers')" style="background:#7c2d12">3️⃣ احذف transfers واختبر</button>
-    <button onclick="restoreBackup()" style="background:#166534">↩️ استرجاع (تراجع عن الحذف)</button>
-  </div>`;
-  out.innerHTML=h;
+async function load(){
+  if(!PRODUCTS)PRODUCTS=await sbGet("baro_products_v2")||[];
+  if(!PERIODS)PERIODS=await sbGet("baro_periods_v2")||[];
 }
-
-window.testRemove=async(field)=>{
-  if(!confirm(`حذف "${field}" من settings للاختبار؟\nبنحفظ نسخة احتياطية — تقدر ترجّعها.`)) return;
-  const r=await sbGet(KEYS.SETTINGS);
-  if(r.error||r.empty){ alert("ما قدرت أقرأ settings"); return; }
-  const s=r.value;
-  // نسخة احتياطية
-  await sbSet("baro_settings_backup", s);
-  // احذف الحقp
-  delete s[field];
-  const ok=await sbSet(KEYS.SETTINGS, s);
-  alert(ok ? `✅ حُذف "${field}".\nافتح النظام الأساسي الآن:\n- اشتغل = ${field} هو السبب\n- علّق = جرّب زر ثاني` : "⚠️ خطأ بالحفظ");
+function soldMap(){
+  const m={};
+  PERIODS.forEach(per=>Object.values(per.sales||{}).forEach(bd=>Object.entries(bd).forEach(([bc,v])=>{m[bc]=(m[bc]||0)+num(v.qty);})));
+  return m;
+}
+window.show=async(tab,btn)=>{
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  if(btn)btn.classList.add("active");
+  P.innerHTML="⏳ جاري…";
+  await load();
+  if(tab==="overview")renderOverview();
+  if(tab==="oversold")renderOversold();
+  if(tab==="warehouse")renderWarehouse();
+  if(tab==="periods")renderPeriods();
+  if(tab==="trace")renderTrace();
+  if(tab==="dups")renderDups();
 };
-
-window.restoreBackup=async()=>{
-  const r=await sbGet("baro_settings_backup");
-  if(r.error||r.empty){ alert("ما فيه نسخة احتياطية"); return; }
-  const ok=await sbSet(KEYS.SETTINGS, r.value);
-  alert(ok ? "✅ تم الاسترجاع" : "⚠️ خطأ");
-  run();
-};
-
-window.copyReport=()=>{
-  navigator.clipboard.writeText(report).then(()=>alert("تم نسخ التقرير — الصقه للمبرمج")).catch(()=>{
-    prompt("انسخ هذا:", report);
+function renderOverview(){
+  const sold=soldMap();
+  let directSold=0;
+  PERIODS.forEach(per=>Object.values(per.sales||{}).forEach(bd=>Object.values(bd).forEach(v=>directSold+=num(v.qty))));
+  let systemSold=0;PRODUCTS.forEach(p=>systemSold+=(sold[p.barcode]||0));
+  let totalBought=0;PRODUCTS.forEach(p=>totalBought+=(p.purchases||[]).reduce((s,x)=>s+num(x.qty),0));
+  const branches=new Set();PERIODS.forEach(per=>Object.keys(per.sales||{}).forEach(b=>branches.add(b)));
+  P.innerHTML=`<div class="w">📦 المنتجات: ${PRODUCTS.length.toLocaleString()}</div>
+    <div class="w">📅 الفترات: ${PERIODS.length}</div>
+    <div class="w">🏪 الفروع: ${branches.size}</div>
+    <hr style="border-color:#1f2940;margin:10px 0">
+    <div class="b">🛒 المشتريات: ${totalBought.toLocaleString()} قطعة</div>
+    <div class="ok">💰 المبيعات: ${directSold.toLocaleString()} قطعة</div>
+    <hr style="border-color:#1f2940;margin:10px 0">
+    <div class="${systemSold>directSold*1.3?'err':'ok'}">${systemSold>directSold*1.3?'🔴 النظام يحسب مبيعات أكثر (تدبيل)':'🟢 حساب المبيعات سليم'}</div>
+    <div class="${totalBought<directSold?'y':'ok'}">${totalBought<directSold?'⚠️ المشتريات أقل من المبيعات (نقص فواتير أو منتجات مستثناة)':'🟢 المشتريات تغطي المبيعات'}</div>`;
+}
+function renderOversold(){
+  const sold=soldMap();const over=[];
+  PRODUCTS.forEach(p=>{const bought=(p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);const s=sold[p.barcode]||0;if(s>bought&&bought>0)over.push({...p,bought,sold:s,ratio:s/bought});});
+  over.sort((a,b)=>b.ratio-a.ratio);
+  const near2=over.filter(p=>p.ratio>=1.7&&p.ratio<=2.3).length;
+  let h=`<div class="w">🔴 مباعها > مشترياتها: ${over.length}</div><div class="y">🎯 قريبة من 2x: ${near2}</div><div class="b" style="margin:8px 0">اضغط منتج لتتبعه</div>`;
+  over.slice(0,40).forEach(p=>{
+    h+=`<div class="item bad" style="cursor:pointer" onclick="window._tb='${p.barcode}';show('trace')"><span class="bc">${p.barcode}</span> · ${p.name}<div class="det">جاء ${p.bought.toLocaleString()} · باع ${p.sold.toLocaleString()} · <b style="color:#fca5a5">${p.ratio.toFixed(1)}x</b></div></div>`;
   });
+  if(over.length>40)h+=`<div class="y">…و ${over.length-40} آخر</div>`;
+  P.innerHTML=h;
+}
+function renderWarehouse(){
+  const sold=soldMap();
+  let rows=PRODUCTS.map(p=>{const bought=(p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);const s=sold[p.barcode]||0;return {barcode:p.barcode,name:p.name,container:p.container,bought,sold:s,closing:bought-s};});
+  let totBought=0,totSold=0,totClosing=0,negCount=0;
+  rows.forEach(r=>{totBought+=r.bought;totSold+=r.sold;totClosing+=r.closing;if(r.closing<0)negCount++;});
+  rows.sort((a,b)=>a.closing-b.closing);
+  let h=`<div class="w">🏬 المستودع — جاء / باع / متبقي</div><div class="b">🛒 إجمالي جاء: ${totBought.toLocaleString()}</div><div class="ok">💰 إجمالي باع: ${totSold.toLocaleString()}</div><div class="w">📦 إجمالي المتبقي: ${totClosing.toLocaleString()}</div><div class="${negCount?'err':'ok'}">${negCount?'🔴 منتجات متبقيها سالب: '+negCount:'🟢 ما فيه متبقي سالب'}</div><div class="b" style="margin:8px 0">الأقل متبقياً أولاً (السالب فوق) · اضغط للتتبع</div>`;
+  rows.slice(0,50).forEach(r=>{const bad=r.closing<0;h+=`<div class="item ${bad?'bad':''}" style="cursor:pointer" onclick="window._tb='${r.barcode}';show('trace')"><div style="display:flex;justify-content:space-between"><span class="bc">${r.name}</span><span class="${bad?'err':'q'}" style="font-weight:900">${r.closing.toLocaleString()}</span></div><div class="det">${r.barcode} · ${r.container||''} · جاء ${r.bought.toLocaleString()} · باع ${r.sold.toLocaleString()}</div></div>`;});
+  if(rows.length>50)h+=`<div class="y">…و ${rows.length-50} منتج آخر</div>`;
+  P.innerHTML=h;
+}
+function renderPeriods(){
+  function info(per){let qty=0;const bcs=new Set();Object.values(per.sales||{}).forEach(bd=>Object.entries(bd).forEach(([bc,v])=>{qty+=num(v.qty);bcs.add(bc);}));return{qty,products:bcs.size,branches:Object.keys(per.sales||{}).length};}
+  const lc={};PERIODS.forEach(p=>{lc[p.label]=(lc[p.label]||0)+1;});
+  let h=`<div class="w">📅 ${PERIODS.length} فترة</div><div class="b" style="margin-bottom:8px">الحذف نهائي</div>`;
+  PERIODS.forEach(per=>{const i=info(per);const dup=lc[per.label]>1;
+    h+=`<div class="item ${dup?'bad':''}"><div style="display:flex;justify-content:space-between"><span class="${dup?'bc':'w'}">${dup?'🔁 ':''}${per.label}</span><span class="q">${i.qty.toLocaleString()}</span></div><div class="det">${per.uploadDate||'؟'} · ${i.branches} فرع · ${i.products} منتج</div><button class="delbtn" onclick="delPeriod('${per.id}','${(per.label||'').replace(/'/g,'')}')">🗑️ حذف</button></div>`;
+  });
+  P.innerHTML=h;
+}
+window.delPeriod=async(id,label)=>{
+  if(!confirm(`حذف "${label}"؟ نهائي.`))return;
+  PERIODS=PERIODS.filter(p=>p.id!==id);
+  const ok=await sbSet("baro_periods_v2",PERIODS);
+  alert(ok?`✅ حُذفت. الفترات: ${PERIODS.length}`:"❌ فشل");
+  if(ok)renderPeriods();
 };
-
-window.cleanFix=async()=>{
-  if(!confirm("تنظيف settings: تحويل أي كائن لرقم + نقل transferred/editLog/stockMeta لمفتاح FILL. آمن. متابعة؟")) return;
-  const r=await sbGet(KEYS.SETTINGS);
-  if(r.error||r.empty){ alert("ما قدرت أقرأ settings"); return; }
-  const s=r.value;
-  const fr=await sbGet(KEYS.FILL);
-  const fill=(fr.value)||{};
-  // كائن → رقم
-  if(s.stockOverrides){
-    const ov={},meta={...(fill.stockMeta||{})};
-    Object.entries(s.stockOverrides).forEach(([k,v])=>{
-      if(v&&typeof v==="object"){ov[k]=num(v.qty);meta[k]={atPeriodCount:num(v.atPeriodCount)};}
-      else ov[k]=v;
-    });
-    s.stockOverrides=ov; fill.stockMeta=meta;
-  }
-  // نقل الثقيل لـ FILL
-  if(s.stockMeta!==undefined){ if(!fill.stockMeta)fill.stockMeta=s.stockMeta; delete s.stockMeta; }
-  if(s.transferred!==undefined){ if(!fill.transferred)fill.transferred=s.transferred; delete s.transferred; }
-  if(s.editLog!==undefined){ if(!fill.editLog)fill.editLog=s.editLog; delete s.editLog; }
-  const ok1=await sbSet(KEYS.SETTINGS,s);
-  const ok2=await sbSet(KEYS.FILL,fill);
-  alert(ok1&&ok2 ? "✅ تم التنظيف! افتح النظام الأساسي الآن." : "⚠️ صار خطأ بالحفظ");
-  run();
-};
-
-run();
+function renderTrace(){
+  const bc=window._tb||"26132401B001";
+  let h=`<input id="traceBc" value="${bc}"><button class="btn" onclick="window._tb=document.getElementById('traceBc').value.trim();show('trace')">🔍 تتبع</button><div style="margin-top:12px">`;
+  const prods=PRODUCTS.filter(p=>p.barcode===bc);
+  h+=`<div class="w">📦 ${bc}</div><div class="${prods.length>1?'err':'b'}">سجلات: ${prods.length}</div>`;
+  prods.forEach(p=>{const b=(p.purchases||[]).reduce((s,x)=>s+num(x.qty),0);h+=`<div class="det" style="color:#60a5fa">• ${p.name} · ${p.container} · مشتريات ${b}</div>`;});
+  h+=`<div class="w" style="margin-top:10px">📅 المبيعات بكل فترة:</div>`;
+  let total=0;const qc={};
+  PERIODS.forEach(per=>{let q=0;Object.values(per.sales||{}).forEach(bd=>{q+=num(bd[bc]?.qty);});if(q>0){total+=q;qc[q]=(qc[q]||0)+1;h+=`<div class="per"><span>${per.label} <span style="color:#64748b">(${per.uploadDate||''})</span></span><span class="q">${q.toLocaleString()}</span></div>`;}});
+  h+=`<div class="w" style="margin-top:8px">الإجمالي: ${total.toLocaleString()}</div>`;
+  const rep=Object.entries(qc).filter(([q,c])=>c>1);
+  if(rep.length){h+=`<div class="err" style="margin-top:8px">🔴 فترات بنفس الكمية:</div>`;rep.forEach(([q,c])=>h+=`<div class="y">${Number(q).toLocaleString()} × ${c}</div>`);}
+  h+=`</div>`;P.innerHTML=h;
+}
+function renderDups(){
+  const byBc={};PRODUCTS.forEach(p=>{if(!byBc[p.barcode])byBc[p.barcode]=[];byBc[p.barcode].push(p);});
+  const dupBc=Object.entries(byBc).filter(([k,a])=>a.length>1);
+  function fp(per){let q=0;const bcs=new Set();Object.values(per.sales||{}).forEach(bd=>Object.entries(bd).forEach(([b,v])=>{q+=num(v.qty);bcs.add(b);}));return`${q}_${bcs.size}_${Object.keys(per.sales||{}).length}`;}
+  const fpMap={};PERIODS.forEach(p=>{const k=fp(p);if(!fpMap[k])fpMap[k]=[];fpMap[k].push(p.label);});
+  const dupPer=Object.entries(fpMap).filter(([k,a])=>a.length>1);
+  let h=`<div class="w">🔁 باركود مكرر: ${dupBc.length}</div>`;
+  dupBc.slice(0,15).forEach(([bc,arr])=>{h+=`<div class="item bad"><span class="bc">${bc}</span> في ${arr.length}: ${arr.map(p=>p.container).join(' · ')}</div>`;});
+  h+=`<hr style="border-color:#1f2940;margin:12px 0"><div class="w">🔁 فترات بنفس المحتوى: ${dupPer.length}</div>`;
+  dupPer.forEach(([k,names])=>{h+=`<div class="item bad">${names.join(' = ')}</div>`;});
+  if(dupBc.length===0&&dupPer.length===0)h+=`<div class="ok">🟢 ما فيه تكرار</div>`;
+  P.innerHTML=h;
+}
+show('overview');
 </script>
 </body>
 </html>
