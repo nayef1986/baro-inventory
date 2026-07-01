@@ -30,6 +30,7 @@
   .contbody{padding:0 10px 10px}
   /* منتج */
   .prod{background:#141b2d;border:1px solid #1f2940;border-radius:12px;margin-bottom:8px;overflow:hidden}
+  .prod.redist{border:2px solid #f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.2)}
   .prodh{display:flex;gap:10px;align-items:center;padding:11px;cursor:pointer}
   .prodh img{width:60px;height:60px;border-radius:10px;object-fit:cover;border:1px solid #2d3a52;background:#fff}
   .prodh .noimg{width:60px;height:60px;border-radius:10px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:26px}
@@ -242,6 +243,8 @@ function computeNeeds(){
     const priorBranches = [...new Set(priorTransfers.map(t=>t.to))];
     needs.push({ p, bought, totalSold, closing, branches, distributedBefore, lastDistDate, priorBranches });
   });
+  // نجمّع الموزّع سابقاً فوق (عشان الموظف يلقاها بسرعة)
+  needs.sort((a,b)=> (b.distributedBefore?1:0) - (a.distributedBefore?1:0));
   return needs;
 }
 
@@ -469,11 +472,12 @@ function renderProd(n){
       </div>
     </div>`;
   }
-  return `<div class="prod" id="prod_${bc}">
+  return `<div class="prod${n.distributedBefore?' redist':''}" id="prod_${bc}">
+    ${n.distributedBefore ? `<div style="background:rgba(245,158,11,0.18);border-bottom:1px solid rgba(245,158,11,0.4);padding:6px 11px;font-size:11px;color:#fbbf24;font-weight:900;text-align:center">🔁 وزّع مرة أخرى — فروع تحتاج</div>` : ""}
     <div class="prodh">
       ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${img.replace(/'/g,"\\\\'")}','${safeName}')"/>`:`<div class="noimg" onclick="toggleProd('${safeBc}')">📦</div>`}
       <div class="info" onclick="toggleProd('${safeBc}')">
-        <div class="pnm">${n.p.name}${approvedNow[bc]?' <span style="color:#4ade80">✓</span>':''}${n.distributedBefore?' <span style="color:#fbbf24" title="وُزّع سابقاً — هذي فروع محتاجة من جديد">🔁</span>':''}</div>
+        <div class="pnm">${n.p.name}${approvedNow[bc]?' <span style="color:#4ade80">✓</span>':''}</div>
         <div class="pbc">${bc}</div>
         <div class="pstats">
           <span class="ps-buy"><b>${fmtN(n.bought)}</b>مشترى</span>
@@ -554,7 +558,7 @@ function renderLog(c){
     }
     return `<div class="log">
       <div class="logh" onclick="toggleLog('${pr.barcode.replace(/'/g,'')}')">
-        ${img?`<img src="${img}"/>`:`<div class="noimg">📦</div>`}
+        ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${(img||'').replace(/'/g,"\\\\'")}','${(pr.name||'').replace(/'/g,'')}')" style="cursor:pointer"/>`:`<div class="noimg">📦</div>`}
         <div class="info"><div class="lnm">${pr.name}</div><div class="lqt">${pr.items.length} فرع · ${fmtN(totalQty)} قطعة</div></div>
         <button onclick="event.stopPropagation();deleteProduct('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer">🗑️ حذف الكل</button>
         <span style="color:#5b6b85;margin-right:4px">${isOpen?'▲':'▼'}</span>
