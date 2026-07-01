@@ -184,6 +184,20 @@ function lastSupplyDate(p){
 }
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 
+// نسخ الباركود للحافظة
+function copyBarcode(bc){
+  const done = ()=>showToast(`نُسخ: ${bc} ✓`);
+  if (navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(bc).then(done).catch(()=>{
+      const ta=document.createElement("textarea"); ta.value=bc; document.body.appendChild(ta); ta.select();
+      try{ document.execCommand("copy"); done(); }catch{} ta.remove();
+    });
+  } else {
+    const ta=document.createElement("textarea"); ta.value=bc; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); done(); }catch{} ta.remove();
+  }
+}
+
 // إجمالي الموزّع لفرع معين (كل التوزيعات المُرحّلة للسجل — مو بس آخر أسبوع)
 function totalDistributed(bc, branch){
   return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && t.printed)
@@ -348,6 +362,7 @@ function renderApp(){
   renderContent();
 }
 let searchTerm = "";
+let logSearch = "";
 async function refreshAll(){
   showToast("جاري التحديث…");
   SALES_MAP = null; currentNeeds = []; approvedNow = {};
@@ -369,7 +384,7 @@ async function refreshAll(){
   renderApp();
 }
 function onSearch(v){ searchTerm = v; drawNeeds(document.getElementById("content")); }
-function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; selectedCont=null; searchTerm=""; renderApp(); }
+function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; selectedCont=null; searchTerm=""; logSearch=""; renderApp(); }
 
 function renderContent(){
   const c = document.getElementById("content");
@@ -534,12 +549,18 @@ function renderLog(c){
     if (!byProd[t.barcode]) byProd[t.barcode] = { name:t.name, barcode:t.barcode, items:[] };
     byProd[t.barcode].items.push(t);
   });
-  const list = Object.values(byProd).sort((a,b)=>{
+  let list = Object.values(byProd).sort((a,b)=>{
     const la = Math.max(...a.items.map(x=>x.date)), lb = Math.max(...b.items.map(x=>x.date));
     return lb-la;
   });
-  if (list.length === 0){ c.innerHTML = `<div class="empty">لا توزيعات بعد</div>`; return; }
-  c.innerHTML = list.map(pr=>{
+  // بحث بالباركود أو الاسم
+  const lq = (logSearch||"").trim().toLowerCase();
+  if (lq) list = list.filter(pr => (pr.barcode||"").toLowerCase().includes(lq) || (pr.name||"").toLowerCase().includes(lq));
+
+  const searchBox = `<input id="logSearchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="logSearch=this.value;renderLog(document.getElementById('content'))" value="${logSearch}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`;
+
+  if (list.length === 0){ c.innerHTML = searchBox + `<div class="empty">${lq?`لا نتائج لـ "${logSearch}"`:"لا توزيعات بعد"}</div>`; return; }
+  c.innerHTML = searchBox + list.map(pr=>{
     const img = IMAGES?.[pr.barcode];
     const isOpen = openLog === pr.barcode;
     const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
@@ -559,7 +580,7 @@ function renderLog(c){
     return `<div class="log">
       <div class="logh" onclick="toggleLog('${pr.barcode.replace(/'/g,'')}')">
         ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${(img||'').replace(/'/g,"\\\\'")}','${(pr.name||'').replace(/'/g,'')}')" style="cursor:pointer"/>`:`<div class="noimg">📦</div>`}
-        <div class="info"><div class="lnm">${pr.name}</div><div class="lqt">${pr.items.length} فرع · ${fmtN(totalQty)} قطعة</div></div>
+        <div class="info"><div class="lnm">${pr.name}</div><div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="font-family:monospace;font-size:13px;font-weight:900;color:#94a3b8;letter-spacing:1px">${pr.barcode}</span><button onclick="event.stopPropagation();copyBarcode('${pr.barcode.replace(/'/g,'')}')" style="background:rgba(91,155,213,0.15);color:#7cb3e8;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer">📋 نسخ</button></div><div class="lqt">${pr.items.length} فرع · ${fmtN(totalQty)} قطعة</div></div>
         <button onclick="event.stopPropagation();deleteProduct('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;font-family:'Cairo';cursor:pointer">🗑️ حذف الكل</button>
         <span style="color:#5b6b85;margin-right:4px">${isOpen?'▲':'▼'}</span>
       </div>
