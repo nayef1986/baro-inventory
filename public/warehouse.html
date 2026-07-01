@@ -183,6 +183,12 @@ function lastSupplyDate(p){
 }
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 
+// إجمالي الموزّع لفرع معين (كل التوزيعات المُرحّلة للسجل — مو بس آخر أسبوع)
+function totalDistributed(bc, branch){
+  return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && t.printed)
+    .reduce((s,t)=>s+num(t.qty),0);
+}
+
 function recentTransfer(bc, branch){
   const now = Date.now();
   return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && (now-t.date) < RECENT_DAYS*86400000)
@@ -222,9 +228,11 @@ function computeNeeds(){
     const closedB = SETTINGS?.closedBranches ?? [];
     const branches = Object.entries(branchSales).filter(([branch])=>!closedB.includes(branch)).map(([branch,bsold])=>{
       const given = toUnit(bsold, unit);
+      const distributed = totalDistributed(p.barcode, branch); // كل اللي وزّعناه لهذا الفرع
       const recent = recentTransfer(p.barcode, branch);
-      const remaining = given - bsold + recent;
-      return { branch, sold:bsold, given, remaining, recent };
+      // الباقي = المفروض يأخذ − اللي باعه + اللي وزّعناه له فعلاً
+      const remaining = given - bsold + distributed;
+      return { branch, sold:bsold, given, remaining, recent, distributed };
     }).filter(b=> b.remaining < threshold).sort((a,b)=>a.remaining-b.remaining);
     if (branches.length === 0) return;
     // ✅ هل وُزّع هذا المنتج سابقاً ورُحّل للسجل؟ (تنبيه تكرار)
@@ -462,11 +470,10 @@ function renderProd(n){
     </div>`;
   }
   return `<div class="prod" id="prod_${bc}">
-    ${n.distributedBefore ? `<div style="background:rgba(239,68,68,0.15);border-bottom:1px solid rgba(239,68,68,0.3);padding:7px 11px;font-size:11px;color:#fca5a5;font-weight:700">⚠️ وُزّع سابقاً (${n.priorBranches.length} فرع · ${new Date(n.lastDistDate).toLocaleDateString("en-GB")}) — راجع السجل قبل التوزيع</div>` : ""}
     <div class="prodh">
       ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${img.replace(/'/g,"\\\\'")}','${safeName}')"/>`:`<div class="noimg" onclick="toggleProd('${safeBc}')">📦</div>`}
       <div class="info" onclick="toggleProd('${safeBc}')">
-        <div class="pnm">${n.p.name}${approvedNow[bc]?' <span style="color:#4ade80">✓</span>':''}${n.distributedBefore?' <span style="color:#fca5a5" title="وُزّع سابقاً">🔁</span>':''}</div>
+        <div class="pnm">${n.p.name}${approvedNow[bc]?' <span style="color:#4ade80">✓</span>':''}${n.distributedBefore?' <span style="color:#fbbf24" title="وُزّع سابقاً — هذي فروع محتاجة من جديد">🔁</span>':''}</div>
         <div class="pbc">${bc}</div>
         <div class="pstats">
           <span class="ps-buy"><b>${fmtN(n.bought)}</b>مشترى</span>
