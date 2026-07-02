@@ -122,7 +122,7 @@ const toDozen = n => Math.ceil(n/MIN)*MIN;
 const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
 const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
 
-let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [];
+let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [], COUNTS = {};
 let SALES_MAP = null;
 let currentNeeds = [];
 let activeTab = "needs";
@@ -245,9 +245,24 @@ function computeNeeds(){
       const given = toUnit(bsold, unit);
       const distributed = totalDistributed(p.barcode, branch); // كل اللي وزّعناه لهذا الفرع
       const recent = recentTransfer(p.barcode, branch);
-      // الباقي = المفروض يأخذ − اللي باعه + اللي وزّعناه له فعلاً
-      const remaining = given - bsold + distributed;
-      return { branch, sold:bsold, given, remaining, recent, distributed };
+      // الباقي المحسوب = المفروض يأخذ − اللي باعه + اللي وزّعناه له فعلاً
+      let remaining = given - bsold + distributed;
+      // ✅ لو فيه جرد فعلي لهذا الفرع، نستخدمه بدل الحساب
+      const cnt = COUNTS?.[p.barcode+"_"+branch];
+      let counted = false, staleCount = false, soldAfter = 0;
+      if (cnt){
+        const soldAtCount = num(cnt.soldAtCount);
+        soldAfter = Math.max(0, bsold - soldAtCount); // باع كم بعد الجرد
+        if (soldAfter > num(cnt.count)){
+          // 🔴 باع بعد الجرد أكثر من اللي جرده → الجرد صار غلط، ننبّه ونرجع للحساب
+          staleCount = true;
+        } else {
+          // ✅ الجرد سليم: الباقي الفعلي = المجرود − اللي باعه بعد الجرد
+          remaining = num(cnt.count) - soldAfter;
+          counted = true;
+        }
+      }
+      return { branch, sold:bsold, given, remaining, recent, distributed, counted, staleCount, soldAfter, countVal: cnt?num(cnt.count):null };
     }).filter(b=> b.remaining < threshold).sort((a,b)=>a.remaining-b.remaining);
     if (branches.length === 0) return;
     // ✅ هل وُزّع هذا المنتج سابقاً ورُحّل للسجل؟ (تنبيه تكرار)
@@ -354,6 +369,7 @@ function renderApp(){
       <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
       <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
       <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 السجل</button>
+      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📊 الجرد</button>
     </div>
     <div id="stats" class="stats"></div>
     ${activeTab==='needs' && !selectedCont?`<input id="searchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="onSearch(this.value)" value="${searchTerm}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`:''}
@@ -367,8 +383,8 @@ async function refreshAll(){
   showToast("جاري التحديث…");
   SALES_MAP = null; currentNeeds = []; approvedNow = {};
   try {
-    const [prods, pers, sett, imgs, trans] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2")
+    const [prods, pers, sett, imgs, trans, counts] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2")
     ]);
     // 🛡️ لو فشل تحميل المنتجات (null) لا نكتب فاضي فوقها — نوقف ونحذّر
     if (prods === null) {
@@ -377,7 +393,7 @@ async function refreshAll(){
       renderApp();
       return;
     }
-    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? [];
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {};
     DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
     showToast("تم التحديث ✓");
   } catch(e){ DATA_LOADED = false; showToast("تعذّر التحديث"); }
@@ -389,6 +405,7 @@ function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; sel
 function renderContent(){
   const c = document.getElementById("content");
   if (activeTab === "log"){ renderLog(c); return; }
+  if (activeTab === "count"){ renderCounts(c); return; }
   if (activeTab === "print"){ renderPrintQueue(c); return; }
   // النواقص
   if (currentNeeds.length === 0 && !SALES_MAP){
@@ -455,10 +472,12 @@ function renderProd(n){
       const ex = excluded[key];
       const qv = qtyEdit[key] ?? unitOf(bc);
       const recentWarn = b.recent>0 ? `<div class="recent">⚠️ نُقل ${fmtN(b.recent)} قطعة خلال أسبوع — تأكد</div>` : "";
-      return `${recentWarn}<div class="br${ex?' excluded':''}" id="br_${key}">
+      const staleWarn = b.staleCount ? `<div class="recent">🔴 باع ${fmtN(b.soldAfter)} بعد جرده (${fmtN(b.countVal)}) — الجرد غلط، راجع الموظف</div>` : "";
+      const countedBadge = b.counted ? ` <span style="background:rgba(74,222,128,0.15);color:#4ade80;font-size:9px;font-weight:900;padding:1px 6px;border-radius:100px">✓ جرد فعلي</span>` : "";
+      return `${recentWarn}${staleWarn}<div class="br${ex?' excluded':''}" id="br_${key}">
         <span class="chk" id="chk_${key}" onclick="toggleExclude('${safeBc}','${b.branch.replace(/'/g,'')}')">${ex?'☐':'✅'}</span>
         <div class="bn">
-          <div class="bname">🏪 ${b.branch}</div>
+          <div class="bname">🏪 ${b.branch}${countedBadge}</div>
           <div class="q3">
             <span class="s-sold"><b>${fmtN(b.sold)}</b>باع</span>
             <span class="s-given"><b>${fmtN(b.given)}</b>أخذ</span>
@@ -540,6 +559,65 @@ function openImg(src, name){
       setTimeout(()=>URL.revokeObjectURL(url),1000);
     } catch { alert("اضغط مطوّل على الصورة لحفظها"); }
   };
+}
+
+let countSearch = "";
+function renderCounts(c){
+  const entries = Object.values(COUNTS||{});
+  const q = (countSearch||"").trim().toLowerCase();
+  let filtered = entries;
+  if (q) filtered = entries.filter(e => (e.barcode||"").toLowerCase().includes(q) || (e.name||"").toLowerCase().includes(q) || (e.branch||"").toLowerCase().includes(q) || (e.emp||"").toLowerCase().includes(q));
+  const searchBox = `<input id="countSearch" placeholder="🔍 بحث بالباركود/الاسم/الفرع/الموظف…" oninput="countSearch=this.value;renderCounts(document.getElementById('content'))" value="${countSearch}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`;
+  if (entries.length === 0){ c.innerHTML = `<div class="empty">لا جرد بعد<br><span style="font-size:12px">أرسل رابط الجرد للفروع</span></div>`; return; }
+  const byBranch = {};
+  filtered.forEach(e=>{ if(!byBranch[e.branch]) byBranch[e.branch]=[]; byBranch[e.branch].push(e); });
+  const branchNames = Object.keys(byBranch).sort();
+  if (filtered.length === 0){ c.innerHTML = searchBox + `<div class="empty">لا نتائج لـ "${countSearch}"</div>`; return; }
+  c.innerHTML = searchBox + branchNames.map(branch=>{
+    const items = byBranch[branch].sort((a,b)=>b.date-a.date);
+    const emp = items[0]?.emp || "؟";
+    const diffs = items.map(e=> num(e.count)-num(e.calc));
+    const short = diffs.filter(d=>d<0).length;
+    const over  = diffs.filter(d=>d>0).length;
+    const rows = items.map(e=>{
+      const diff = num(e.count) - num(e.calc);
+      const dc = diff<0?"#f87171":diff>0?"#fbbf24":"#4ade80";
+      const img = IMAGES?.[e.barcode];
+      const d = new Date(e.date);
+      const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+" "+(d.getHours()+"").padStart(2,"0")+":"+(d.getMinutes()+"").padStart(2,"0");
+      // 🔴 كشف الجرد الغلط: باع بعد الجرد أكثر من المجرود
+      let soldAfterNow = 0;
+      PERIODS.forEach(per=>{ const bd = per.sales?.[e.branch]; if (bd) soldAfterNow += num(bd[e.barcode]?.qty??0); });
+      soldAfterNow = Math.max(0, soldAfterNow - num(e.soldAtCount));
+      const stale = soldAfterNow > num(e.count);
+      const staleRow = stale ? `<div style="background:rgba(248,113,113,0.12);border-radius:7px;padding:5px 9px;margin-top:5px;font-size:11px;color:#fca5a5;font-weight:700">🔴 باع ${fmtN(soldAfterNow)} بعد جرده (${fmtN(e.count)}) — راجع الموظف</div>` : "";
+      return `<div style="background:${stale?'rgba(248,113,113,0.06)':'#0f1626'};border:${stale?'1px solid rgba(248,113,113,0.3)':'none'};border-radius:9px;padding:8px 10px;margin-top:6px">
+        <div style="display:flex;gap:9px;align-items:center">
+        ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(e.name||'').replace(/'/g,'')}')" style="width:42px;height:42px;border-radius:8px;object-fit:cover;background:#fff;cursor:pointer"/>`:`<div style="width:42px;height:42px;border-radius:8px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:900;color:#fff">${e.name||"—"}</div>
+          <div style="font-family:monospace;font-size:11px;color:#94a3b8">${e.barcode} · ${ds}</div>
+        </div>
+        <div style="display:flex;gap:5px;text-align:center">
+          <div style="background:rgba(91,155,213,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#7cb3e8">${fmtN(e.calc)}</div><div style="font-size:8px;color:#5b6b85">محسوب</div></div>
+          <div style="background:rgba(255,255,255,0.06);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#fff">${fmtN(e.count)}</div><div style="font-size:8px;color:#5b6b85">فعلي</div></div>
+          <div style="background:${dc}22;border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:${dc}">${diff>0?"+":""}${diff}</div><div style="font-size:8px;color:#5b6b85">فرق</div></div>
+        </div>
+        </div>
+        ${staleRow}
+      </div>`;
+    }).join("");
+    return `<div class="log" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px;background:#141d33;border-bottom:1px solid #1f2940">
+        <div><div style="font-weight:900;font-size:14px;color:#fff">🏪 ${branch}</div><div style="font-size:11px;color:#7cb3e8;margin-top:2px">👤 ${emp} · ${items.length} صنف</div></div>
+        <div style="display:flex;gap:6px;font-size:10px">
+          ${short>0?`<span style="background:rgba(248,113,113,0.15);color:#f87171;border-radius:100px;padding:3px 9px;font-weight:900">${short} نقص</span>`:''}
+          ${over>0?`<span style="background:rgba(251,191,36,0.15);color:#fbbf24;border-radius:100px;padding:3px 9px;font-weight:900">${over} زيادة</span>`:''}
+        </div>
+      </div>
+      <div style="padding:8px 10px 10px">${rows}</div>
+    </div>`;
+  }).join("");
 }
 
 function renderLog(c){
@@ -829,10 +907,10 @@ async function saveSlipImage(bc){
 // ─── البوابة ─────────────────────────────────────────────────
 async function init(){
   try {
-    const [prods, pers, sett, imgs, trans] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2")
+    const [prods, pers, sett, imgs, trans, counts] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2")
     ]);
-    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? [];
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {};
     // ✅ نعتبر التحميل ناجحاً فقط لو وصلنا هنا بدون خطأ. لو prods=null (مفتاح فاضي فعلاً) الحفظ يبقى محمياً بالحارس
     DATA_LOADED = (prods !== null);
   } catch(e){
