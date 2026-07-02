@@ -270,7 +270,10 @@ function computeNeeds(){
     const distributedBefore = priorTransfers.length > 0;
     const lastDistDate = distributedBefore ? Math.max(...priorTransfers.map(t=>num(t.date))) : 0;
     const priorBranches = [...new Set(priorTransfers.map(t=>t.to))];
-    needs.push({ p, bought, totalSold, closing, branches, distributedBefore, lastDistDate, priorBranches });
+    // هل أي فرع في هذا المنتج مجرود فعلياً؟
+    const hasCount = branches.some(b=>b.counted);
+    const hasStale = branches.some(b=>b.staleCount);
+    needs.push({ p, bought, totalSold, closing, branches, distributedBefore, lastDistDate, priorBranches, hasCount, hasStale });
   });
   // نجمّع الموزّع سابقاً فوق (عشان الموظف يلقاها بسرعة)
   needs.sort((a,b)=> (b.distributedBefore?1:0) - (a.distributedBefore?1:0));
@@ -511,7 +514,7 @@ function renderProd(n){
     <div class="prodh">
       ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${img.replace(/'/g,"\\\\'")}','${safeName}')"/>`:`<div class="noimg" onclick="toggleProd('${safeBc}')">📦</div>`}
       <div class="info" onclick="toggleProd('${safeBc}')">
-        <div class="pnm">${n.p.name}${approvedNow[bc]?' <span style="color:#4ade80">✓</span>':''}</div>
+        <div class="pnm">${n.p.name}${approvedNow[bc]?' <span style="color:#4ade80">✓</span>':''}${n.hasStale?' <span title="جرد قديم — راجع الموظف">🔴</span>':n.hasCount?' <span style="color:#4ade80" title="فيه جرد فعلي">📋</span>':''}</div>
         <div class="pbc">${bc}</div>
         <div class="pstats">
           <span class="ps-buy"><b>${fmtN(n.bought)}</b>مشترى</span>
