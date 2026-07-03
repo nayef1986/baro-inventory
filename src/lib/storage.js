@@ -15,6 +15,7 @@ const KEYS = {
   PERIODS:  "baro_periods_v2",
   SETTINGS: "baro_settings_v2",
   IMAGES:   "baro_images_v2",
+  COUNTS:   "baro_branch_counts_v2",
 };
 
 // ─── Supabase REST ───────────────────────────────────────────
@@ -191,6 +192,16 @@ export async function deleteImage(key) {
   if (!images[key]) return { ok: false };
   delete images[key];
   return { ok: await save(KEYS.IMAGES, images) };
+}
+
+// ─── Branch Counts (جرد الفروع) ──────────────────────────────
+
+export async function loadBranchCounts() {
+  return (await load(KEYS.COUNTS)) ?? {};
+}
+
+export async function saveBranchCounts(counts) {
+  return await save(KEYS.COUNTS, counts);
 }
 
 // ─── تحميل الكل ──────────────────────────────────────────────
