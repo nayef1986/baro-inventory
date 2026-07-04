@@ -73,7 +73,8 @@ const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
 const params = new URLSearchParams(location.search);
 const BRANCH = (params.get("branch") || "").trim();
 
-let PRODUCTS = [], PERIODS = [], IMAGES = {}, COUNTS = {};
+let PRODUCTS = [], PERIODS = [], IMAGES = {}, COUNTS = {}, TRANSFERS = [];
+let activeTab = "count"; // count | receive
 let searchTerm = "";
 let EMP = "";
 let openConts = {};
@@ -117,10 +118,10 @@ async function init(){
   }
   EMP = localStorage.getItem("baro_emp_"+BRANCH) || "";
   try {
-    const [prods, pers, imgs, counts] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_images_v2"), load("baro_branch_counts_v2")
+    const [prods, pers, imgs, counts, trans] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_images_v2"), load("baro_branch_counts_v2"), load("baro_transfers_v2")
     ]);
-    PRODUCTS = prods ?? []; PERIODS = pers ?? []; IMAGES = imgs ?? {}; COUNTS = counts ?? {};
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; IMAGES = imgs ?? {}; COUNTS = counts ?? {}; TRANSFERS = trans ?? [];
   } catch(e){
     document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
     return;
@@ -168,6 +169,29 @@ function branchProductsGrouped(){
 
 function render(){
   const app = document.getElementById("app");
+  // عدد شحنات الاستلام المعلّقة (مرسلة للفرع، مطبوعة، ما استُلمت)
+  const pendingReceive = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received).length;
+  app.innerHTML = `
+    <h1>🏪 ${BRANCH}</h1>
+    <div class="sub">ALBAROO · ${EMP}</div>
+    <div class="empId">👤 الموظف: <b>${EMP}</b><button onclick="changeEmp()">تغيير</button></div>
+    <div class="tabs" style="display:flex;gap:7px;margin-bottom:14px">
+      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')" style="flex:1;padding:11px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:13px;cursor:pointer">📋 جرد</button>
+      <button class="${activeTab==='receive'?'on':''}" onclick="setTab('receive')" style="flex:1;padding:11px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:13px;cursor:pointer">📥 استلام${pendingReceive>0?` (${pendingReceive})`:''}</button>
+    </div>
+    <div id="tabBody"></div>`;
+  renderTabBody();
+}
+
+function setTab(t){ activeTab = t; render(); }
+
+function renderTabBody(){
+  const body = document.getElementById("tabBody");
+  if (activeTab === "receive"){ renderReceive(body); return; }
+  renderCountTab(body);
+}
+
+function renderCountTab(app){
   const groups = branchProductsGrouped();
   const contNames = Object.keys(groups).sort();
   const totalProds = Object.values(groups).reduce((s,a)=>s+a.length,0);
@@ -175,10 +199,6 @@ function render(){
   const q = searchTerm.trim();
 
   app.innerHTML = `
-    <h1>📋 جرد الفرع</h1>
-    <div class="sub">ALBAROO · حدّث الكمية الفعلية</div>
-    <div class="branchName">🏪 ${BRANCH}</div>
-    <div class="empId">👤 الموظف: <b>${EMP}</b><button onclick="changeEmp()">تغيير</button></div>
     <div class="hint">اضغط <b>+</b> أو <b>−</b> أو اكتب الرقم مباشرة. عدّ اللي عندك في الرف فعلياً، ثم احفظ. الإدارة تشوف الفرق تلقائياً.</div>
     <input class="search" id="search" placeholder="🔍 ابحث بالباركود أو الاسم…" value="${searchTerm}" oninput="onSearch(this.value)" />
     <div style="font-size:12px;color:#5b6b85;margin-bottom:10px">📦 ${totalProds} منتج · ✅ جردت ${done}</div>
@@ -267,6 +287,55 @@ async function saveCount(bc, name, remaining){
   const card = document.getElementById("card_"+key);
   if (card) card.classList.add("done");
   if (btn){ btn.textContent = "✓ محفوظ — تعديل"; btn.classList.add("saved"); btn.disabled = false; }
+}
+
+// ─── تبويب الاستلام ──────────────────────────────────────────
+function renderReceive(app){
+  const pending = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received);
+  const received = TRANSFERS.filter(t=>t.to===BRANCH && t.received);
+  const byBc = {};
+  pending.forEach(t=>{ if(!byBc[t.barcode]) byBc[t.barcode]={name:t.name,barcode:t.barcode,items:[]}; byBc[t.barcode].items.push(t); });
+  const list = Object.values(byBc);
+
+  app.innerHTML = `
+    <div class="hint">📥 هذي البضاعة اللي أرسلها لك المستودع. لما توصلك فعلياً، اضغط "استلمت" — رصيدك يتحدّث تلقائياً.</div>
+    ${list.length===0
+      ? `<div class="empty">${received.length>0?"✅ استلمت كل الشحنات":"لا شحنات جديدة"}</div>`
+      : list.map(pr=>{
+          const img = IMAGES?.[pr.barcode];
+          const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
+          return `<div class="card" style="border-color:rgba(22,163,74,0.3)">
+            <div class="cardh">
+              ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(pr.name||'').replace(/'/g,'')}')"/>`:`<div class="noimg">📦</div>`}
+              <div class="info">
+                <div class="nm">${pr.name||"—"}</div>
+                <div class="bc">${pr.barcode}</div>
+              </div>
+              <div style="text-align:center;background:rgba(22,163,74,0.12);border-radius:9px;padding:7px 11px">
+                <div style="font-size:20px;font-weight:900;color:#4ade80">${fmtN(totalQty)}</div>
+                <div style="font-size:9px;color:#5b6b85">قطعة</div>
+              </div>
+            </div>
+            <button class="savebtn" style="background:#16a34a" onclick="confirmReceive('${pr.barcode.replace(/'/g,'')}')">✓ استلمت (${fmtN(totalQty)} قطعة)</button>
+          </div>`;
+        }).join("")}
+    ${received.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ استلمت سابقاً: ${received.length} شحنة</div>`:''}`;
+}
+
+async function confirmReceive(bc){
+  const items = TRANSFERS.filter(t=>t.barcode===bc && t.to===BRANCH && t.printed && !t.received);
+  if (items.length===0) return;
+  const total = items.reduce((s,t)=>s+num(t.qty),0);
+  if (!confirm(`تأكيد استلام ${fmtN(total)} قطعة من ${items[0].name||bc}؟`)) return;
+  const now = Date.now();
+  TRANSFERS.forEach(t=>{
+    if (t.barcode===bc && t.to===BRANCH && t.printed && !t.received){
+      t.received = true; t.receivedDate = now; t.receivedBy = EMP;
+    }
+  });
+  await save("baro_transfers_v2", TRANSFERS);
+  showToast(`✓ استلمت ${fmtN(total)} قطعة`);
+  render();
 }
 
 function openImg(src, name){
