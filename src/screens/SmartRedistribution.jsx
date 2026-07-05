@@ -2,7 +2,7 @@
 // يكتشف الراكد والسريع لكل مصنع عبر الفترات، يقترح نقل، وأنت تعدّل.
 import { useState, useMemo, useEffect } from "react";
 import { getFactoryCode, num, allBranches, totalPurchases, getBranchRemaining } from "../lib/calc.js";
-import { loadBranchCounts } from "../lib/storage.js";
+import { loadBranchCounts, loadTransfers, saveTransfers } from "../lib/storage.js";
 
 const toDozen = (n, u) => Math.ceil(n / (u||12)) * (u||12);
 
@@ -388,8 +388,9 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     if (!plan) return;
     const items = plan.items.filter(it=>!removed[it.barcode]);
     if (items.length === 0) return;
-    // نحفظ النقل في settings.transfers (نفس آلية النقل اليدوي)
-    const existing = settings?.transfers ?? [];
+    // نحفظ النقل في baro_transfers_v2 (موحّد مع المستودع + الاستلام بصفحة الفرع)
+    const existing = await loadTransfers();
+    const now = Date.now();
     const newTransfers = items.map(it => ({
       barcode: it.barcode,
       name: it.name,
@@ -398,11 +399,12 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
       qty: edits[it.barcode] ?? it.suggest,
       factory: plan.fac.code,
       smart: true,
-      ts: Date.now(),
+      printed: true,      // مُرسل (الفرع المستقبِل يشوفه في الاستلام)
+      received: false,    // ينتظر تأكيد الاستلام
+      date: now,
+      ts: now,
     }));
-    if (onSaveSettings) {
-      try { await onSaveSettings({ ...settings, transfers: [...existing, ...newTransfers] }); } catch(e){}
-    }
+    try { await saveTransfers([...existing, ...newTransfers]); } catch(e){}
     printPlan();
   };
 
