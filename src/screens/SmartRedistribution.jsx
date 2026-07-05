@@ -147,18 +147,8 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       }
     };
 
-    // قاعدة أساسية: لو المستودع يغطّي الحاجة كاملة → خذ منه فقط (لا تظهره في الفروع)
-    if (warehouseStock >= needQty) {
-      takeFromWarehouse();
-    } else if (priority === "stale") {
-      // الراكد أولاً: حرّك راكد الفروع، ثم المستودع يكمّل
-      takeFromBranch();
-      takeFromWarehouse();
-    } else {
-      // المستودع أولاً: خذ ما فيه، ثم الفروع تكمّل
-      takeFromWarehouse();
-      if (needQty >= unit/2) takeFromBranch();
-    }
+    // 🎯 بين الفروع فقط — لا نأخذ من المستودع (النقل فرع→فرع حصراً)
+    takeFromBranch();
   });
 
   // ترتيب: نفس المدينة أولاً
@@ -170,7 +160,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
 
 
 export default function SmartRedistribution({ products=[], periods=[], settings={}, images={}, onSaveSettings }) {
-  const [view, setView] = useState("fac");    // fac = النقل بالمصنع · fill = عبّي فرع
+  const [view, setView] = useState("fill");    // fill = عبّي فرع (النقل بين الفروع)
   const [cont, setCont] = useState(null);    // الكونتينر المختار
   const [sel, setSel] = useState(null);      // المصنع المختار
   const [edits, setEdits] = useState({});    // {barcode: qty معدّلة}
@@ -184,6 +174,21 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
   const [openSrc, setOpenSrc] = useState({});          // مصادر مفتوحة
   const [counts, setCounts] = useState(null);          // 🎯 جرد الفروع (baro_branch_counts_v2)
   useEffect(() => { loadBranchCounts().then(setCounts).catch(()=>setCounts(null)); }, []);
+  const [myTransfers, setMyTransfers] = useState([]);  // النقلات المعتمدة (للإلغاء)
+  const [txReload, setTxReload] = useState(0);
+  useEffect(() => { loadTransfers().then(t=>setMyTransfers(t||[])).catch(()=>setMyTransfers([])); }, [txReload]);
+
+  // إلغاء نقلة معتمدة
+  const cancelTransfer = async (tx) => {
+    if (!window.confirm(`إلغاء تحويل ${tx.name||tx.barcode} (${tx.qty}) من ${tx.from} إلى ${tx.to}؟`)) return;
+    try {
+      const all = await loadTransfers();
+      const filtered = all.filter(t => !(t.barcode===tx.barcode && t.from===tx.from && t.to===tx.to && t.ts===tx.ts));
+      await saveTransfers(filtered);
+      setTxReload(x=>x+1);
+      window.alert("✅ أُلغي التحويل");
+    } catch(e){ window.alert("تعذّر الإلغاء"); }
+  };
 
   const analysis = useMemo(()=>analyze(products, periods, settings), [products, periods, settings]);
 
@@ -384,6 +389,37 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
 
   // طباعة خطة النقل
   // اعتمد + احفظ + اطبع
+  // ✅ اعتماد تحويل بضاعة بين الفروع (من عبّي فرع) — يحفظ في baro_transfers_v2
+  const approveFillTransfer = async () => {
+    if (!fillPlan || fillPlan.sources.length === 0) return;
+    const rows = [];
+    fillPlan.sources.forEach(s => {
+      s.items.forEach(it => {
+        rows.push({
+          barcode: it.barcode,
+          name: it.name,
+          from: s.branch,          // الفرع المصدر (يسلّم)
+          to: fillTarget,          // الفرع الهدف (يستلم)
+          qty: num(it.qty),
+          smart: true,
+          printed: true,           // معتمد
+          delivered: false,        // ينتظر تسليم المصدر
+          received: false,         // ينتظر استلام الهدف
+          date: Date.now(),
+          ts: Date.now(),
+        });
+      });
+    });
+    if (rows.length === 0) return;
+    const totalQty = rows.reduce((s,r)=>s+r.qty,0);
+    if (!window.confirm(`اعتماد تحويل ${rows.length} صنف (${totalQty} قطعة) إلى فرع ${fillTarget}؟\nالفروع المصدر تشوفه في "تسليم"، والهدف في "استلام".`)) return;
+    try {
+      const existing = await loadTransfers();
+      await saveTransfers([...existing, ...rows]);
+      window.alert(`✅ تم اعتماد التحويل (${rows.length} صنف). الفروع تنفّذ عبر روابطها.`);
+    } catch(e){ window.alert("تعذّر الحفظ — حاول مرة ثانية"); }
+  };
+
   const approveAndPrint = async () => {
     if (!plan) return;
     const items = plan.items.filter(it=>!removed[it.barcode]);
@@ -459,109 +495,13 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     </div>
   ) : null;
 
-  // ─── شاشة تفاصيل المصنع ───
-  if (view==="fac" && sel && plan) {
-    const items = plan.items.filter(it=>!removed[it.barcode]);
-    return (
-      <div className="space-y-3">
-        {imgModal}
-        <button onClick={()=>{setSel(null);setEdits({});setRemoved({});}} className="text-blue-400 font-bold text-sm">← رجوع للمصانع</button>
-        <div style={{background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"14px",padding:"14px"}}>
-          <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"15px",marginBottom:"8px"}}>🏭 {plan.fac.code}{plan.fac.name?` · ${plan.fac.name}`:""}</div>
-          <div style={{display:"flex",alignItems:"center",gap:"10px",fontSize:"14px",fontWeight:900}}>
-            <span style={{color:"#f87171"}}>📤 {plan.source.branch}</span>
-            <span style={{color:"#64748b"}}>←</span>
-            <span style={{color:"#4ade80"}}>📥 {plan.dest.branch}</span>
-          </div>
-          <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
-            <div style={{flex:1,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"10px",padding:"8px",textAlign:"center"}}>
-              <div style={{fontSize:"20px",fontWeight:900,color:"#f87171"}}>{plan.source.sold}</div>
-              <div style={{fontSize:"10px",color:"#94a3b8"}}>باع الراكد ({plan.source.vsAvg.toFixed(0)}%)</div>
-            </div>
-            <div style={{flex:1,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"10px",padding:"8px",textAlign:"center"}}>
-              <div style={{fontSize:"20px",fontWeight:900,color:"#4ade80"}}>{plan.dest.sold}</div>
-              <div style={{fontSize:"10px",color:"#94a3b8"}}>باع السريع ({plan.dest.vsAvg.toFixed(0)}%)</div>
-            </div>
-          </div>
-        </div>
-
-        {items.length===0 ? (
-          <div style={{textAlign:"center",padding:"30px",color:"#64748b"}}>ما فيه منتجات للنقل</div>
-        ) : (
-          <>
-            <div style={{fontSize:"12px",color:"#94a3b8",fontWeight:700}}>المنتجات المقترحة للنقل ({items.length}) — عدّل أو احذف:</div>
-            {items.map(it => {
-              const qty = edits[it.barcode] ?? it.suggest;
-              return (
-                <div key={it.barcode} style={{background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"12px",padding:"10px",display:"flex",alignItems:"center",gap:"10px"}}>
-                  {images?.[it.barcode]
-                    ? <img src={images[it.barcode]} alt="" onClick={()=>setViewImg({src:images[it.barcode],name:it.name})} style={{width:"48px",height:"48px",borderRadius:"8px",objectFit:"cover",border:"1px solid #2d3a52",flexShrink:0,cursor:"pointer"}} />
-                    : <div style={{width:"48px",height:"48px",borderRadius:"8px",background:"#1a2236",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}}>📦</div>}
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:700,color:"#f0e6d0",fontSize:"13px"}}>{it.name}</div>
-                    <div style={{fontFamily:"monospace",fontSize:"11px",color:"#64748b"}}>{it.barcode}</div>
-                    <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px"}}>فائض: {it.surplus}</div>
-                  </div>
-                  <input type="number" value={qty} min="0" step="12"
-                    onChange={e=>setEdits({...edits,[it.barcode]:Math.max(0,num(e.target.value))})}
-                    style={{width:"60px",background:"#1a2236",border:"1px solid #2d3a52",color:"#4ade80",borderRadius:"8px",padding:"7px",fontSize:"15px",fontWeight:900,textAlign:"center",fontFamily:"Cairo"}} />
-                  <button onClick={()=>setRemoved({...removed,[it.barcode]:true})}
-                    style={{background:"rgba(239,68,68,0.15)",color:"#fca5a5",border:"none",borderRadius:"8px",padding:"7px 10px",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"Cairo"}}>حذف</button>
-                </div>
-              );
-            })}
-            <button onClick={approveAndPrint}
-              style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:"12px",padding:"13px",fontSize:"15px",fontWeight:900,cursor:"pointer",fontFamily:"Cairo",marginTop:"6px"}}>
-              ✅ اعتمد + احفظ + اطبع
-            </button>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // ─── شاشة المصانع داخل كونتينر مختار ───
-  if (view==="fac" && cont && !sel) {
-    const c = byContainer.find(x=>x.name===cont);
-    return (
-      <div className="space-y-3">
-        {imgModal}
-        <button onClick={()=>setCont(null)} className="text-blue-400 font-bold text-sm">← رجوع للكونتينرات</button>
-        <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"15px"}}>📦 {cont}</div>
-        {(c?.factories ?? []).map(f => (
-          <button key={f.code} onClick={()=>setSel(f.code)}
-            style={{width:"100%",background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"14px",padding:"14px",textAlign:"right",cursor:"pointer",fontFamily:"Cairo"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"14px"}}>🏭 {f.code}{f.name?` · ${f.name}`:""}</div>
-                <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px"}}>📤 {f.stale.length} فرع راكد · 📥 {f.hot.length} فرع يطلب</div>
-              </div>
-              <div style={{color:"#3b82f6",fontWeight:900,fontSize:"18px"}}>←</div>
-            </div>
-          </button>
-        ))}
-      </div>
-    );
-  }
 
   // ─── شاشة الكونتينرات (الفرص) ───
   return (
     <div className="space-y-3">
       {imgModal}
 
-      {/* تبويبان */}
-      <div style={{display:"flex",gap:"6px",background:"rgba(255,255,255,0.04)",borderRadius:"14px",padding:"4px"}}>
-        {[["fac","🔄 النقل بالمصنع"],["fill","🎯 عبّي فرع"]].map(([k,l])=>(
-          <button key={k} onClick={()=>setView(k)} style={{
-            flex:1,padding:"9px",borderRadius:"11px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"13px",fontWeight:"700",
-            background:view===k?"rgba(59,130,246,0.2)":"transparent",
-            color:view===k?"#93c5fd":"rgba(255,255,255,0.4)",
-            border:view===k?"1px solid rgba(59,130,246,0.4)":"1px solid transparent",
-          }}>{l}</button>
-        ))}
-      </div>
-
-      {/* 🎯 عبّي فرع */}
+      {/* 🎯 عبّي فرع (النقل بين الفروع) */}
       {view==="fill" && (
         <div className="space-y-3">
           {!fillTarget ? (
@@ -621,6 +561,27 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
               {fillPlan && (fillPlan.sources.length>0 || fillPlan.fromWarehouse.length>0) ? (
                 <>
                   <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                    <button onClick={approveFillTransfer} disabled={fillPlan.sources.length===0} style={{width:"100%",padding:"14px",borderRadius:"12px",border:"none",background:fillPlan.sources.length?"linear-gradient(135deg,#16a34a,#15803d)":"#334155",color:"#fff",fontSize:"15px",fontWeight:"900",cursor:fillPlan.sources.length?"pointer":"default",fontFamily:"Cairo",opacity:fillPlan.sources.length?1:0.5}}>
+                      ✅ اعتماد تحويل بين الفروع ({fillPlan.sources.reduce((s,x)=>s+x.items.length,0)} صنف)
+                    </button>
+                    {(() => {
+                      const pend = myTransfers.filter(t=>t.smart && t.to===fillTarget && !t.delivered && !t.received);
+                      if (pend.length===0) return null;
+                      return (
+                        <div style={{background:"rgba(234,88,12,0.08)",border:"1px solid rgba(234,88,12,0.25)",borderRadius:"12px",padding:"10px",marginTop:"2px"}}>
+                          <div style={{fontSize:"12px",fontWeight:"900",color:"#fb923c",marginBottom:"7px"}}>📋 تحويلات معتمدة لـ {fillTarget} — يمكن إلغاؤها</div>
+                          {pend.map((t,i)=>(
+                            <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",background:"rgba(0,0,0,0.2)",borderRadius:"8px",padding:"7px 9px",marginBottom:"5px"}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:"12px",fontWeight:"700",color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name||t.barcode}</div>
+                                <div style={{fontSize:"10px",color:"#94a3b8"}}>{t.from} ← {t.qty} قطعة</div>
+                              </div>
+                              <button onClick={()=>cancelTransfer(t)} style={{background:"rgba(239,68,68,0.2)",color:"#fca5a5",border:"none",borderRadius:"7px",padding:"6px 11px",fontSize:"11px",fontWeight:"900",fontFamily:"Cairo",cursor:"pointer",flexShrink:0}}>✕ إلغاء</button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     <div style={{display:"flex",gap:"8px"}}>
                       <button onClick={()=>printFill("warehouse")} disabled={fillPlan.fromWarehouse.length===0} style={{flex:1,padding:"12px",borderRadius:"12px",border:"none",background:fillPlan.fromWarehouse.length?"#1e3a5f":"#334155",color:"#fff",fontSize:"13px",fontWeight:"900",cursor:fillPlan.fromWarehouse.length?"pointer":"default",fontFamily:"Cairo",opacity:fillPlan.fromWarehouse.length?1:0.5}}>
                         🏬 اطبع المستودع ({fillPlan.fromWarehouse.length})
@@ -805,30 +766,6 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
         </div>
       )}
 
-      {view==="fac" && (<>
-      <div style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:"12px",padding:"12px",fontSize:"12px",color:"#93c5fd"}}>
-        💡 النظام حلّل مبيعاتك عبر كل الفترات، واكتشف بضاعة <b>راكدة بفرع</b> + <b>طلب بفرع ثاني</b>. اختر كونتينر ثم مصنع لترى خطة النقل.
-      </div>
-      {byContainer.length===0 ? (
-        <div style={{textAlign:"center",padding:"40px",color:"#64748b"}}>
-          <div style={{fontSize:"32px",marginBottom:"8px"}}>✓</div>
-          ما فيه فرص نقل واضحة حالياً<br/><span style={{fontSize:"11px"}}>التوزيع متوازن بين الفروع</span>
-        </div>
-      ) : (
-        byContainer.map(c => (
-          <button key={c.name} onClick={()=>setCont(c.name)}
-            style={{width:"100%",background:"#0f1626",border:"1px solid #2d3a52",borderRadius:"14px",padding:"14px",textAlign:"right",cursor:"pointer",fontFamily:"Cairo"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontWeight:900,color:"#f0e6d0",fontSize:"14px"}}>📦 {c.name}</div>
-                <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px"}}>{c.factories.length} مصنع فيه فرصة نقل</div>
-              </div>
-              <div style={{color:"#3b82f6",fontWeight:900,fontSize:"18px"}}>←</div>
-            </div>
-          </button>
-        ))
-      )}
-      </>)}
     </div>
   );
 }
