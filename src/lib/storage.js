@@ -16,6 +16,7 @@ const KEYS = {
   SETTINGS: "baro_settings_v2",
   IMAGES:   "baro_images_v2",
   COUNTS:   "baro_branch_counts_v2",
+  TRANSFERS:"baro_transfers_v2",
 };
 
 // ─── Supabase REST ───────────────────────────────────────────
@@ -202,6 +203,16 @@ export async function loadBranchCounts() {
 
 export async function saveBranchCounts(counts) {
   return await save(KEYS.COUNTS, counts);
+}
+
+// ─── Transfers (النقل بين المستودع والفروع) ──────────────────
+
+export async function loadTransfers() {
+  return (await load(KEYS.TRANSFERS)) ?? [];
+}
+
+export async function saveTransfers(transfers) {
+  return await save(KEYS.TRANSFERS, transfers);
 }
 
 // ─── تحميل الكل ──────────────────────────────────────────────
