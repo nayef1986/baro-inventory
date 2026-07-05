@@ -57,7 +57,10 @@ async function load(key){
 }
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 
-function branchLink(branch){ return BASE + "?branch=" + encodeURIComponent(branch); }
+// الرابط القصير: ?b=رقم الفرع (ترتيبه) بدل الاسم الطويل
+function branchIndex(branch){ return allBranches().indexOf(branch) + 1; }
+function branchLink(branch){ return BASE + "?b=" + branchIndex(branch); }
+function branchLinkFull(branch){ return BASE + "?branch=" + encodeURIComponent(branch); }
 
 function copyLink(branch){
   const link = branchLink(branch);
