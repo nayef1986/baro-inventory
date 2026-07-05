@@ -420,28 +420,31 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     } catch(e){ window.alert("تعذّر الحفظ — حاول مرة ثانية"); }
   };
 
-  const approveAndPrint = async () => {
-    if (!plan) return;
-    const items = plan.items.filter(it=>!removed[it.barcode]);
-    if (items.length === 0) return;
-    // نحفظ النقل في baro_transfers_v2 (موحّد مع المستودع + الاستلام بصفحة الفرع)
-    const existing = await loadTransfers();
-    const now = Date.now();
-    const newTransfers = items.map(it => ({
+  // ✅ اعتماد تحويل فرع مصدر واحد فقط (زر تحت كل فرع)
+  const approveSingleSource = async (branch, items) => {
+    if (!items || items.length === 0) return;
+    const rows = items.map(it => ({
       barcode: it.barcode,
       name: it.name,
-      from: plan.source.branch,
-      to: plan.dest.branch,
-      qty: edits[it.barcode] ?? it.suggest,
-      factory: plan.fac.code,
+      from: branch,            // هذا الفرع المصدر
+      to: fillTarget,          // الفرع الهدف
+      qty: num(it.qty),
       smart: true,
-      printed: true,      // مُرسل (الفرع المستقبِل يشوفه في الاستلام)
-      received: false,    // ينتظر تأكيد الاستلام
-      date: now,
-      ts: now,
+      printed: true,
+      delivered: false,
+      received: false,
+      date: Date.now(),
+      ts: Date.now(),
     }));
-    try { await saveTransfers([...existing, ...newTransfers]); } catch(e){}
-    printPlan();
+    const totalQty = rows.reduce((s,r)=>s+r.qty,0);
+    if (!window.confirm(`اعتماد تحويل ${rows.length} صنف (${totalQty} قطعة) من ${branch} إلى ${fillTarget}؟\nفرع ${branch} يشوفه في "تسليم"، وفرع ${fillTarget} في "استلام".`)) return;
+    try {
+      const existing = await loadTransfers();
+      const saved = [...existing, ...rows];
+      await saveTransfers(saved);
+      setMyTransfers(saved.filter(t=>t.smart && !t.delivered && !t.received));
+      window.alert(`✅ اعتُمد تحويل ${branch} (${rows.length} صنف). الفرع ينفّذ عبر رابطه.`);
+    } catch(e){ window.alert("تعذّر الحفظ — حاول مرة ثانية"); }
   };
 
   const printPlan = () => {
@@ -561,9 +564,9 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
               {fillPlan && (fillPlan.sources.length>0 || fillPlan.fromWarehouse.length>0) ? (
                 <>
                   <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-                    <button onClick={approveFillTransfer} disabled={fillPlan.sources.length===0} style={{width:"100%",padding:"14px",borderRadius:"12px",border:"none",background:fillPlan.sources.length?"linear-gradient(135deg,#16a34a,#15803d)":"#334155",color:"#fff",fontSize:"15px",fontWeight:"900",cursor:fillPlan.sources.length?"pointer":"default",fontFamily:"Cairo",opacity:fillPlan.sources.length?1:0.5}}>
-                      ✅ اعتماد تحويل بين الفروع ({fillPlan.sources.reduce((s,x)=>s+x.items.length,0)} صنف)
-                    </button>
+                    <div style={{background:"rgba(22,163,74,0.08)",border:"1px solid rgba(22,163,74,0.2)",borderRadius:"12px",padding:"11px",fontSize:"12px",color:"#4ade80",textAlign:"center",fontWeight:"700"}}>
+                      👆 اعتمد التحويل من كل فرع مصدر على حدة (الزر تحت كل فرع)
+                    </div>
                     {(() => {
                       const pend = myTransfers.filter(t=>t.smart && t.to===fillTarget && !t.delivered && !t.received);
                       if (pend.length===0) return null;
@@ -614,7 +617,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                           <div style={{padding:"0 10px 10px",display:"flex",flexDirection:"column",gap:"6px"}}>
                             <div style={{display:"flex",gap:"6px",marginBottom:"2px"}}>
                               <button onClick={()=>printSource(s.branch, s.items)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#93c5fd",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>🖨️ طباعة</button>
-                              <button onClick={()=>saveSourceImage(s.branch, s.items)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#6ee7b7",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>📷 حفظ صورة</button>
+                              <button onClick={()=>approveSingleSource(s.branch, s.items)} style={{flex:2,padding:"8px",borderRadius:"9px",border:"none",background:"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontSize:"12px",fontWeight:"900",cursor:"pointer",fontFamily:"Cairo"}}>✅ اعتماد تحويل {s.branch}</button>
                             </div>
                             {s.items.map(m => (
                               <div key={m.barcode} style={{display:"flex",alignItems:"flex-start",gap:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",padding:"10px"}}>
@@ -709,7 +712,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                         <div style={{padding:"0 10px 10px",display:"flex",flexDirection:"column",gap:"6px"}}>
                           <div style={{display:"flex",gap:"6px",marginBottom:"2px"}}>
                             <button onClick={()=>printSource("المستودع الرئيسي", fillPlan.fromWarehouse)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#93c5fd",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>🖨️ طباعة</button>
-                            <button onClick={()=>saveSourceImage("المستودع الرئيسي", fillPlan.fromWarehouse)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#6ee7b7",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>📷 حفظ صورة</button>
+                            <button onClick={()=>printSource("المستودع الرئيسي", fillPlan.fromWarehouse)} style={{flex:1,padding:"8px",borderRadius:"9px",border:"1px solid #334155",background:"#1e293b",color:"#93c5fd",fontSize:"11px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo"}}>🖨️ طباعة المستودع</button>
                           </div>
                           {fillPlan.fromWarehouse.map(m => (
                             <div key={m.barcode} style={{display:"flex",alignItems:"flex-start",gap:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",padding:"10px"}}>
