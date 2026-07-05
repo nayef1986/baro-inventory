@@ -25,6 +25,7 @@
   .btns button{flex:1;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer}
   .copy{background:#2563eb;color:#fff}
   .wa{background:#16a34a;color:#fff}
+  .open{background:#7c3aed;color:#fff}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:12px 24px;border-radius:100px;font-weight:900;z-index:99;opacity:0;transition:opacity 0.3s}
   .toast.show{opacity:1}
   .empty{text-align:center;padding:40px;color:#5b6b85}
@@ -74,6 +75,9 @@ function shareWA(branch){
   const msg = `رابط جرد فرع ${branch}:\n${link}\n\nافتح الرابط، اكتب اسمك، وحدّث الكميات الفعلية.`;
   window.open("https://wa.me/?text="+encodeURIComponent(msg), "_blank");
 }
+function openLink(branch){
+  window.open(branchLink(branch), "_blank");
+}
 
 async function init(){
   try {
@@ -120,8 +124,9 @@ function render(){
               </div>
               <div class="link">${link}</div>
               <div class="btns">
-                <button class="copy" onclick="copyLink('${safeB}')">📋 نسخ الرابط</button>
-                <button class="wa" onclick="shareWA('${safeB}')">💬 واتساب</button>
+                <button class="copy" onclick="copyLink('${safeB}')">📋 نسخ</button>
+                <a class="wa" href="https://wa.me/?text=${encodeURIComponent('رابط جرد فرع '+b+':\n'+link+'\n\nافتح الرابط، اكتب اسمك، وحدّث الكميات الفعلية.')}" target="_blank" rel="noopener" style="flex:1;background:#16a34a;color:#fff;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center">💬 واتساب</a>
+                <a class="open" href="${link}" target="_blank" rel="noopener" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center">🔗 فتح</a>
               </div>
             </div>`;
           }).join("")
