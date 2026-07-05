@@ -432,11 +432,18 @@ function renderDeliver(app){
                   ${img?`<img src="${img}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'noimg',textContent:'📦'}))" onclick="openImgBc('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')"/>`:`<div class="noimg">📦</div>`}
                   <div class="info"><div class="nm">${pr.name||"—"}</div><div class="bc">${pr.barcode}</div></div>
                   <div style="text-align:center;background:rgba(234,88,12,0.12);border-radius:9px;padding:7px 11px">
-                    <div style="font-size:20px;font-weight:900;color:#fb923c">${fmtN(totalQty)}</div>
-                    <div style="font-size:9px;color:#5b6b85">أرسل</div>
+                    <div style="font-size:18px;font-weight:900;color:#fb923c">${fmtN(totalQty)}</div>
+                    <div style="font-size:9px;color:#5b6b85">مقترح</div>
                   </div>
                 </div>
-                <button class="savebtn" style="background:#ea580c" onclick="confirmDeliver('${pr.barcode.replace(/'/g,'')}','${dest.replace(/'/g,'')}',${totalQty})">✓ سلّمت (${fmtN(totalQty)} قطعة)</button>
+                <div class="row2" style="margin-top:11px">
+                  <div class="counter">
+                    <button class="minus" onclick="stepDeliver('${pr.barcode.replace(/'/g,'')}','${dest.replace(/'/g,'')}',-1)">−</button>
+                    <div class="mid"><input type="number" min="0" id="dlv_${pr.barcode}_${dest}" value="${totalQty}" /><div class="cl">كم ترسل فعلياً</div></div>
+                    <button class="plus" onclick="stepDeliver('${pr.barcode.replace(/'/g,'')}','${dest.replace(/'/g,'')}',1)">+</button>
+                  </div>
+                </div>
+                <button class="savebtn" style="background:#ea580c" onclick="confirmDeliver('${pr.barcode.replace(/'/g,'')}','${dest.replace(/'/g,'')}',${totalQty})">✓ سلّمت</button>
               </div>`;
             }).join("")}
           </div>`;
@@ -444,18 +451,42 @@ function renderDeliver(app){
     ${delivered.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ سلّمت سابقاً: ${delivered.length} شحنة</div>`:''}`;
 }
 
-async function confirmDeliver(bc, dest, total){
+// زر +/− لكمية التسليم
+function stepDeliver(bc, dest, delta){
+  const inp = document.getElementById("dlv_"+bc+"_"+dest);
+  if (!inp) return;
+  const cur = inp.value === "" ? 0 : num(inp.value);
+  inp.value = Math.max(0, cur + delta);
+}
+
+async function confirmDeliver(bc, dest, suggested){
   const items = TRANSFERS.filter(t=>t.barcode===bc && t.from===BRANCH && t.to===dest && t.printed && !t.delivered);
   if (items.length===0) return;
-  if (!confirm(`تأكيد تسليم ${fmtN(total)} قطعة من ${items[0].name||bc} لفرع ${dest}؟`)) return;
+  const inp = document.getElementById("dlv_"+bc+"_"+dest);
+  const deliverQty = inp ? Math.max(0, num(inp.value)) : suggested;
+  const name = items[0].name || bc;
+  const changed = deliverQty !== suggested;
+  const msg = changed
+    ? `ترسل ${fmtN(deliverQty)} بدل ${fmtN(suggested)} لفرع ${dest}؟`
+    : `تأكيد تسليم ${fmtN(deliverQty)} قطعة من ${name} لفرع ${dest}؟`;
+  if (!confirm(msg)) return;
   const now = Date.now();
+  // نعلّم كل السجلات مسلّمة، ونحدّث الكمية الفعلية (على أول سجل، والباقي صفر)
+  let first = true;
   TRANSFERS.forEach(t=>{
     if (t.barcode===bc && t.from===BRANCH && t.to===dest && t.printed && !t.delivered){
       t.delivered = true; t.deliveredDate = now; t.deliveredBy = EMP;
+      if (first){
+        t.qty = deliverQty;          // ✅ الكمية المعدّلة = الفعلية (المستقبِل يشوفها)
+        t.deliveredQty = deliverQty;
+        first = false;
+      } else {
+        t.qty = 0;                   // باقي السجلات صفر (دُمجت في الأول)
+      }
     }
   });
   await save("baro_transfers_v2", TRANSFERS);
-  showToast(`✓ سلّمت ${fmtN(total)} لفرع ${dest}`);
+  showToast(changed ? `✓ سلّمت ${fmtN(deliverQty)} (معدّلة) لفرع ${dest}` : `✓ سلّمت ${fmtN(deliverQty)} لفرع ${dest}`);
   render();
 }
 
