@@ -2,7 +2,7 @@
 // يكتشف الراكد والسريع لكل مصنع عبر الفترات، يقترح نقل، وأنت تعدّل.
 import { useState, useMemo, useEffect } from "react";
 import { getFactoryCode, num, allBranches, totalPurchases, getBranchRemaining } from "../lib/calc.js";
-import { loadBranchCounts, loadTransfers, saveTransfers } from "../lib/storage.js";
+import { loadBranchCounts, loadTransfers, saveTransfers, loadImages } from "../lib/storage.js";
 
 const toDozen = (n, u) => Math.ceil(n / (u||12)) * (u||12);
 
@@ -174,6 +174,12 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
   const [openSrc, setOpenSrc] = useState({});          // مصادر مفتوحة
   const [counts, setCounts] = useState(null);          // 🎯 جرد الفروع (baro_branch_counts_v2)
   useEffect(() => { loadBranchCounts().then(setCounts).catch(()=>setCounts(null)); }, []);
+
+  // الصور: نقرأها بأنفسنا من Supabase (props قد تكون ناقصة) — مع fallback للـprops
+  const [imgMap, setImgMap] = useState(images);
+  useEffect(() => {
+    loadImages().then(m => { if (m && Object.keys(m).length) setImgMap(m); }).catch(()=>{});
+  }, []);
   const [myTransfers, setMyTransfers] = useState([]);  // النقلات المعتمدة (للإلغاء)
   const [txReload, setTxReload] = useState(0);
   useEffect(() => { loadTransfers().then(t=>setMyTransfers(t||[])).catch(()=>setMyTransfers([])); }, [txReload]);
@@ -187,6 +193,20 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
       await saveTransfers(filtered);
       setTxReload(x=>x+1);
       window.alert("✅ أُلغي التحويل");
+    } catch(e){ window.alert("تعذّر الإلغاء"); }
+  };
+
+  // إلغاء كل التحويلات المعتمدة لهذا الفرع (جماعي)
+  const cancelAllTransfers = async () => {
+    const pend = myTransfers.filter(t=>t.smart && t.to===fillTarget && !t.delivered && !t.received);
+    if (pend.length===0) return;
+    if (!window.confirm(`إلغاء كل التحويلات المعتمدة لفرع ${fillTarget} (${pend.length} تحويل)؟`)) return;
+    try {
+      const all = await loadTransfers();
+      const filtered = all.filter(t => !(t.smart && t.to===fillTarget && !t.delivered && !t.received));
+      await saveTransfers(filtered);
+      setTxReload(x=>x+1);
+      window.alert(`✅ أُلغيت كل التحويلات (${pend.length})`);
     } catch(e){ window.alert("تعذّر الإلغاء"); }
   };
 
@@ -572,7 +592,10 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                       if (pend.length===0) return null;
                       return (
                         <div style={{background:"rgba(234,88,12,0.08)",border:"1px solid rgba(234,88,12,0.25)",borderRadius:"12px",padding:"10px",marginTop:"2px"}}>
-                          <div style={{fontSize:"12px",fontWeight:"900",color:"#fb923c",marginBottom:"7px"}}>📋 تحويلات معتمدة لـ {fillTarget} — يمكن إلغاؤها</div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"7px"}}>
+                            <div style={{fontSize:"12px",fontWeight:"900",color:"#fb923c"}}>📋 تحويلات معتمدة لـ {fillTarget}</div>
+                            <button onClick={cancelAllTransfers} style={{background:"rgba(239,68,68,0.25)",color:"#fca5a5",border:"none",borderRadius:"7px",padding:"5px 12px",fontSize:"11px",fontWeight:"900",fontFamily:"Cairo",cursor:"pointer"}}>✕ إلغاء الكل</button>
+                          </div>
                           {pend.map((t,i)=>(
                             <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",background:"rgba(0,0,0,0.2)",borderRadius:"8px",padding:"7px 9px",marginBottom:"5px"}}>
                               <div style={{flex:1,minWidth:0}}>
@@ -621,8 +644,8 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                             </div>
                             {s.items.map(m => (
                               <div key={m.barcode} style={{display:"flex",alignItems:"flex-start",gap:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",padding:"10px"}}>
-                                {images?.[m.barcode]
-                                  ? <img src={images[m.barcode]} alt="" onClick={()=>setViewImg({src:images[m.barcode],name:m.name})} style={{width:"72px",height:"72px",borderRadius:"10px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
+                                {imgMap?.[m.barcode]
+                                  ? <img src={imgMap[m.barcode]} alt="" onClick={()=>setViewImg({src:imgMap[m.barcode],name:m.name})} style={{width:"72px",height:"72px",borderRadius:"10px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
                                   : <div style={{width:"72px",height:"72px",borderRadius:"10px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"30px",flexShrink:0}}>📦</div>}
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📦 {m.name}</div>
@@ -716,8 +739,8 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                           </div>
                           {fillPlan.fromWarehouse.map(m => (
                             <div key={m.barcode} style={{display:"flex",alignItems:"flex-start",gap:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",padding:"10px"}}>
-                              {images?.[m.barcode]
-                                ? <img src={images[m.barcode]} alt="" onClick={()=>setViewImg({src:images[m.barcode],name:m.name})} style={{width:"72px",height:"72px",borderRadius:"10px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
+                              {imgMap?.[m.barcode]
+                                ? <img src={imgMap[m.barcode]} alt="" onClick={()=>setViewImg({src:imgMap[m.barcode],name:m.name})} style={{width:"72px",height:"72px",borderRadius:"10px",objectFit:"cover",cursor:"pointer",flexShrink:0}} />
                                 : <div style={{width:"72px",height:"72px",borderRadius:"10px",background:"#1e293b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"30px",flexShrink:0}}>📦</div>}
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:"13px",fontWeight:"700",color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📦 {m.name}</div>
