@@ -955,7 +955,8 @@ function showBranchLinks(){
           <div style="background:#0f1626;border:1px solid #2d3a52;border-radius:8px;padding:8px 10px;font-family:monospace;font-size:10px;color:#94a3b8;word-break:break-all;margin-bottom:8px;line-height:1.5">${branchLink(b)}</div>
           <div style="display:flex;gap:7px">
             <button onclick="copyBranchLink('${safeB}')" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">📋 نسخ</button>
-            <button onclick="waBranchLink('${safeB}')" style="flex:1;background:#16a34a;color:#fff;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">💬 واتساب</button>
+            <a href="${branchLink(b)}" target="_blank" rel="noopener" style="flex:1;background:#7c3aed;color:#fff;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';text-decoration:none;display:flex;align-items:center;justify-content:center">🔗 فتح</a>
+            <a href="https://wa.me/?text=${encodeURIComponent('رابط جرد فرع '+b+':\n'+branchLink(b)+'\n\nافتح الرابط، اكتب اسمك، وحدّث الكميات الفعلية.')}" target="_blank" rel="noopener" style="flex:1;background:#16a34a;color:#fff;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';text-decoration:none;display:flex;align-items:center;justify-content:center">💬 واتساب</a>
           </div>
         </div>`;
       }).join("")}
