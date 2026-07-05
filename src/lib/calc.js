@@ -152,8 +152,21 @@ export function calcProduct(product, periods) {
  * - تعديل رقم قديم: ثابت
  * - تعديل كائن فيه qty و atPeriodCount: الكمية ناقص مبيعات الفترات الجديدة
  */
-export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12) {
+export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12, counts = null) {
   const sold = soldAllPeriods(barcode, periods, branch);
+
+  // 🎯 أولوية الجرد الفعلي (baro_branch_counts_v2) — لو مُمرّر وفيه جرد صالح لهذا الفرع
+  if (counts) {
+    const cnt = counts[barcode + "_" + branch];
+    if (cnt) {
+      const soldAfter = Math.max(0, sold - num(cnt.soldAtCount));
+      // لو باع بعد الجرد أكثر من المجرود → الجرد قديم، نكمّل للحساب العادي
+      if (soldAfter <= num(cnt.count)) {
+        return Math.max(0, num(cnt.count) - soldAfter);
+      }
+    }
+  }
+
   const key = branch + "|" + barcode;
   const ov = overrides[key];
   if (ov === undefined || ov === null) {
