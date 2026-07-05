@@ -71,7 +71,8 @@ const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
 const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
 
 const params = new URLSearchParams(location.search);
-const BRANCH = (params.get("branch") || "").trim();
+let BRANCH = (params.get("branch") || "").trim();
+const BRANCH_IDX = params.get("b"); // رقم الفرع القصير (يُحل بعد تحميل الفترات)
 
 let PRODUCTS = [], PERIODS = [], IMAGES = {}, COUNTS = {}, TRANSFERS = [];
 let activeTab = "count"; // count | receive
@@ -111,12 +112,19 @@ function calcRemaining(bc){
   return Math.max(0, given - sold);
 }
 
+// كل الفروع مرتّبة (لحل رقم الفرع القصير) — نفس ترتيب صفحة الروابط
+function allBranchesList(){
+  const set = new Set();
+  PERIODS.forEach(per => Object.keys(per.sales??{}).forEach(b=>{ if(b && b.trim()) set.add(b); }));
+  return [...set].sort();
+}
+
 async function init(){
-  if (!BRANCH){
+  // لو الرابط ما فيه لا اسم ولا رقم فرع
+  if (!BRANCH && !BRANCH_IDX){
     document.getElementById("app").innerHTML = `<div class="empty">⚠️ الرابط ناقص اسم الفرع<br><span style="font-size:12px">تواصل مع الإدارة</span></div>`;
     return;
   }
-  EMP = localStorage.getItem("baro_emp_"+BRANCH) || "";
   try {
     const [prods, pers, counts, trans] = await Promise.all([
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_branch_counts_v2"), load("baro_transfers_v2")
@@ -129,6 +137,17 @@ async function init(){
     document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
     return;
   }
+  // نحل رقم الفرع القصير (?b=3) لاسم الفرع من ترتيب الفروع
+  if (!BRANCH && BRANCH_IDX != null){
+    const all = allBranchesList();
+    const idx = parseInt(BRANCH_IDX, 10);
+    if (!isNaN(idx) && idx >= 1 && idx <= all.length) BRANCH = all[idx-1];
+  }
+  if (!BRANCH){
+    document.getElementById("app").innerHTML = `<div class="empty">⚠️ رقم الفرع غير صحيح<br><span style="font-size:12px">تواصل مع الإدارة</span></div>`;
+    return;
+  }
+  EMP = localStorage.getItem("baro_emp_"+BRANCH) || "";
   if (!EMP) renderGate(); else render();
 }
 
@@ -174,13 +193,15 @@ function render(){
   const app = document.getElementById("app");
   // عدد شحنات الاستلام المعلّقة (مرسلة للفرع، مطبوعة، ما استُلمت)
   const pendingReceive = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received).length;
+  const pendingDeliver = TRANSFERS.filter(t=>t.from===BRANCH && t.printed && !t.delivered && t.to!=="المستودع").length;
   app.innerHTML = `
     <h1>🏪 ${BRANCH}</h1>
     <div class="sub">ALBAROO · ${EMP}</div>
     <div class="empId">👤 الموظف: <b>${EMP}</b> · 🖼️ ${Object.keys(IMAGES||{}).length} صورة<button onclick="changeEmp()">تغيير</button></div>
-    <div class="tabs" style="display:flex;gap:7px;margin-bottom:14px">
-      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')" style="flex:1;padding:11px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:13px;cursor:pointer">📋 جرد</button>
-      <button class="${activeTab==='receive'?'on':''}" onclick="setTab('receive')" style="flex:1;padding:11px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:13px;cursor:pointer">📥 استلام${pendingReceive>0?` (${pendingReceive})`:''}</button>
+    <div class="tabs" style="display:flex;gap:6px;margin-bottom:14px">
+      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📋 جرد</button>
+      <button class="${activeTab==='receive'?'on':''}" onclick="setTab('receive')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام${pendingReceive>0?` (${pendingReceive})`:''}</button>
+      <button class="${activeTab==='deliver'?'on':''}" onclick="setTab('deliver')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='deliver'?'#ea580c':'#2d3a52'};background:${activeTab==='deliver'?'#ea580c':'#141b2d'};color:${activeTab==='deliver'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📤 تسليم${pendingDeliver>0?` (${pendingDeliver})`:''}</button>
     </div>
     <div id="tabBody"></div>`;
   renderTabBody();
@@ -191,6 +212,7 @@ function setTab(t){ activeTab = t; render(); }
 function renderTabBody(){
   const body = document.getElementById("tabBody");
   if (activeTab === "receive"){ renderReceive(body); return; }
+  if (activeTab === "deliver"){ renderDeliver(body); return; }
   renderCountTab(body);
 }
 
@@ -204,6 +226,7 @@ function renderCountTab(app){
   app.innerHTML = `
     <div class="hint">اضغط <b>+</b> أو <b>−</b> أو اكتب الرقم مباشرة. عدّ اللي عندك في الرف فعلياً، ثم احفظ. الإدارة تشوف الفرق تلقائياً.</div>
     <input class="search" id="search" placeholder="🔍 ابحث بالباركود أو الاسم…" value="${searchTerm}" oninput="onSearch(this.value)" />
+    <button onclick="fillAll()" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer;margin-bottom:10px">⚡ عبّي الكل بالمحسوب (${totalProds} منتج)</button>
     <div style="font-size:12px;color:#5b6b85;margin-bottom:10px">📦 ${totalProds} منتج · ✅ جردت ${done}</div>
     <div id="list">${
       contNames.length === 0
@@ -292,6 +315,22 @@ async function saveCount(bc, name, remaining){
   if (btn){ btn.textContent = "✓ محفوظ — تعديل"; btn.classList.add("saved"); btn.disabled = false; }
 }
 
+// ⚡ عبّي كل الحقول المعروضة بالمتبقي المحسوب (الموظف يعدّل المختلف ثم يحفظ)
+function fillAll(){
+  const groups = branchProductsGrouped();
+  let filled = 0;
+  Object.values(groups).forEach(arr => arr.forEach(p=>{
+    const bc = p.barcode;
+    const inp = document.getElementById("in_"+bc+"_"+BRANCH);
+    if (inp && inp.value === ""){ // نعبّي الفاضي فقط (ما نلغي اللي كتبه)
+      inp.value = calcRemaining(bc);
+      onType(bc+"_"+BRANCH, calcRemaining(bc));
+      filled++;
+    }
+  }));
+  showToast(filled>0 ? `⚡ عُبّئ ${filled} منتج بالمحسوب — عدّل واحفظ` : "الكل معبّى مسبقاً");
+}
+
 // ─── تبويب الاستلام ──────────────────────────────────────────
 function renderReceive(app){
   const pending = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received);
@@ -364,6 +403,59 @@ async function confirmReceive(bc, sentTotal){
   });
   await save("baro_transfers_v2", TRANSFERS);
   showToast(partial ? `✓ استلمت ${fmtN(receivedQty)} (جزئي)` : `✓ استلمت ${fmtN(receivedQty)} قطعة`);
+  render();
+}
+
+// ─── تبويب التسليم (الإدارة تقرر، الفرع ينفّذ) ────────────────
+function renderDeliver(app){
+  // الشحنات اللي الإدارة قررت هذا الفرع يرسلها لفرع ثاني، لسه ما سلّم
+  const pending = TRANSFERS.filter(t=>t.from===BRANCH && t.printed && !t.delivered && t.to!=="المستودع");
+  const delivered = TRANSFERS.filter(t=>t.from===BRANCH && t.delivered && t.to!=="المستودع");
+  // تجميع بالفرع المستقبِل ثم المنتج
+  const byDest = {};
+  pending.forEach(t=>{ if(!byDest[t.to]) byDest[t.to]={}; if(!byDest[t.to][t.barcode]) byDest[t.to][t.barcode]={name:t.name,barcode:t.barcode,items:[]}; byDest[t.to][t.barcode].items.push(t); });
+  const dests = Object.keys(byDest).sort();
+
+  app.innerHTML = `
+    <div class="hint">📤 هذي بضاعة قررت الإدارة ترسلها لفروع ثانية. جهّزها وسلّمها، ثم اضغط "سلّمت". الفرع الثاني يأكّد الاستلام.</div>
+    ${dests.length===0
+      ? `<div class="empty">${delivered.length>0?"✅ سلّمت كل الطلبات":"لا طلبات تسليم"}</div>`
+      : dests.map(dest=>{
+          const prods = Object.values(byDest[dest]);
+          return `<div style="margin-bottom:16px">
+            <div style="background:#1a1207;border:1px solid rgba(234,88,12,0.3);border-radius:11px;padding:10px 13px;margin-bottom:8px;font-weight:900;color:#fb923c;font-size:14px">📤 إلى فرع: ${dest} (${prods.length} صنف)</div>
+            ${prods.map(pr=>{
+              const img = IMAGES?.[pr.barcode];
+              const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
+              return `<div class="card" style="border-color:rgba(234,88,12,0.25)">
+                <div class="cardh">
+                  ${img?`<img src="${img}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'noimg',textContent:'📦'}))" onclick="openImgBc('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')"/>`:`<div class="noimg">📦</div>`}
+                  <div class="info"><div class="nm">${pr.name||"—"}</div><div class="bc">${pr.barcode}</div></div>
+                  <div style="text-align:center;background:rgba(234,88,12,0.12);border-radius:9px;padding:7px 11px">
+                    <div style="font-size:20px;font-weight:900;color:#fb923c">${fmtN(totalQty)}</div>
+                    <div style="font-size:9px;color:#5b6b85">أرسل</div>
+                  </div>
+                </div>
+                <button class="savebtn" style="background:#ea580c" onclick="confirmDeliver('${pr.barcode.replace(/'/g,'')}','${dest.replace(/'/g,'')}',${totalQty})">✓ سلّمت (${fmtN(totalQty)} قطعة)</button>
+              </div>`;
+            }).join("")}
+          </div>`;
+        }).join("")}
+    ${delivered.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ سلّمت سابقاً: ${delivered.length} شحنة</div>`:''}`;
+}
+
+async function confirmDeliver(bc, dest, total){
+  const items = TRANSFERS.filter(t=>t.barcode===bc && t.from===BRANCH && t.to===dest && t.printed && !t.delivered);
+  if (items.length===0) return;
+  if (!confirm(`تأكيد تسليم ${fmtN(total)} قطعة من ${items[0].name||bc} لفرع ${dest}؟`)) return;
+  const now = Date.now();
+  TRANSFERS.forEach(t=>{
+    if (t.barcode===bc && t.from===BRANCH && t.to===dest && t.printed && !t.delivered){
+      t.delivered = true; t.deliveredDate = now; t.deliveredBy = EMP;
+    }
+  });
+  await save("baro_transfers_v2", TRANSFERS);
+  showToast(`✓ سلّمت ${fmtN(total)} لفرع ${dest}`);
   render();
 }
 
