@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تشخيص النقلات</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+  *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0e1a;color:#e8eef7;padding:14px;max-width:640px;margin:0 auto;padding-bottom:40px}
+  h1{font-size:19px;color:#fff;margin-bottom:4px}
+  .sub{font-size:12px;color:#5b9bd5;margin-bottom:14px}
+  .loading{text-align:center;padding:60px;color:#5b9bd5}
+  .spin{font-size:32px;animation:s 1s linear infinite;display:inline-block}@keyframes s{to{transform:rotate(360deg)}}
+  .card{background:#141b2d;border:1px solid #1f2940;border-radius:10px;padding:11px;margin-bottom:8px;font-size:12px}
+  .card.pending{border-color:rgba(234,88,12,0.4)}
+  .card.done{border-color:rgba(74,222,128,0.3);opacity:0.7}
+  .row{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px}
+  .k{color:#5b6b85}
+  .v{color:#fff;font-weight:700;font-family:monospace}
+  .badge{display:inline-block;font-size:10px;font-weight:900;padding:2px 8px;border-radius:100px;margin-left:4px}
+  .b-print{background:rgba(59,130,246,0.15);color:#7cb3e8}
+  .b-deliv{background:rgba(234,88,12,0.15);color:#fb923c}
+  .b-recv{background:rgba(74,222,128,0.15);color:#4ade80}
+  .empty{text-align:center;padding:40px;color:#5b6b85}
+  .summary{background:#10172a;border:1px solid #2d3a52;border-radius:12px;padding:13px;margin-bottom:14px}
+  .summary div{margin-bottom:4px;font-size:13px}
+  .filter{display:flex;gap:6px;margin-bottom:12px}
+  .filter button{flex:1;padding:9px;border-radius:9px;border:1px solid #2d3a52;background:#141b2d;color:#94a3b8;font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer}
+  .filter button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading"><span class="spin">⏳</span></div></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+let TRANSFERS = [], PERIODS = [];
+let filter = "pending";
+
+async function load(key){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+    { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+  const j = await r.json();
+  const raw = j?.[0]?.value;
+  if (raw == null) return null;
+  if (typeof raw === "string"){ try { return JSON.parse(raw); } catch { return null; } }
+  return raw;
+}
+
+function allBranches(){
+  const set = new Set();
+  PERIODS.forEach(per => Object.keys(per.sales??{}).forEach(b=>{ if(b && b.trim()) set.add(b); }));
+  return [...set].sort();
+}
+
+async function init(){
+  try {
+    const [trans, pers] = await Promise.all([ load("baro_transfers_v2"), load("baro_periods_v2") ]);
+    TRANSFERS = trans ?? []; PERIODS = pers ?? [];
+  } catch(e){
+    document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال</div>`;
+    return;
+  }
+  render();
+}
+
+function render(){
+  const app = document.getElementById("app");
+  const branches = allBranches();
+  const total = TRANSFERS.length;
+  const pending = TRANSFERS.filter(t=>t.printed && !t.delivered && !t.received);
+  const fromBranch = TRANSFERS.filter(t=>t.from && t.from!=="المستودع" && t.from!=="المستودع الرئيسي");
+  const fromWh = TRANSFERS.filter(t=>t.from==="المستودع" || t.from==="المستودع الرئيسي");
+
+  let list = TRANSFERS;
+  if (filter==="pending") list = pending;
+  else if (filter==="fromBranch") list = fromBranch;
+  else if (filter==="fromWh") list = fromWh;
+
+  app.innerHTML = `
+    <h1>🔍 تشخيص النقلات</h1>
+    <div class="sub">baro_transfers_v2 · وش اتسجّل فعلاً</div>
+
+    <div class="summary">
+      <div>📦 إجمالي النقلات: <b style="color:#7cb3e8">${total}</b></div>
+      <div>⏳ معلّقة (مطبوعة، ما سُلّمت/استُلمت): <b style="color:#fb923c">${pending.length}</b></div>
+      <div>📤 من فرع (تظهر في التسليم): <b style="color:#4ade80">${fromBranch.length}</b></div>
+      <div>🏬 من المستودع (ما تظهر في تسليم الفروع): <b style="color:#94a3b8">${fromWh.length}</b></div>
+      <div style="margin-top:8px;font-size:11px;color:#5b6b85">أسماء الفروع في النظام: ${branches.length}</div>
+    </div>
+
+    <div class="filter">
+      <button class="${filter==='pending'?'on':''}" onclick="setF('pending')">⏳ معلّقة (${pending.length})</button>
+      <button class="${filter==='fromBranch'?'on':''}" onclick="setF('fromBranch')">📤 من فرع (${fromBranch.length})</button>
+      <button class="${filter==='all'?'on':''}" onclick="setF('all')">الكل (${total})</button>
+    </div>
+
+    <div id="list">${
+      list.length===0
+        ? `<div class="empty">لا نقلات في هذا التصنيف</div>`
+        : list.slice().reverse().map(t=>{
+            const cls = t.received ? "done" : (t.delivered ? "done" : "pending");
+            const d = t.date ? new Date(t.date) : (t.ts ? new Date(t.ts) : null);
+            const ds = d ? `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` : "—";
+            return `<div class="card ${cls}">
+              <div class="row"><span class="k">المنتج</span><span class="v">${t.name||"—"}</span></div>
+              <div class="row"><span class="k">الباركود</span><span class="v">${t.barcode||"—"}</span></div>
+              <div class="row"><span class="k">من (from)</span><span class="v" style="color:${(t.from==='المستودع'||t.from==='المستودع الرئيسي')?'#94a3b8':'#4ade80'}">${t.from||"⚠️ فاضي"}</span></div>
+              <div class="row"><span class="k">إلى (to)</span><span class="v">${t.to||"⚠️ فاضي"}</span></div>
+              <div class="row"><span class="k">الكمية</span><span class="v">${t.qty ?? "—"}</span></div>
+              <div class="row"><span class="k">التاريخ</span><span class="v">${ds}</span></div>
+              <div style="margin-top:6px">
+                ${t.printed?'<span class="badge b-print">✓ مطبوع/معتمد</span>':'<span class="badge" style="background:#333;color:#888">مسودة</span>'}
+                ${t.delivered?'<span class="badge b-deliv">✓ سُلّم</span>':''}
+                ${t.received?'<span class="badge b-recv">✓ استُلم</span>':''}
+                ${t.smart?'<span class="badge" style="background:rgba(168,159,196,0.15);color:#a89fc4">سمارت</span>':''}
+              </div>
+            </div>`;
+          }).join("")
+    }</div>`;
+}
+
+function setF(f){ filter=f; render(); }
+
+init();
+</script>
+</body>
+</html>
