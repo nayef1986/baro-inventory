@@ -18,6 +18,7 @@ import {
   exportBranchNeedReport, printBranchNeedReport,
   exportGeneric, printTrendReport,
 } from "../lib/exporters.js";
+import { loadBranchCounts, loadTransfers } from "../lib/storage.js";
 import SmartRedistribution from "./SmartRedistribution.jsx";
 import OfferBuilder from "./OfferBuilder.jsx";
 
@@ -285,6 +286,14 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
   const { show, ToastContainer } = useToast();
   const togglePick = (bc) => setPicked(s => s.includes(bc) ? s.filter(x=>x!==bc) : [...s, bc]);
 
+  // 🎯 الجرد + الترحيل (لتوحيد الأرقام مع المستودع والسمارت)
+  const [counts, setCounts] = useState(null);
+  const [transfers, setTransfers] = useState(null);
+  useEffect(() => {
+    loadBranchCounts().then(setCounts).catch(()=>setCounts(null));
+    loadTransfers().then(setTransfers).catch(()=>setTransfers(null));
+  }, []);
+
   const starred = settings?.starred ?? [];
 
   // احتياج الفرع: كل منتج باعه الفرع (باع/أخذ/باقي) + بياناته
@@ -308,7 +317,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const given = dozens * minStock;
         const ovKey = branch + "|" + p.barcode;
         const hasOverride = overrides[ovKey] !== undefined;
-        const remaining = getBranchRemaining(branch, p.barcode, periods, overrides, minStock);
+        const remaining = getBranchRemaining(branch, p.barcode, periods, overrides, minStock, counts, transfers);
         const needQty = Math.max(0, minStock - remaining);
         const bought = totalPurchases(p);
         const allSold = soldAllIndex[p.barcode] ?? 0;
@@ -320,7 +329,7 @@ const NeedSection = memo(({ branch, products, periods, images, onSaveImage, onRe
         const isHero = (soldPct > 70 && margin > 20) || starred.includes(p.barcode);
         return { ...p, sold, given, remaining, needQty, closingAll, bought, totalSoldAll: allSold, buyPrice, sellPrice, soldPct, margin, isHero, hasOverride };
       });
-  }, [products, branch, minStock, periods, starred, settings]);
+  }, [products, branch, minStock, periods, starred, settings, counts, transfers]);
 
   // تعديل المتبقي اليدوي (يُحفظ لكل فرع+منتج)
   const [editRem, setEditRem] = useState(null);   // barcode قيد التعديل
