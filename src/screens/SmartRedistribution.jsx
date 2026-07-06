@@ -56,7 +56,7 @@ function cityOf(branch, overrides = {}) {
 }
 
 // 🎯 عبّي فرع: لكل منتج ناقص عند الفرع، من وين نجيبه (فرع فائض نفس المدينة أولوية، ثم أي فائض، ثم المستودع)
-function fillBranch(targetBranch, products, periods, settings, needRem, surplusRem, priority = "warehouse", counts = null) {
+function fillBranch(targetBranch, products, periods, settings, needRem, surplusRem, priority = "warehouse", counts = null, transfers = null) {
   const cityOverrides = settings?.cityOverrides ?? {};
   const newBranches = settings?.newBranches ?? [];
   const closed = settings?.closedBranches ?? [];
@@ -88,7 +88,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
     const unit = num(p.unitQty) || 12;
     const targetGiven = toDozen(targetSold, unit);
     const ovKey = targetBranch + "|" + bc;
-    const targetRem = getBranchRemaining(targetBranch, bc, periods, overrides, unit, counts);
+    const targetRem = getBranchRemaining(targetBranch, bc, periods, overrides, unit, counts, transfers);
     if (targetRem >= needRem) return; // مو ناقص
     needCount++;
 
@@ -118,7 +118,7 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       .map(([br, sold]) => {
         const given = toDozen(sold, unit);
         const srcKey = br + "|" + bc;
-        const rem = getBranchRemaining(br, bc, periods, overrides, unit, counts);
+        const rem = getBranchRemaining(br, bc, periods, overrides, unit, counts, transfers);
         return { br, sold, given, rem, city: cityOf(br, cityOverrides) };
       })
       .filter(s => (avgProdSold > 0 && s.sold < avgProdSold * 0.5 && s.rem > 0) || s.rem >= surplusRem)
@@ -198,12 +198,12 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
 
   // إلغاء كل التحويلات المعتمدة لهذا الفرع (جماعي)
   const cancelAllTransfers = async () => {
-    const pend = myTransfers.filter(t=>t.smart && t.to===fillTarget && !t.delivered && !t.received);
+    const pend = myTransfers.filter(t=>t.to===fillTarget && !t.delivered && !t.received);
     if (pend.length===0) return;
     if (!window.confirm(`إلغاء كل التحويلات المعتمدة لفرع ${fillTarget} (${pend.length} تحويل)؟`)) return;
     try {
       const all = await loadTransfers();
-      const filtered = all.filter(t => !(t.smart && t.to===fillTarget && !t.delivered && !t.received));
+      const filtered = all.filter(t => !(t.to===fillTarget && !t.delivered && !t.received));
       await saveTransfers(filtered);
       setTxReload(x=>x+1);
       window.alert(`✅ أُلغيت كل التحويلات (${pend.length})`);
@@ -214,8 +214,8 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
 
   const branchList = useMemo(()=>allBranches(periods).filter(b=>!(settings?.closedBranches??[]).includes(b)), [periods, settings]);
   const fillPlan = useMemo(
-    ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem, priority, counts) : null,
-    [fillTarget, products, periods, settings, needRem, surplusRem, priority, counts]
+    ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem, priority, counts, myTransfers) : null,
+    [fillTarget, products, periods, settings, needRem, surplusRem, priority, counts, myTransfers]
   );
 
   // تعديل المتبقي داخل عبّي فرع (هدف أو مصدر) — يحفظ في stockOverrides والخطة تتحدّث فوراً
@@ -588,7 +588,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                       👆 اعتمد التحويل من كل فرع مصدر على حدة (الزر تحت كل فرع)
                     </div>
                     {(() => {
-                      const pend = myTransfers.filter(t=>t.smart && t.to===fillTarget && !t.delivered && !t.received);
+                      const pend = myTransfers.filter(t=>t.to===fillTarget && !t.delivered && !t.received);
                       if (pend.length===0) return null;
                       return (
                         <div style={{background:"rgba(234,88,12,0.08)",border:"1px solid rgba(234,88,12,0.25)",borderRadius:"12px",padding:"10px",marginTop:"2px"}}>
