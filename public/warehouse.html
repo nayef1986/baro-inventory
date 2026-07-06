@@ -375,6 +375,7 @@ function renderApp(){
       <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
       <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
       <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 السجل</button>
+      <button class="${activeTab==='branchtx'?'on':''}" onclick="setTab('branchtx')">🔄 نقل الفروع</button>
       <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📊 الجرد</button>
     </div>
     <div id="stats" class="stats"></div>
@@ -411,6 +412,7 @@ function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; sel
 function renderContent(){
   const c = document.getElementById("content");
   if (activeTab === "log"){ renderLog(c); return; }
+  if (activeTab === "branchtx"){ renderBranchTx(c); return; }
   if (activeTab === "count"){ renderCounts(c); return; }
   if (activeTab === "print"){ renderPrintQueue(c); return; }
   // النواقص
@@ -626,10 +628,61 @@ function renderCounts(c){
   }).join("");
 }
 
+let btxSearch = "";
+function renderBranchTx(c){
+  // النقل فرع→فرع فقط (from = فرع، مو المستودع)
+  const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
+  let txs = TRANSFERS.filter(t => t.printed && !isWh(t.from) && t.to && t.to!=="المستودع" && t.to!=="المستودع الرئيسي");
+  const q = (btxSearch||"").trim().toLowerCase();
+  if (q) txs = txs.filter(t => (t.barcode||"").toLowerCase().includes(q) || (t.name||"").toLowerCase().includes(q) || (t.from||"").toLowerCase().includes(q) || (t.to||"").toLowerCase().includes(q));
+
+  const searchBox = `<input placeholder="🔍 بحث بالباركود/الاسم/الفرع…" oninput="btxSearch=this.value;renderBranchTx(document.getElementById('content'))" value="${btxSearch}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`;
+
+  if (txs.length === 0){
+    c.innerHTML = searchBox + `<div class="empty">لا نقل بين الفروع بعد<br><span style="font-size:12px">النقل من "عبّي فرع" في النظام يظهر هنا</span></div>`;
+    return;
+  }
+
+  // تجميع بالمسار (from → to)
+  const byRoute = {};
+  txs.forEach(t=>{ const k=t.from+" ← "+t.to; if(!byRoute[k]) byRoute[k]={from:t.from,to:t.to,items:[]}; byRoute[k].items.push(t); });
+  const routes = Object.values(byRoute).sort((a,b)=>{
+    const la=Math.max(...a.items.map(x=>x.date||x.ts||0)), lb=Math.max(...b.items.map(x=>x.date||x.ts||0));
+    return lb-la;
+  });
+
+  c.innerHTML = searchBox + routes.map(r=>{
+    const totalQty = r.items.reduce((s,t)=>s+num(t.qty),0);
+    const delivered = r.items.filter(t=>t.delivered).length;
+    const received = r.items.filter(t=>t.received).length;
+    const rows = r.items.map(t=>{
+      const img = IMAGES?.[t.barcode];
+      const st = t.received ? {t:"✓ استُلم",c:"#4ade80",bg:"rgba(74,222,128,0.15)"}
+               : t.delivered ? {t:"✓ سُلّم — بانتظار الاستلام",c:"#fb923c",bg:"rgba(234,88,12,0.15)"}
+               : {t:"⏳ بانتظار التسليم",c:"#7cb3e8",bg:"rgba(124,179,232,0.15)"};
+      return `<div style="display:flex;gap:9px;align-items:center;background:#0f1626;border-radius:9px;padding:8px 10px;margin-top:6px">
+        ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(t.name||'').replace(/'/g,'')}')" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:#fff;cursor:pointer"/>`:`<div style="width:40px;height:40px;border-radius:8px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:900;color:#fff">${t.name||"—"}</div>
+          <div style="font-family:monospace;font-size:11px;color:#94a3b8">${t.barcode} · ${fmtN(t.qty)} قطعة</div>
+        </div>
+        <span style="background:${st.bg};color:${st.c};font-size:10px;font-weight:900;padding:3px 9px;border-radius:100px;white-space:nowrap">${st.t}</span>
+      </div>`;
+    }).join("");
+    return `<div class="log" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px;background:#141d33;border-bottom:1px solid #1f2940">
+        <div><div style="font-weight:900;font-size:14px;color:#fff">🔄 ${r.from} <span style="color:#5b6b85">←</span> ${r.to}</div><div style="font-size:11px;color:#7cb3e8;margin-top:2px">${r.items.length} صنف · ${fmtN(totalQty)} قطعة</div></div>
+        <div style="text-align:left;font-size:10px;color:#5b6b85"><div>سُلّم ${delivered}/${r.items.length}</div><div>استُلم ${received}/${r.items.length}</div></div>
+      </div>
+      <div style="padding:8px 10px 10px">${rows}</div>
+    </div>`;
+  }).join("");
+}
+
 function renderLog(c){
-  // السجل = المطبوع (المُرحّل) فقط
+  // السجل = توزيعات المستودع فقط (from = المستودع أو فاضي = قديم من المستودع)
   const byProd = {};
-  TRANSFERS.filter(t=>t.printed).forEach(t=>{
+  TRANSFERS.filter(t=>t.printed && (!t.from || t.from==="المستودع" || t.from==="المستودع الرئيسي")).forEach(t=>{
     if (!byProd[t.barcode]) byProd[t.barcode] = { name:t.name, barcode:t.barcode, items:[] };
     byProd[t.barcode].items.push(t);
   });
