@@ -152,8 +152,20 @@ export function calcProduct(product, periods) {
  * - تعديل رقم قديم: ثابت
  * - تعديل كائن فيه qty و atPeriodCount: الكمية ناقص مبيعات الفترات الجديدة
  */
-export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12, counts = null) {
+export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12, counts = null, transfers = null) {
   const sold = soldAllPeriods(barcode, periods, branch);
+
+  // صافي الترحيل لهذا الفرع/المنتج: الوارد المستُلم − الصادر المسلّم
+  let txNet = 0;
+  if (transfers && transfers.length) {
+    transfers.forEach(t => {
+      if (t.barcode !== barcode) return;
+      // وارد مستُلم (وصل الفرع فعلاً) → يزيد
+      if (t.to === branch && t.received) txNet += num(t.qty);
+      // صادر مسلّم (طلع من الفرع فعلاً) → ينقص
+      if (t.from === branch && t.delivered) txNet -= num(t.qty);
+    });
+  }
 
   // 🎯 أولوية الجرد الفعلي (baro_branch_counts_v2) — لو مُمرّر وفيه جرد صالح لهذا الفرع
   if (counts) {
@@ -162,7 +174,8 @@ export function getBranchRemaining(branch, barcode, periods, overrides = {}, min
       const soldAfter = Math.max(0, sold - num(cnt.soldAtCount));
       // لو باع بعد الجرد أكثر من المجرود → الجرد قديم، نكمّل للحساب العادي
       if (soldAfter <= num(cnt.count)) {
-        return Math.max(0, num(cnt.count) - soldAfter);
+        // الجرد + أي ترحيل صار بعد الجرد
+        return Math.max(0, num(cnt.count) - soldAfter + txNet);
       }
     }
   }
@@ -171,16 +184,16 @@ export function getBranchRemaining(branch, barcode, periods, overrides = {}, min
   const ov = overrides[key];
   if (ov === undefined || ov === null) {
     const given = Math.ceil(sold / minStock) * minStock;
-    return Math.max(0, given - sold);
+    return Math.max(0, given - sold + txNet);
   }
   if (typeof ov === "number") {
-    return Math.max(0, ov);
+    return Math.max(0, ov + txNet);
   }
   const baseQty = num(ov.qty);
   const atCount = num(ov.atPeriodCount);
   const newPeriods = periods.slice(atCount);
   const newSold = newPeriods.reduce((s, per) => s + soldInPeriod(barcode, per, branch), 0);
-  return Math.max(0, baseQty - newSold);
+  return Math.max(0, baseQty - newSold + txNet);
 }
 
 export function allBranches(periods) {
