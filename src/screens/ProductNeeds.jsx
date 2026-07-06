@@ -3,7 +3,9 @@ import { useState, useMemo, useRef, useEffect, memo } from "react";
 import {
   totalPurchases, soldAllPeriods, getFactoryCode,
   arabicIncludes, num, allContainers, fmtN, fmtM, fmtPct,
+  getBranchRemaining,
 } from "../lib/calc.js";
+import { loadBranchCounts, loadTransfers } from "../lib/storage.js";
 import OfferBuilder from "./OfferBuilder.jsx";
 
 const MIN = 12;
@@ -558,7 +560,15 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
 // ─── تفاصيل المنتج عبر الفروع ────────────────────────────────
 const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const [sortMode, setSortMode] = useState("need");
+  const [counts, setCounts] = useState(null);
+  const [txData, setTxData] = useState(null);
+  useEffect(() => {
+    loadBranchCounts().then(setCounts).catch(()=>setCounts(null));
+    loadTransfers().then(setTxData).catch(()=>setTxData(null));
+  }, []);
   const data = useMemo(() => {
+    const overrides = settings?.stockOverrides ?? {};
+    const minStock = settings?.minStock ?? MIN;
     const branchSales = {};
     periods.forEach(per => {
       Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
@@ -568,7 +578,9 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
     });
     const branches = Object.entries(branchSales).map(([branch, sold]) => {
       const given = toDozen(sold);
-      return { branch, sold, given, remaining: given - sold };
+      // 🎯 موحّد مع المستودع والسمارت: الجرد + الترحيل
+      const remaining = getBranchRemaining(branch, product.barcode, periods, overrides, minStock, counts, txData);
+      return { branch, sold, given, remaining };
     });
     const bought  = totalPurchases(product);
     const sold    = soldAllPeriods(product.barcode, periods);
@@ -577,7 +589,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
       container: pu.container ?? product.container ?? "—", qty: num(pu.qty),
     })).filter(c => c.qty > 0);
     return { branches, bought, sold, closing, conts };
-  }, [product, periods]);
+  }, [product, periods, counts, txData, settings]);
 
   const img = images?.[product.barcode];
   const factory = getFactoryCode(product.barcode);
