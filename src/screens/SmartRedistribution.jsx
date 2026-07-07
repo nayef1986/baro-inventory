@@ -131,12 +131,14 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
     const takeFromBranch = () => {
       if (candidates.length === 0) return;
       const src = candidates[0];
-      const moveQty = Math.min(Math.max(src.rem, unit), needQty);
-      if (moveQty >= unit/2) {
+      // الكمية المقترحة للنقل فرع→فرع = 6 حبات، لكن ما تتعدى متبقي المصدر ولا حاجة الهدف
+      const SUGGEST = 6;
+      const move = Math.min(src.rem, needQty, SUGGEST);
+      if (move >= 1) {
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
-        fromSources[src.br].items.push({ ...item, qty: moveQty, srcBranch: src.br, srcGiven: src.given, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
-        needQty -= moveQty;
+        fromSources[src.br].items.push({ ...item, qty: move, srcBranch: src.br, srcGiven: src.given, srcRem: src.rem, srcSold: src.sold, srcStale: avgProdSold > 0 && src.sold < avgProdSold * 0.5 });
+        needQty -= move;
       }
     };
     const takeFromWarehouse = () => {
