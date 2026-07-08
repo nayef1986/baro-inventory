@@ -133,7 +133,27 @@ let approvedNow = {}; // {barcode: count} = اعتُمد بهذه الجلسة
 let qtyEdit = {};  // {barcode_branch: qty} كمية معدّلة
 let viewImg = null; // الصورة المكبّرة
 
-async function load(key) {
+// ─── كاش IndexedDB (تحميل فوري بعد أول مرة) ──────────────────
+const IDB_NAME = "baro_cache", IDB_STORE = "kv";
+function idbOpen(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(key){
+  try { const db = await idbOpen(); return await new Promise((res)=>{ const t=db.transaction(IDB_STORE,"readonly").objectStore(IDB_STORE).get(key); t.onsuccess=()=>res(t.result??null); t.onerror=()=>res(null); }); }
+  catch { return null; }
+}
+async function idbSet(key, val){
+  try { const db = await idbOpen(); const t=db.transaction(IDB_STORE,"readwrite"); t.objectStore(IDB_STORE).put(val, key); }
+  catch {}
+}
+
+// جلب من Supabase (بدون كاش)
+async function fetchRemote(key){
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
     { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
   const j = await r.json();
@@ -141,6 +161,20 @@ async function load(key) {
   if (raw == null) return null;
   if (typeof raw === "string") { try { return JSON.parse(raw); } catch { return null; } }
   return raw;
+}
+
+// load: يرجع الكاش فوراً لو موجود، ويحدّثه من Supabase بالخلفية
+async function load(key) {
+  const cached = await idbGet(key);
+  if (cached != null){
+    // حدّث بالخلفية (ما ننتظره)
+    fetchRemote(key).then(fresh => { if (fresh != null) idbSet(key, fresh); }).catch(()=>{});
+    return cached;
+  }
+  // أول مرة: من Supabase + خزّن
+  const fresh = await fetchRemote(key);
+  if (fresh != null) idbSet(key, fresh);
+  return fresh;
 }
 // 🛡️ حماية: لا نحفظ أبداً مصفوفة فاضية فوق بيانات حرجة (يمنع مسح كل شي)
 let DATA_LOADED = false; // يصير true فقط بعد تحميل ناجح من Supabase
@@ -166,6 +200,7 @@ async function save(key, value) {
     headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
     body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
   });
+  idbSet(key, value); // حدّث الكاش عشان القراءة الجاية تكون صحيحة
   return true;
 }
 
@@ -605,6 +640,7 @@ function renderCounts(c){
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:900;color:#fff">${e.name||"—"}</div>
           <div style="font-family:monospace;font-size:11px;color:#94a3b8">${e.barcode} · ${ds}</div>
+          <div style="font-size:10px;color:#a89fc4;margin-top:2px">👤 ${e.emp||"؟"}</div>
         </div>
         <div style="display:flex;gap:5px;text-align:center">
           <div style="background:rgba(91,155,213,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#7cb3e8">${fmtN(e.calc)}</div><div style="font-size:8px;color:#5b6b85">محسوب</div></div>
@@ -617,8 +653,12 @@ function renderCounts(c){
     }).join("");
     return `<div class="log" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:11px;background:#141d33;border-bottom:1px solid #1f2940">
-        <div><div style="font-weight:900;font-size:14px;color:#fff">🏪 ${branch}</div><div style="font-size:11px;color:#7cb3e8;margin-top:2px">👤 ${emp} · ${items.length} صنف</div></div>
-        <div style="display:flex;gap:6px;font-size:10px">
+        <div><div style="font-weight:900;font-size:14px;color:#fff">🏪 ${branch}</div><div style="font-size:11px;color:#7cb3e8;margin-top:2px">👤 ${emp}</div></div>
+        <div style="display:flex;gap:6px;align-items:center;font-size:10px">
+          <div style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);border-radius:10px;padding:5px 12px;text-align:center">
+            <div style="font-size:18px;font-weight:900;color:#4ade80;line-height:1">${items.length}</div>
+            <div style="font-size:9px;color:#5b6b85">منتج مجرود</div>
+          </div>
           ${short>0?`<span style="background:rgba(248,113,113,0.15);color:#f87171;border-radius:100px;padding:3px 9px;font-weight:900">${short} نقص</span>`:''}
           ${over>0?`<span style="background:rgba(251,191,36,0.15);color:#fbbf24;border-radius:100px;padding:3px 9px;font-weight:900">${over} زيادة</span>`:''}
         </div>
