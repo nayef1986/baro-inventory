@@ -80,7 +80,26 @@ let searchTerm = "";
 let EMP = "";
 let openConts = {};
 
-async function load(key){
+// ─── كاش IndexedDB (تحميل فوري بعد أول مرة) ──────────────────
+const IDB_NAME = "baro_cache", IDB_STORE = "kv";
+function idbOpen(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(key){
+  try { const db = await idbOpen(); return await new Promise((res)=>{ const t=db.transaction(IDB_STORE,"readonly").objectStore(IDB_STORE).get(key); t.onsuccess=()=>res(t.result??null); t.onerror=()=>res(null); }); }
+  catch { return null; }
+}
+async function idbSet(key, val){
+  try { const db = await idbOpen(); const t=db.transaction(IDB_STORE,"readwrite"); t.objectStore(IDB_STORE).put(val, key); }
+  catch {}
+}
+
+async function fetchRemote(key){
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
     { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
   const j = await r.json();
@@ -89,12 +108,24 @@ async function load(key){
   if (typeof raw === "string"){ try { return JSON.parse(raw); } catch { return null; } }
   return raw;
 }
+
+async function load(key){
+  const cached = await idbGet(key);
+  if (cached != null){
+    fetchRemote(key).then(fresh => { if (fresh != null) idbSet(key, fresh); }).catch(()=>{});
+    return cached;
+  }
+  const fresh = await fetchRemote(key);
+  if (fresh != null) idbSet(key, fresh);
+  return fresh;
+}
 async function save(key, value){
   await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
     method:"POST",
     headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
     body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
   });
+  idbSet(key, value); // حدّث الكاش
 }
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
