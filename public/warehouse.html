@@ -122,7 +122,7 @@ const toDozen = n => Math.ceil(n/MIN)*MIN;
 const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
 const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
 
-let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [], COUNTS = {};
+let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [], COUNTS = {}, WH_COUNTS = {};
 let SALES_MAP = null;
 let currentNeeds = [];
 let activeTab = "needs";
@@ -300,8 +300,9 @@ function computeNeeds(){
       return { branch, sold:bsold, given, remaining, recent, distributed, counted, staleCount, soldAfter, countVal: cnt?num(cnt.count):null };
     }).filter(b=> b.remaining < threshold).sort((a,b)=>a.remaining-b.remaining);
     if (branches.length === 0) return;
-    // ✅ هل وُزّع هذا المنتج سابقاً ورُحّل للسجل؟ (تنبيه تكرار)
-    const priorTransfers = TRANSFERS.filter(t=>t.barcode===p.barcode && t.printed);
+    // ✅ هل وزّع المستودع هذا المنتج سابقاً؟ (نقل الفروع فرع→فرv لا يُحسب هنا)
+    const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
+    const priorTransfers = TRANSFERS.filter(t=>t.barcode===p.barcode && t.printed && isWh(t.from));
     const distributedBefore = priorTransfers.length > 0;
     const lastDistDate = distributedBefore ? Math.max(...priorTransfers.map(t=>num(t.date))) : 0;
     const priorBranches = [...new Set(priorTransfers.map(t=>t.to))];
@@ -411,7 +412,8 @@ function renderApp(){
       <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
       <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 السجل</button>
       <button class="${activeTab==='branchtx'?'on':''}" onclick="setTab('branchtx')">🔄 نقل الفروع</button>
-      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📊 الجرد</button>
+      <button class="${activeTab==='whcount'?'on':''}" onclick="setTab('whcount')">📊 جرد المستودع</button>
+      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📥 جرد الفروع</button>
     </div>
     <div id="stats" class="stats"></div>
     ${activeTab==='needs' && !selectedCont?`<input id="searchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="onSearch(this.value)" value="${searchTerm}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`:''}
@@ -425,8 +427,8 @@ async function refreshAll(){
   showToast("جاري التحديث…");
   SALES_MAP = null; currentNeeds = []; approvedNow = {};
   try {
-    const [prods, pers, sett, imgs, trans, counts] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2")
+    const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     // 🛡️ لو فشل تحميل المنتجات (null) لا نكتب فاضي فوقها — نوقف ونحذّر
     if (prods === null) {
@@ -435,7 +437,7 @@ async function refreshAll(){
       renderApp();
       return;
     }
-    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {};
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
     DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
     showToast("تم التحديث ✓");
   } catch(e){ DATA_LOADED = false; showToast("تعذّر التحديث"); }
@@ -448,6 +450,7 @@ function renderContent(){
   const c = document.getElementById("content");
   if (activeTab === "log"){ renderLog(c); return; }
   if (activeTab === "branchtx"){ renderBranchTx(c); return; }
+  if (activeTab === "whcount"){ renderWhCount(c); return; }
   if (activeTab === "count"){ renderCounts(c); return; }
   if (activeTab === "print"){ renderPrintQueue(c); return; }
   // النواقص
@@ -605,6 +608,87 @@ function openImg(src, name){
 }
 
 let countSearch = "";
+// ─── جرد المستودع (كم باقي فعلياً لكل منتج في المستودع) ───────
+let whCountSearch = "";
+function whStockOf(bc){
+  const p = PRODUCTS.find(x=>x.barcode===bc);
+  if (!p) return 0;
+  let bought = 0;
+  (p.purchases||[]).forEach(pu=>bought += num(pu.qty));
+  if (!bought) bought = num(p.qty)||0;
+  let totalSold = 0;
+  PERIODS.forEach(per=>{ Object.values(per.sales??{}).forEach(bd=>{ totalSold += num(bd[bc]?.qty??0); }); });
+  return Math.max(0, bought - totalSold);
+}
+function renderWhCount(c){
+  // المنتجات اللي لها مخزون في المستودع
+  let prods = PRODUCTS.filter(p=>whStockOf(p.barcode) > 0);
+  const q = (whCountSearch||"").trim().toLowerCase();
+  if (q) prods = prods.filter(p=>(p.barcode||"").toLowerCase().includes(q) || (p.name||"").toLowerCase().includes(q));
+  prods.sort((a,b)=>whStockOf(b.barcode)-whStockOf(a.barcode));
+
+  const done = Object.keys(WH_COUNTS).length;
+  const searchBox = `<input placeholder="🔍 بحث بالباركود أو الاسم…" oninput="whCountSearch=this.value;renderWhCount(document.getElementById('content'))" value="${whCountSearch}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:10px" />`;
+  const hint = `<div style="background:rgba(124,179,232,0.08);border:1px solid rgba(124,179,232,0.2);border-radius:10px;padding:10px 12px;font-size:12px;color:#7cb3e8;margin-bottom:10px">📊 عُدّ كم باقي فعلياً لكل منتج في المستودع. المحسوب = المشترى − المباع. اكتب الفعلي، الفرق يبيّن تلقائياً.</div>`;
+
+  if (prods.length === 0){ c.innerHTML = searchBox + `<div class="empty">${q?`لا نتائج لـ "${q}"`:"لا مخزون في المستودع"}</div>`; return; }
+
+  c.innerHTML = searchBox + hint + `<div style="font-size:12px;color:#5b6b85;margin-bottom:10px">📦 ${prods.length} منتج · ✅ جردت ${done}</div>` + prods.map(p=>{
+    const bc = p.barcode;
+    const calc = whStockOf(bc);
+    const saved = WH_COUNTS[bc];
+    const actualVal = saved ? saved.count : "";
+    const diff = saved ? (num(saved.count) - calc) : null;
+    const dc = diff===null?"#5b6b85":(diff<0?"#f87171":diff>0?"#fbbf24":"#4ade80");
+    const img = IMAGES?.[bc];
+    return `<div style="background:${saved?'rgba(74,222,128,0.05)':'#0f1626'};border:1px solid ${saved?'rgba(74,222,128,0.25)':'#1f2940'};border-radius:11px;padding:10px;margin-bottom:8px">
+      ${saved?`<div style="font-size:11px;color:#4ade80;font-weight:900;margin-bottom:7px">✓ جردته</div>`:''}
+      <div style="display:flex;gap:10px;align-items:center">
+        ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(p.name||'').replace(/'/g,'')}')" style="width:48px;height:48px;border-radius:8px;object-fit:cover;background:#fff;cursor:pointer"/>`:`<div style="width:48px;height:48px;border-radius:8px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name||"—"}</div>
+          <div style="font-family:monospace;font-size:11px;color:#94a3b8">${bc}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:7px;align-items:center;margin-top:9px">
+        <div style="text-align:center;background:rgba(124,179,232,0.12);border-radius:8px;padding:6px 10px"><div style="font-size:16px;font-weight:900;color:#7cb3e8">${fmtN(calc)}</div><div style="font-size:8px;color:#5b6b85">محسوب</div></div>
+        <div style="flex:1;display:flex;align-items:center;gap:5px;background:#0f172a;border-radius:9px;padding:4px">
+          <button onclick="whStep('${bc.replace(/'/g,'')}',-1)" style="width:34px;height:34px;border-radius:7px;border:none;background:#1e293b;color:#f87171;font-size:20px;font-weight:900;cursor:pointer">−</button>
+          <input type="number" min="0" id="wh_${bc}" value="${actualVal}" placeholder="؟" oninput="whType('${bc.replace(/'/g,'')}',${calc})" style="flex:1;width:100%;background:transparent;border:none;color:#fff;text-align:center;font-size:18px;font-weight:900;font-family:'Cairo'" />
+          <button onclick="whStep('${bc.replace(/'/g,'')}',1)" style="width:34px;height:34px;border-radius:7px;border:none;background:#1e293b;color:#4ade80;font-size:20px;font-weight:900;cursor:pointer">+</button>
+        </div>
+        <div style="text-align:center;background:${dc}22;border-radius:8px;padding:6px 10px"><div id="whdiff_${bc}" style="font-size:16px;font-weight:900;color:${dc}">${diff===null?"—":(diff>0?"+":"")+diff}</div><div style="font-size:8px;color:#5b6b85">فرق</div></div>
+      </div>
+      <button onclick="saveWhCount('${bc.replace(/'/g,'')}','${(p.name||'').replace(/'/g,'')}',${calc})" style="width:100%;margin-top:8px;background:${saved?'#334155':'#16a34a'};color:#fff;border:none;border-radius:9px;padding:10px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">${saved?'✓ محفوظ — تعديل':'💾 حفظ جرد المستودع'}</button>
+    </div>`;
+  }).join("");
+}
+function whStep(bc, delta){
+  const inp = document.getElementById("wh_"+bc);
+  if (!inp) return;
+  const cur = inp.value===""?0:num(inp.value);
+  inp.value = Math.max(0, cur+delta);
+  const calc = whStockOf(bc);
+  whType(bc, calc);
+}
+function whType(bc, calc){
+  const inp = document.getElementById("wh_"+bc), d = document.getElementById("whdiff_"+bc);
+  if (!inp||!d) return;
+  if (inp.value===""){ d.textContent="—"; d.style.color="#5b6b85"; return; }
+  const diff = num(inp.value)-calc;
+  d.textContent = (diff>0?"+":"")+diff;
+  d.style.color = diff<0?"#f87171":diff>0?"#fbbf24":"#4ade80";
+}
+async function saveWhCount(bc, name, calc){
+  const inp = document.getElementById("wh_"+bc);
+  if (!inp || inp.value===""){ showToast("اكتب الكمية الفعلية أولاً"); return; }
+  const count = Math.max(0, num(inp.value));
+  WH_COUNTS[bc] = { count, calc, barcode: bc, name, date: Date.now() };
+  await save("baro_wh_counts_v2", WH_COUNTS);
+  showToast(`✓ حُفظ جرد المستودع: ${name||bc}`);
+  renderWhCount(document.getElementById("content"));
+}
+
 function renderCounts(c){
   const entries = Object.values(COUNTS||{});
   const q = (countSearch||"").trim().toLowerCase();
@@ -1059,10 +1143,10 @@ function showBranchLinks(){
 
 async function init(){
   try {
-    const [prods, pers, sett, imgs, trans, counts] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2")
+    const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
+      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
-    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {};
+    PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
     // ✅ نعتبر التحميل ناجحاً فقط لو وصلنا هنا بدون خطأ. لو prods=null (مفتاح فاضي فعلاً) الحفظ يبقى محمياً بالحارس
     DATA_LOADED = (prods !== null);
   } catch(e){
