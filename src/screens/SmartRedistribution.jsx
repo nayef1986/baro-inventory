@@ -2,7 +2,7 @@
 // يكتشف الراكد والسريع لكل مصنع عبر الفترات، يقترح نقل، وأنت تعدّل.
 import { useState, useMemo, useEffect } from "react";
 import { getFactoryCode, num, allBranches, totalPurchases, getBranchRemaining } from "../lib/calc.js";
-import { loadBranchCounts, loadTransfers, saveTransfers, loadImages } from "../lib/storage.js";
+import { loadBranchCounts, loadTransfers, saveTransfers, loadImages, loadWhCounts } from "../lib/storage.js";
 
 const toDozen = (n, u) => Math.ceil(n / (u||12)) * (u||12);
 
@@ -56,7 +56,7 @@ function cityOf(branch, overrides = {}) {
 }
 
 // 🎯 عبّي فرع: لكل منتج ناقص عند الفرع، من وين نجيبه (فرع فائض نفس المدينة أولوية، ثم أي فائض، ثم المستودع)
-function fillBranch(targetBranch, products, periods, settings, needRem, surplusRem, priority = "warehouse", counts = null, transfers = null) {
+function fillBranch(targetBranch, products, periods, settings, needRem, surplusRem, priority = "warehouse", counts = null, transfers = null, whCounts = null) {
   const cityOverrides = settings?.cityOverrides ?? {};
   const newBranches = settings?.newBranches ?? [];
   const closed = settings?.closedBranches ?? [];
@@ -101,11 +101,15 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
       sellPrice: num(p.sellPrice),
     };
 
-    // مخزون المستودع = المشترى − مجموع الموزّع لكل الفروع
+    // مخزون المستودv = المشترى − مجموع الموزّع لكل الفروع
     const bought = totalPurchases(p);
     let totalGiven = 0;
     Object.values(brSales).forEach(sold => { totalGiven += toDozen(sold, unit); });
-    const warehouseStock = Math.max(0, bought - totalGiven);
+    let warehouseStock = Math.max(0, bought - totalGiven);
+    // 🏬 لو فيه جرد فعلي للمستودع لهذا المنتج → يصحّح المخزون (يحل محل الحساب)
+    if (whCounts && whCounts[bc] && whCounts[bc].count != null) {
+      warehouseStock = Math.max(0, num(whCounts[bc].count));
+    }
     item.bought = bought;          // كم جاء (المشترى الكلي)
     item.whStock = warehouseStock; // كم باقي في المستودع
 
@@ -189,6 +193,8 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
   const [openSrc, setOpenSrc] = useState({});          // مصادر مفتوحة
   const [counts, setCounts] = useState(null);          // 🎯 جرد الفروع (baro_branch_counts_v2)
   useEffect(() => { loadBranchCounts().then(setCounts).catch(()=>setCounts(null)); }, []);
+  const [whCounts, setWhCounts] = useState(null);      // 🏬 جرد المستودع (baro_wh_counts_v2)
+  useEffect(() => { loadWhCounts().then(setWhCounts).catch(()=>setWhCounts(null)); }, []);
 
   // الصور: نقرأها بأنفسنا من Supabase (props قد تكون ناقصة) — مع fallback للـprops
   const [imgMap, setImgMap] = useState(images);
@@ -229,8 +235,8 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
 
   const branchList = useMemo(()=>allBranches(periods).filter(b=>!(settings?.closedBranches??[]).includes(b)), [periods, settings]);
   const fillPlan = useMemo(
-    ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem, priority, counts, myTransfers) : null,
-    [fillTarget, products, periods, settings, needRem, surplusRem, priority, counts, myTransfers]
+    ()=> fillTarget ? fillBranch(fillTarget, products, periods, settings, needRem, surplusRem, priority, counts, myTransfers, whCounts) : null,
+    [fillTarget, products, periods, settings, needRem, surplusRem, priority, counts, myTransfers, whCounts]
   );
 
   // تعديل المتبقي داخل عبّي فرع (هدف أو مصدر) — يحفظ في stockOverrides والخطة تتحدّث فوراً
