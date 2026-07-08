@@ -215,6 +215,14 @@ export async function saveTransfers(transfers) {
   return await save(KEYS.TRANSFERS, transfers);
 }
 
+// ─── جرد المستودع ────────────────────────────────────────────
+export async function loadWhCounts() {
+  return (await load("baro_wh_counts_v2")) ?? {};
+}
+export async function saveWhCounts(counts) {
+  return await save("baro_wh_counts_v2", counts);
+}
+
 // ─── تحميل الكل ──────────────────────────────────────────────
 
 export async function loadAll() {
