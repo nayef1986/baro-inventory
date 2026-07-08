@@ -128,12 +128,14 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
         return aCity - bCity || b.rem - a.rem;
       });
 
+    const usedSrc = new Set();
     const takeFromBranch = () => {
-      if (candidates.length === 0) return;
-      const src = candidates[0];
+      const src = candidates.find(c => !usedSrc.has(c.br) && c.rem >= 1);
+      if (!src) return;
       // الكمية المقترحة للنقل فرع→فرع = 6 حبات، لكن ما تتعدى متبقي المصدر ولا حاجة الهدف
       const SUGGEST = 6;
       const move = Math.min(src.rem, needQty, SUGGEST);
+      usedSrc.add(src.br);
       if (move >= 1) {
         const sameCity = src.city === tCity;
         if (!fromSources[src.br]) fromSources[src.br] = { sameCity, city: src.city, items: [] };
@@ -141,16 +143,27 @@ function fillBranch(targetBranch, products, periods, settings, needRem, surplusR
         needQty -= move;
       }
     };
-    const takeFromWarehouse = () => {
-      if (warehouseStock >= unit && needQty >= unit/2) {
-        const fromWh = Math.min(warehouseStock, needQty);
-        fromWarehouse.push({ ...item, qty: fromWh });
-        needQty -= fromWh;
+    // 🎯 القاعدة: لو المستودع يغطي الناقص → اسحب منه · وإلا وزّع بين الفروع
+    if (warehouseStock >= needQty && needQty >= 1) {
+      // المستودع يكفي — اسحب منه كامل الناقص
+      fromWarehouse.push({ ...item, qty: needQty });
+      needQty = 0;
+    } else {
+      // المستودع ما يكفي — وزّع بين الفروع (الأقوى للأضعف)
+      // نسحب من المستودع اللي عنده (لو فيه) ثم نكمّل من الفروع
+      if (warehouseStock >= 1) {
+        fromWarehouse.push({ ...item, qty: warehouseStock });
+        needQty -= warehouseStock;
       }
-    };
-
-    // 🎯 بين الفروع فقط — لا نأخذ من المستودع (النقل فرع→فرع حصراً)
-    takeFromBranch();
+      // نكمّل الباقي من الفروع الفائضة
+      let guard = 0;
+      while (needQty >= 1 && candidates.length > 0 && guard < candidates.length) {
+        const before = needQty;
+        takeFromBranch();
+        guard++;
+        if (needQty === before) break; // ما قدر يسحب أكثر
+      }
+    }
   });
 
   // ترتيب: نفس المدينة أولاً
