@@ -772,8 +772,16 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
 
   const filtered = useMemo(() => {
     if (!search) return items;
-    return items.filter(x => arabicIncludes(x.p.name, search) || x.p.barcode.includes(search));
-  }, [items, search]);
+    const q = search.trim();
+    return items.filter(x => {
+      const fac = getFactoryCode(x.p.barcode);
+      const facName = settings?.factories?.[fac] ?? "";
+      return arabicIncludes(x.p.name, q)
+          || x.p.barcode.includes(q)
+          || fac.includes(q)                       // رقم المصنع
+          || arabicIncludes(facName, q);           // اسم المصنع
+    });
+  }, [items, search, settings]);
 
   // المنتجات المختارة بكامل معلوماتها للعرض
   const pickedItems = useMemo(
@@ -830,7 +838,7 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
       )}
 
       <div className="flex gap-2">
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث بالاسم أو الباركود…"
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث بالاسم أو الباركود أو المصنع…"
           className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
         <button onClick={()=>setScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
       </div>
@@ -1051,6 +1059,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [redMax,    setRedMax]    = useState(30);
   const [greenMin,  setGreenMin]  = useState(60);
   const [showHeroes, setShowHeroes] = useState(false);
+  const [showBad, setShowBad] = useState(false);
   const [openHeroCont, setOpenHeroCont] = useState(null);
   const [heroViewImg, setHeroViewImg] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -1165,6 +1174,65 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     );
   }
 
+  if (showBad) {
+    const isBad = (soldPct, margin) => soldPct < 30 || margin < 5;
+    const bads = products.map(p => {
+      const x = calcItem(p);
+      const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+      const m = buyPrice > 0 ? ((num(p.sellPrice)-buyPrice)/buyPrice)*100 : 0;
+      return { ...x, margin:m, buyPrice, bad: isBad(x.soldPct, m) };
+    }).filter(h => h.bad);
+
+    const groups = {};
+    bads.forEach(h => {
+      const cont = h.p.container || "بدون كونتينر";
+      if (!groups[cont]) groups[cont] = [];
+      groups[cont].push(h);
+    });
+    Object.values(groups).forEach(g => g.sort((a,b)=> a.soldPct-b.soldPct));
+    const contNames = Object.keys(groups).sort();
+
+    return (
+      <div className="space-y-3">
+        {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
+        <button onClick={()=>setShowBad(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
+        <div className="font-black text-slate-100 text-lg">⚠️ السيئين ({bads.length})</div>
+        <div className="text-xs text-slate-500">بيع ضعيف (أقل من 30%) أو هامش ربح ضعيف (أقل من 5%) — مقسّمة بالكونتينر</div>
+        {bads.length === 0 && <div className="text-center text-slate-500 py-12">لا منتجات سيئة 🎉</div>}
+        {contNames.map(cont => (
+          <div key={cont} className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="px-3 py-2 bg-slate-800/50 font-black text-slate-200 text-sm">📦 {cont} ({groups[cont].length})</div>
+            <div className="p-2 space-y-2">
+              {groups[cont].map(h => {
+                const img = images?.[h.p.barcode];
+                return (
+                  <div key={h.p.barcode} className="flex items-center gap-3 bg-slate-950/60 rounded-xl p-2 border border-rose-900/30">
+                    {img
+                      ? <img src={img} alt="" onClick={()=>setHeroViewImg({src:img,name:h.p.name})} className="w-14 h-14 rounded-lg object-cover bg-white cursor-pointer shrink-0" />
+                      : <div className="w-14 h-14 rounded-lg bg-slate-800 grid place-items-center text-2xl shrink-0">📦</div>}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-slate-100 text-sm truncate">{h.p.name}</div>
+                      <div className="font-mono text-xs text-slate-400">{h.p.barcode}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">🏭 {getFactoryCode(h.p.barcode)}</div>
+                    </div>
+                    <div className="text-center shrink-0">
+                      <div className={`text-lg font-black ${h.soldPct<30?"text-rose-400":"text-slate-300"}`}>{fmtPct(h.soldPct)}</div>
+                      <div className="text-[9px] text-slate-500">بيع</div>
+                    </div>
+                    <div className="text-center shrink-0">
+                      <div className={`text-lg font-black ${h.margin<5?"text-rose-400":"text-slate-300"}`}>{fmtPct(h.margin)}</div>
+                      <div className="text-[9px] text-slate-500">هامش</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (showHeroes) {
     const heroes = products.map(p => {
       const x = calcItem(p);
@@ -1263,6 +1331,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         <div className="flex gap-2 shrink-0">
           <button onClick={()=>setShowSearch(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-bold">🔍 بحث</button>
           <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-bold">⭐ الأبطال</button>
+          <button onClick={()=>setShowBad(true)} className="bg-rose-700 text-white px-3 py-2 rounded-xl text-sm font-bold">⚠️ السيئين</button>
         </div>
       </div>
       <div className="space-y-2">
