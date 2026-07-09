@@ -601,6 +601,89 @@ const StatCard = memo(({ h, images, onImg, bad }) => {
   );
 });
 
+// ─── طباعة نتائج البحث ───────────────────────────────────────
+function printSearchResults(results, calcItem, images, settings, query) {
+  if (!results || results.length === 0) { alert("لا نتائج للطباعة"); return; }
+  const { greg, hijri } = dateEN();
+  const brandName = settings?.brandName ?? "ALBAROO";
+  const rows = results.map((p, i) => {
+    const x = calcItem(p);
+    const sell = num(p.sellPrice);
+    const whole = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    const fac = getFactoryCode(p.barcode);
+    const facName = settings?.factories?.[fac] ?? "";
+    const img = images?.[p.barcode];
+    return `<tr>
+      <td class="c">${i+1}</td>
+      <td class="im">${img?`<img src="${img}" />`:`<div class="ph">📦</div>`}</td>
+      <td class="nm">${p.name ?? "—"}</td>
+      <td class="bc">${p.barcode}</td>
+      <td class="c fc">${fac}${facName?`<br><span class="fn">${facName}</span>`:""}</td>
+      <td class="c b">${fmtN(x.bought)}</td>
+      <td class="c s">${fmtN(x.sold)}</td>
+      <td class="c r">${fmtN(x.closing)}</td>
+      <td class="c p">${fmtN(sell)}</td>
+      <td class="c w">${fmtN(whole)}</td>
+    </tr>`;
+  }).join("");
+
+  const totalBought = results.reduce((s,p)=>s+calcItem(p).bought,0);
+  const totalSold   = results.reduce((s,p)=>s+calcItem(p).sold,0);
+  const totalRem    = results.reduce((s,p)=>s+calcItem(p).closing,0);
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>نتائج البحث</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+    body{background:#fff;color:#111;padding:14px}
+    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px}
+    .brand{font-size:20px;font-weight:900}
+    .ttl{font-size:13px;color:#555;margin-top:2px}
+    .dt{font-size:11px;color:#666;text-align:left;line-height:1.6}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{background:#111;color:#fff;padding:7px 4px;font-size:11px;font-weight:900}
+    td{border-bottom:1px solid #e5e5e5;padding:6px 4px;vertical-align:middle}
+    .c{text-align:center}
+    .im{width:44px}.im img{width:38px;height:38px;object-fit:cover;border-radius:5px;display:block}
+    .ph{width:38px;height:38px;background:#f0f0f0;border-radius:5px;display:flex;align-items:center;justify-content:center}
+    .nm{font-weight:700;max-width:150px}
+    .bc{font-family:monospace;font-size:13px;font-weight:900;letter-spacing:0.5px}
+    .fc{font-size:11px;color:#2563eb;font-weight:700}.fn{font-size:9px;color:#666;font-weight:400}
+    .b{color:#2563eb;font-weight:900}
+    .s{color:#d97706;font-weight:900}
+    .r{color:#059669;font-weight:900}
+    .p{color:#059669;font-weight:900}
+    .w{color:#dc2626;font-weight:900}
+    tfoot td{background:#f5f5f5;font-weight:900;border-top:2px solid #111}
+    @media print{body{padding:0}@page{margin:8mm}}
+  </style></head><body>
+    <div class="hd">
+      <div><div class="brand">${brandName}</div><div class="ttl">🔍 نتائج البحث${query?` — "${query}"`:""} (${results.length} منتج)</div></div>
+      <div class="dt">${greg}<br>${hijri}</div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>صورة</th><th>المنتج</th><th>الباركود</th><th>المصنع</th>
+        <th>جاء</th><th>باع</th><th>باقي</th><th>بيع ﷼</th><th>جملة ﷼</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="5" class="c">الإجمالي</td>
+        <td class="c">${fmtN(totalBought)}</td>
+        <td class="c">${fmtN(totalSold)}</td>
+        <td class="c">${fmtN(totalRem)}</td>
+        <td colspan="2"></td>
+      </tr></tfoot>
+    </table>
+    <script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
+  </body></html>`;
+
+  const w = window.open("", "_blank");
+  if (!w) { alert("اسمح بالنوافذ المنبثقة للطباعة"); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
 const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const [sortMode, setSortMode] = useState("need");
   const [counts, setCounts] = useState(null);
@@ -1094,6 +1177,73 @@ function printHeroesReport(groups, contNames, images, brandName) {
   if (w) { w.document.write(html); w.document.close(); }
 }
 
+// ─── تقرير السيئين المتكامل ──────────────────────────────────
+function printBadReport(groups, contNames, images, brandName) {
+  const d = new Date();
+  const dnum = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+  const total = contNames.reduce((s,c)=>s+groups[c].length,0);
+  if (total === 0) { alert("لا منتجات سيئة للطباعة"); return; }
+  const imgCell = (bc) => {
+    const im = images?.[bc];
+    return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`;
+  };
+  const sections = contNames.map(cont => {
+    const list = groups[cont];
+    const rows = list.map(h => `
+      <tr>
+        <td class="imgc">${imgCell(h.p.barcode)}</td>
+        <td class="nm">${h.p.name} ${h.soldPct<30?'🐌':''}${h.margin<5?'📉':''}</td>
+        <td class="bc">${h.p.barcode}</td>
+        <td>${fmtN(h.bought)}</td><td>${fmtN(h.sold)}</td><td>${fmtN(h.closing)}</td>
+        <td class="pct">${fmtPct(h.soldPct)}</td><td class="mrg">${Math.round(h.margin)}%</td>
+        <td>${fmtN(h.buyPrice)}</td><td>${fmtN(num(h.p.sellPrice))}</td>
+      </tr>`).join("");
+    return `<div class="sec">
+      <div class="sech">📦 ${cont} <span class="cnt">${list.length} منتج</span></div>
+      <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير السيئين</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+      *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+      body{background:#f1f5f9;color:#1a1a1a}
+      .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+      .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+      .bk{background:#334155;color:#fff}.pr{background:#e11d48;color:#fff}
+      .page{max-width:900px;margin:70px auto 30px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+      .hd{display:flex;justify-content:space-between;border-bottom:3px solid #e11d48;padding-bottom:14px;margin-bottom:18px}
+      .brand{font-size:26px;font-weight:900;color:#0f172a;letter-spacing:2px}
+      .ttl{font-size:15px;color:#e11d48;margin-top:2px;font-weight:700}
+      .ref{text-align:left;font-size:13px;color:#64748b}
+      .sec{margin-bottom:22px;page-break-inside:avoid}
+      .sech{background:linear-gradient(135deg,#e11d48,#9f1239);color:#fff;padding:11px 16px;border-radius:10px 10px 0 0;font-weight:900;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+      .cnt{font-size:12px;background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:100px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#e2e8f0;padding:8px 4px;font-size:11px;color:#334155}
+      td{border:1px solid #e2e8f0;padding:6px 4px;text-align:center;font-size:12px;vertical-align:middle}
+      td.imgc{width:50px;padding:3px}
+      .th{width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+      .noimg{width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
+      td.nm{text-align:right;font-weight:700;color:#0f172a;font-size:13px}
+      td.bc{font-family:monospace;font-size:11px;font-weight:900;color:#334155}
+      td.pct{color:#e11d48;font-weight:900;font-size:14px}
+      td.mrg{color:#dc2626;font-weight:900}
+      tr:nth-child(even) td{background:#fafbfc}
+      @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+    </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="page">
+      <div class="hd">
+        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⚠️ تقرير السيئين — بيع ضعيف أو هامش ضعيف</div></div>
+        <div class="ref">📅 ${dnum}<br><b>${total}</b> منتج · ${contNames.length} كونتينر</div>
+      </div>
+      ${sections}
+    </div></body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 // ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
 export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {}, onSaveSettings }) {
   const [container, setContainer] = useState(null);
@@ -1103,7 +1253,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [greenMin,  setGreenMin]  = useState(60);
   const [showHeroes, setShowHeroes] = useState(false);
   const [showBad, setShowBad] = useState(false);
-  const [openCont, setOpenCont] = useState({});   // الكونتينرات المفتوحة (الأبطال/السيئين)
+  const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
   const [openHeroCont, setOpenHeroCont] = useState(null);
   const [heroViewImg, setHeroViewImg] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -1197,23 +1347,47 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
           <button onClick={()=>setSearchScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
         </div>
-        {q && <div className="text-xs text-slate-500">{results.length} نتيجة</div>}
+        {q && <div className="flex items-center justify-between">
+          <div className="text-xs text-slate-500">{results.length} نتيجة</div>
+          {results.length > 0 && <button onClick={()=>printSearchResults(results, calcItem, images, settings, searchQuery)}
+            className="bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black">🖨️ طباعة النتائج</button>}
+        </div>}
         <div className="space-y-2">
           {results.map(p => {
             const x = calcItem(p);
+            const sell = num(p.sellPrice);
+            const whole = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
             return (
-              <div key={p.barcode} onClick={()=>{ setSelected(p); setShowSearch(false); }} className="bg-slate-800 border border-slate-700 rounded-xl p-3 cursor-pointer flex items-center gap-3">
-                {images?.[p.barcode]
-                  ? <img src={images[p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
-                  : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-lg shrink-0">📦</div>}
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
-                  <div className="text-xs text-slate-400 font-mono">{p.barcode}</div>
-                  <ContainerQtys product={p} />
-                  <div className="flex gap-1.5 mt-1">
-                    <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(x.sold)}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(x.closing)}</span>
+              <div key={p.barcode} onClick={()=>{ setSelected(p); setShowSearch(false); }} className="bg-slate-800 border border-slate-700 rounded-xl p-3 cursor-pointer">
+                <div className="flex items-center gap-3">
+                  {images?.[p.barcode]
+                    ? <img src={images[p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                    : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-lg shrink-0">📦</div>}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
+                    <div className="text-sm text-slate-300 font-mono font-black tracking-wide">{p.barcode}</div>
+                    <div className="text-[11px] text-blue-400">🏭 {getFactoryCode(p.barcode)}</div>
                   </div>
+                </div>
+                {/* جاء · باع · باقي */}
+                <div className="grid grid-cols-3 gap-1.5 mt-2">
+                  <div className="bg-blue-950/40 rounded-lg py-1.5 text-center">
+                    <div className="text-base font-black text-blue-300">{fmtN(x.bought)}</div>
+                    <div className="text-[9px] text-slate-500">جاء</div>
+                  </div>
+                  <div className="bg-amber-950/40 rounded-lg py-1.5 text-center">
+                    <div className="text-base font-black text-amber-300">{fmtN(x.sold)}</div>
+                    <div className="text-[9px] text-slate-500">باع</div>
+                  </div>
+                  <div className="bg-emerald-950/40 rounded-lg py-1.5 text-center">
+                    <div className="text-base font-black text-emerald-300">{fmtN(x.closing)}</div>
+                    <div className="text-[9px] text-slate-500">باقي</div>
+                  </div>
+                </div>
+                {/* الأسعار */}
+                <div className="flex gap-1.5 mt-1.5">
+                  <span className="flex-1 text-center text-xs px-2 py-1 rounded-lg bg-emerald-900/25 text-emerald-300 font-bold">بيع {fmtN(sell)} ﷼</span>
+                  <span className="flex-1 text-center text-xs px-2 py-1 rounded-lg bg-red-900/20 text-red-300 font-bold">جملة {fmtN(whole)} ﷼</span>
                 </div>
               </div>
             );
@@ -1240,7 +1414,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       if (!groups[cont]) groups[cont] = [];
       groups[cont].push(h);
     });
-    Object.values(groups).forEach(g => g.sort((a,b)=> a.soldPct-b.soldPct));
+    Object.values(groups).forEach(g => g.sort((a,b)=> a.soldPct-b.soldPct || a.margin-b.margin));
     const contNames = Object.keys(groups).sort();
 
     return (
@@ -1248,26 +1422,66 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
         <button onClick={()=>setShowBad(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">⚠️ السيئين ({bads.length})</div>
-        <div className="text-xs text-slate-500">بيع ضعيف (أقل من 30%) أو هامش ربح ضعيف (أقل من 5%) — اضغط الكونتينر للفتح</div>
+        <div className="text-xs text-slate-500">بيع ضعيف 🐌 (أقل من 30%) أو هامش ضعيف 📉 (أقل من 5%) — مقسّمة بالكونتينر</div>
+
+        {bads.length > 0 && (
+          <button onClick={()=>printBadReport(groups, contNames, images, settings?.brandName ?? "ALBAROO")}
+            className="w-full bg-gradient-to-r from-rose-700 to-red-700 text-white py-3 rounded-xl font-bold text-sm">
+            🖨️ تقرير السيئين المتكامل (بالصور)
+          </button>
+        )}
+
         {bads.length === 0 && <div className="text-center text-slate-500 py-12">لا منتجات سيئة 🎉</div>}
-        {contNames.map(cont => {
-          const open = openCont[cont] !== false;
-          return (
-            <div key={cont} className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden">
-              <button onClick={()=>setOpenCont(s=>({...s,[cont]: open?false:true}))}
-                className="w-full flex items-center justify-between px-3 py-3 bg-slate-800/50">
-                <span className="font-black text-slate-200 text-sm">📦 {cont}</span>
-                <span className="flex items-center gap-2">
-                  <span className="bg-rose-900/40 text-rose-300 rounded-full px-2.5 py-0.5 text-[11px] font-black">{groups[cont].length}</span>
-                  <span className="text-slate-500 text-xs">{open?"▲":"▼"}</span>
-                </span>
-              </button>
-              {open && <div className="p-2 space-y-2">
-                {groups[cont].map(h => <StatCard key={h.p.barcode} h={h} images={images} onImg={setHeroViewImg} bad />)}
-              </div>}
-            </div>
-          );
-        })}
+
+        <div className="space-y-2">
+          {contNames.map(cont => {
+            const list = groups[cont];
+            const open = openBadCont === cont;
+            return (
+              <div key={cont} className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+                <div onClick={()=>setOpenBadCont(open?null:cont)} className="flex items-center justify-between p-3.5 cursor-pointer">
+                  <div className="font-black text-slate-100">📦 {cont}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold bg-rose-700 text-white px-2.5 py-1 rounded-full">{list.length} منتج</span>
+                    <span className="text-slate-500">{open?"▲":"▼"}</span>
+                  </div>
+                </div>
+                {open && (
+                  <div className="px-2.5 pb-2.5 space-y-2">
+                    {list.map(h => (
+                      <div key={h.p.barcode} style={{background:"rgba(225,29,72,0.07)",border:"1.5px solid rgba(225,29,72,0.28)",borderRadius:"14px",padding:"12px",position:"relative"}}>
+                        {h.soldPct < 30 && <div style={{position:"absolute",top:"-9px",left:"10px",background:"linear-gradient(135deg,#e11d48,#9f1239)",color:"#fff",fontSize:"10px",fontWeight:"900",padding:"2px 8px",borderRadius:"100px"}}>🐌 بيع بطيء</div>}
+                        <div className="flex items-start gap-3">
+                          {images?.[h.p.barcode]
+                            ? <img src={images[h.p.barcode]} alt="" onClick={()=>setHeroViewImg({src:images[h.p.barcode],name:h.p.name})} className="w-16 h-16 rounded-lg object-cover shrink-0 cursor-pointer" />
+                            : <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center text-2xl shrink-0">📦</div>}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
+                            <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
+                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                            <ContainerQtys product={h.p} />
+                          </div>
+                          <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
+                            {starred.includes(h.p.barcode) ? "⭐" : "☆"}
+                          </button>
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap mt-2">
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(h.bought)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(h.sold)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(h.closing)}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-lg ${h.soldPct<30?"bg-rose-900/40 text-rose-300":"bg-emerald-900/30 text-emerald-300"}`}>نسبة {fmtPct(h.soldPct)}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-lg ${h.margin<5?"bg-rose-900/40 text-rose-300":"bg-purple-900/30 text-purple-300"}`}>هامش {Math.round(h.margin)}%</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/20 text-red-300">جملة {fmtN(h.buyPrice)}﷼</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/20 text-emerald-300">بيع {fmtN(num(h.p.sellPrice))}﷼</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
