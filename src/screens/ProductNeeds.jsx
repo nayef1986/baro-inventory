@@ -558,6 +558,49 @@ const BarcodeScanner = memo(({ onDetect, onClose }) => {
 });
 
 // ─── تفاصيل المنتج عبر الفروع ────────────────────────────────
+// بطاقة منتج مع الأعداد: جاء · باع · باقي
+const StatCard = memo(({ h, images, onImg, bad }) => {
+  const img = images?.[h.p.barcode];
+  return (
+    <div className={`bg-slate-950/60 rounded-xl p-2.5 border ${bad?"border-rose-900/30":"border-slate-800"}`}>
+      <div className="flex items-center gap-3">
+        {img
+          ? <img src={img} alt="" onClick={()=>onImg({src:img,name:h.p.name})} className="w-14 h-14 rounded-lg object-cover bg-white cursor-pointer shrink-0" />
+          : <div className="w-14 h-14 rounded-lg bg-slate-800 grid place-items-center text-2xl shrink-0">📦</div>}
+        <div className="flex-1 min-w-0">
+          <div className="font-bold text-slate-100 text-sm truncate">{h.p.name}{h.winner?" 🎉":""}{h.star?" ⭐":""}</div>
+          <div className="font-mono text-sm font-black text-slate-300 tracking-wide">{h.p.barcode}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">🏭 {getFactoryCode(h.p.barcode)}</div>
+        </div>
+        <div className="text-center shrink-0">
+          <div className={`text-lg font-black ${h.soldPct<30?"text-rose-400":h.soldPct>70?"text-emerald-400":"text-slate-300"}`}>{fmtPct(h.soldPct)}</div>
+          <div className="text-[9px] text-slate-500">بيع</div>
+        </div>
+      </div>
+      {/* الأعداد: جاء · باع · باقي */}
+      <div className="grid grid-cols-3 gap-1.5 mt-2.5">
+        <div className="bg-blue-950/40 rounded-lg py-1.5 text-center">
+          <div className="text-base font-black text-blue-300">{fmtN(h.bought)}</div>
+          <div className="text-[9px] text-slate-500">جاء</div>
+        </div>
+        <div className="bg-amber-950/40 rounded-lg py-1.5 text-center">
+          <div className="text-base font-black text-amber-300">{fmtN(h.sold)}</div>
+          <div className="text-[9px] text-slate-500">باع</div>
+        </div>
+        <div className="bg-emerald-950/40 rounded-lg py-1.5 text-center">
+          <div className="text-base font-black text-emerald-300">{fmtN(h.closing)}</div>
+          <div className="text-[9px] text-slate-500">باقي</div>
+        </div>
+      </div>
+      {h.margin !== undefined && (
+        <div className="text-[11px] text-slate-500 mt-1.5 text-center">
+          هامش الربح: <span className={h.margin<5?"text-rose-400 font-black":"text-slate-300 font-black"}>{fmtPct(h.margin)}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
 const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
   const [sortMode, setSortMode] = useState("need");
   const [counts, setCounts] = useState(null);
@@ -1060,6 +1103,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [greenMin,  setGreenMin]  = useState(60);
   const [showHeroes, setShowHeroes] = useState(false);
   const [showBad, setShowBad] = useState(false);
+  const [openCont, setOpenCont] = useState({});   // الكونتينرات المفتوحة (الأبطال/السيئين)
   const [openHeroCont, setOpenHeroCont] = useState(null);
   const [heroViewImg, setHeroViewImg] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -1134,7 +1178,14 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   if (showSearch) {
     const q = searchQuery.trim().toLowerCase();
     const results = q
-      ? products.filter(p => p.barcode.toLowerCase().includes(q) || arabicIncludes(p.name, searchQuery)).slice(0, 50)
+      ? products.filter(p => {
+          const fac = getFactoryCode(p.barcode);
+          const facName = settings?.factories?.[fac] ?? "";
+          return p.barcode.toLowerCase().includes(q)
+              || arabicIncludes(p.name, searchQuery)
+              || fac.includes(q)                        // رقم المصنع
+              || arabicIncludes(facName, searchQuery);  // اسم المصنع
+        }).slice(0, 50)
       : [];
     return (
       <div className="space-y-3">
@@ -1142,7 +1193,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         <button onClick={()=>{ setShowSearch(false); setSearchQuery(""); }} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">🔍 بحث بالباركود</div>
         <div className="flex gap-2">
-          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} autoFocus placeholder="باركود أو اسم المنتج…"
+          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} autoFocus placeholder="باركود أو اسم المنتج أو المصنع…"
             className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
           <button onClick={()=>setSearchScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
         </div>
@@ -1197,38 +1248,26 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
         <button onClick={()=>setShowBad(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">⚠️ السيئين ({bads.length})</div>
-        <div className="text-xs text-slate-500">بيع ضعيف (أقل من 30%) أو هامش ربح ضعيف (أقل من 5%) — مقسّمة بالكونتينر</div>
+        <div className="text-xs text-slate-500">بيع ضعيف (أقل من 30%) أو هامش ربح ضعيف (أقل من 5%) — اضغط الكونتينر للفتح</div>
         {bads.length === 0 && <div className="text-center text-slate-500 py-12">لا منتجات سيئة 🎉</div>}
-        {contNames.map(cont => (
-          <div key={cont} className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden">
-            <div className="px-3 py-2 bg-slate-800/50 font-black text-slate-200 text-sm">📦 {cont} ({groups[cont].length})</div>
-            <div className="p-2 space-y-2">
-              {groups[cont].map(h => {
-                const img = images?.[h.p.barcode];
-                return (
-                  <div key={h.p.barcode} className="flex items-center gap-3 bg-slate-950/60 rounded-xl p-2 border border-rose-900/30">
-                    {img
-                      ? <img src={img} alt="" onClick={()=>setHeroViewImg({src:img,name:h.p.name})} className="w-14 h-14 rounded-lg object-cover bg-white cursor-pointer shrink-0" />
-                      : <div className="w-14 h-14 rounded-lg bg-slate-800 grid place-items-center text-2xl shrink-0">📦</div>}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-slate-100 text-sm truncate">{h.p.name}</div>
-                      <div className="font-mono text-xs text-slate-400">{h.p.barcode}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">🏭 {getFactoryCode(h.p.barcode)}</div>
-                    </div>
-                    <div className="text-center shrink-0">
-                      <div className={`text-lg font-black ${h.soldPct<30?"text-rose-400":"text-slate-300"}`}>{fmtPct(h.soldPct)}</div>
-                      <div className="text-[9px] text-slate-500">بيع</div>
-                    </div>
-                    <div className="text-center shrink-0">
-                      <div className={`text-lg font-black ${h.margin<5?"text-rose-400":"text-slate-300"}`}>{fmtPct(h.margin)}</div>
-                      <div className="text-[9px] text-slate-500">هامش</div>
-                    </div>
-                  </div>
-                );
-              })}
+        {contNames.map(cont => {
+          const open = openCont[cont] !== false;
+          return (
+            <div key={cont} className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden">
+              <button onClick={()=>setOpenCont(s=>({...s,[cont]: open?false:true}))}
+                className="w-full flex items-center justify-between px-3 py-3 bg-slate-800/50">
+                <span className="font-black text-slate-200 text-sm">📦 {cont}</span>
+                <span className="flex items-center gap-2">
+                  <span className="bg-rose-900/40 text-rose-300 rounded-full px-2.5 py-0.5 text-[11px] font-black">{groups[cont].length}</span>
+                  <span className="text-slate-500 text-xs">{open?"▲":"▼"}</span>
+                </span>
+              </button>
+              {open && <div className="p-2 space-y-2">
+                {groups[cont].map(h => <StatCard key={h.p.barcode} h={h} images={images} onImg={setHeroViewImg} bad />)}
+              </div>}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
