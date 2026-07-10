@@ -223,7 +223,7 @@ function printPolicies(items, periods, images, brandName, closedBranches = [], p
       .note{font-size:${isA5?"11px":"9px"};color:#888;margin-top:6px}
       @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{border:none;margin:0 auto}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length})</button></div>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة (${slips.length})</button></div>
     <div class="wrap">${slipHtml}</div>
     <script>
       document.querySelectorAll('svg.bc').forEach(function(el){
@@ -336,7 +336,7 @@ function printTransferPlan(items, periods, title, brandName, images = {}, cityOv
       .warn{text-align:center;color:#d97706;font-size:12px;margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="page">
       <div class="hd">
         <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">📋 خطة التموين والنقل بين الفروع</div></div>
@@ -397,7 +397,7 @@ function printReport(items, title, brandName, images = {}) {
       .tot .v{font-size:20px;font-weight:900;color:#0f172a}.tot .l{font-size:12px;color:#888}
       @media print{.tb{display:none}.w{padding:16px}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="w">
       <h1>${title}</h1>
       <div class="date">📅 ${dnum} · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
@@ -655,8 +655,14 @@ function printSearchResults(results, calcItem, images, settings, query) {
     .p{color:#059669;font-weight:900}
     .w{color:#dc2626;font-weight:900}
     tfoot td{background:#f5f5f5;font-weight:900;border-top:2px solid #111}
-    @media print{body{padding:0}@page{margin:8mm}}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+    .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+    .bk{background:#334155;color:#fff}.pr{background:#059669;color:#fff}
+    .wrap{margin-top:62px}
+    @media print{body{padding:0}.tb{display:none}.wrap{margin-top:0}@page{margin:8mm}}
   </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="wrap">
     <div class="hd">
       <div><div class="brand">${brandName}</div><div class="ttl">🔍 نتائج البحث${query?` — "${query}"`:""} (${results.length} منتج)</div></div>
       <div class="dt">${greg}<br>${hijri}</div>
@@ -675,7 +681,7 @@ function printSearchResults(results, calcItem, images, settings, query) {
         <td colspan="2"></td>
       </tr></tfoot>
     </table>
-    <script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
+    </div>
   </body></html>`;
 
   const w = window.open("", "_blank");
@@ -769,7 +775,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         tr:nth-child(even){background:#f8fafc}
         @media print{.tb{display:none}.w{padding:20px}}
       </style></head><body>
-      <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+      <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
       <div class="w">
         <div class="nm">${product.name}</div>
         <div class="date">📅 ${dnum} · ${settings?.brandName ?? "ALBAROO"}</div>
@@ -1111,7 +1117,8 @@ const FactoriesView = memo(({ container, factories, allItems, images, periods, s
 });
 
 // ─── تقرير الأبطال المتكامل ──────────────────────────────────
-function printHeroesReport(groups, contNames, images, brandName) {
+function printHeroesReport(groups, contNames, images, brandName, onlyCont = null) {
+  if (onlyCont) { contNames = [onlyCont]; }
   const d = new Date();
   const dnum = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
   const total = contNames.reduce((s,c)=>s+groups[c].length,0);
@@ -1165,10 +1172,10 @@ function printHeroesReport(groups, contNames, images, brandName) {
       tr:nth-child(even) td{background:#fafbfc}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="page">
       <div class="hd">
-        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⭐ تقرير الأبطال — المنتجات الرابحة والمفضّلة</div></div>
+        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⭐ تقرير الأبطال${onlyCont?` — 📦 ${onlyCont}`:" — المنتجات الرابحة والمفضّلة"}</div></div>
         <div class="ref">📅 ${dnum}<br><b>${total}</b> بطل · ${contNames.length} كونتينر</div>
       </div>
       ${sections}
@@ -1178,7 +1185,8 @@ function printHeroesReport(groups, contNames, images, brandName) {
 }
 
 // ─── تقرير السيئين المتكامل ──────────────────────────────────
-function printBadReport(groups, contNames, images, brandName) {
+function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
+  if (onlyCont) { contNames = [onlyCont]; }
   const d = new Date();
   const dnum = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
   const total = contNames.reduce((s,c)=>s+groups[c].length,0);
@@ -1232,10 +1240,10 @@ function printBadReport(groups, contNames, images, brandName) {
       tr:nth-child(even) td{background:#fafbfc}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
     </style></head><body>
-    <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="page">
       <div class="hd">
-        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⚠️ تقرير السيئين — بيع ضعيف أو هامش ضعيف</div></div>
+        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⚠️ تقرير السيئين${onlyCont?` — 📦 ${onlyCont}`:" — بيع ضعيف أو هامش ضعيف"}</div></div>
         <div class="ref">📅 ${dnum}<br><b>${total}</b> منتج · ${contNames.length} كونتينر</div>
       </div>
       ${sections}
@@ -1335,10 +1343,11 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
               || arabicIncludes(p.name, searchQuery)
               || fac.includes(q)                        // رقم المصنع
               || arabicIncludes(facName, searchQuery);  // اسم المصنع
-        }).slice(0, 50)
+        })
       : [];
     return (
       <div className="space-y-3">
+        {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
         {searchScan && <BarcodeScanner onDetect={(code)=>{ setSearchQuery(code); setSearchScan(false); }} onClose={()=>setSearchScan(false)} />}
         <button onClick={()=>{ setShowSearch(false); setSearchQuery(""); }} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">🔍 بحث بالباركود</div>
@@ -1357,16 +1366,19 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             const x = calcItem(p);
             const sell = num(p.sellPrice);
             const whole = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+            const fac = getFactoryCode(p.barcode);
+            const facName = settings?.factories?.[fac] ?? "";
+            const img = images?.[p.barcode];
             return (
               <div key={p.barcode} onClick={()=>{ setSelected(p); setShowSearch(false); }} className="bg-slate-800 border border-slate-700 rounded-xl p-3 cursor-pointer">
                 <div className="flex items-center gap-3">
-                  {images?.[p.barcode]
-                    ? <img src={images[p.barcode]} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                  {img
+                    ? <img src={img} alt="" onClick={e=>{ e.stopPropagation(); setHeroViewImg({src:img,name:p.name}); }} className="w-12 h-12 rounded-lg object-cover shrink-0 cursor-zoom-in" />
                     : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-lg shrink-0">📦</div>}
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
                     <div className="text-sm text-slate-300 font-mono font-black tracking-wide">{p.barcode}</div>
-                    <div className="text-[11px] text-blue-400">🏭 {getFactoryCode(p.barcode)}</div>
+                    <div className="text-[11px] text-blue-400 truncate">🏭 {fac}{facName ? ` · ${facName}` : ""}</div>
                   </div>
                 </div>
                 {/* جاء · باع · باقي */}
@@ -1442,6 +1454,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                 <div onClick={()=>setOpenBadCont(open?null:cont)} className="flex items-center justify-between p-3.5 cursor-pointer">
                   <div className="font-black text-slate-100">📦 {cont}</div>
                   <div className="flex items-center gap-2">
+                    <button onClick={e=>{ e.stopPropagation(); printBadReport(groups, contNames, images, settings?.brandName ?? "ALBAROO", cont); }}
+                      className="text-xs bg-rose-800 text-white px-2.5 py-1 rounded-lg font-bold">🖨️</button>
                     <span className="text-xs font-bold bg-rose-700 text-white px-2.5 py-1 rounded-full">{list.length} منتج</span>
                     <span className="text-slate-500">{open?"▲":"▼"}</span>
                   </div>
@@ -1530,6 +1544,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                 <div onClick={()=>setOpenHeroCont(open?null:cont)} className="flex items-center justify-between p-3.5 cursor-pointer">
                   <div className="font-black text-slate-100">📦 {cont}</div>
                   <div className="flex items-center gap-2">
+                    <button onClick={e=>{ e.stopPropagation(); printHeroesReport(groups, contNames, images, settings?.brandName ?? "ALBAROO", cont); }}
+                      className="text-xs bg-amber-700 text-white px-2.5 py-1 rounded-lg font-bold">🖨️</button>
                     <span className="text-xs font-bold bg-amber-600 text-white px-2.5 py-1 rounded-full">{list.length} بطل</span>
                     <span className="text-slate-500">{open?"▲":"▼"}</span>
                   </div>
