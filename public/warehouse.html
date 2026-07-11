@@ -19,7 +19,10 @@
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
   .stat{background:#141b2d;border:1px solid #1f2940;border-radius:12px;padding:10px;text-align:center}
   .stat .v{font-size:22px;font-weight:900}.stat .l{font-size:10px;color:#5b6b85;margin-top:3px;line-height:1.3}
-  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+  .tabsGroup{margin-bottom:10px}
+  .tabsLabel{font-size:11px;font-weight:900;color:#5b6b85;margin-bottom:5px;padding-right:2px}
+  .tabs button{flex:1;min-width:0}
   .tabs button{flex:1;padding:9px;border-radius:10px;border:1px solid #2d3a52;background:#141b2d;color:#5b6b85;font-family:'Cairo';font-weight:700;font-size:13px;cursor:pointer}
   .tabs button.on{background:#2563eb;color:#fff;border-color:#2563eb}
   /* كونتينر */
@@ -407,13 +410,21 @@ function renderApp(){
         <button onclick="refreshAll()" style="background:#1a2236;border:1px solid #2d3a52;color:#3b82f6;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer;white-space:nowrap">🔄 تحديث</button>
       </div>
     </div>
-    <div class="tabs">
-      <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
-      <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
-      <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 السجل</button>
-      <button class="${activeTab==='branchtx'?'on':''}" onclick="setTab('branchtx')">🔄 نقل الفروع</button>
-      <button class="${activeTab==='whcount'?'on':''}" onclick="setTab('whcount')">📊 جرد المستودع</button>
-      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📥 جرد الفروع</button>
+    <div class="tabsGroup">
+      <div class="tabsLabel">🏬 المستودع</div>
+      <div class="tabs">
+        <button class="${activeTab==='needs'?'on':''}" onclick="setTab('needs')">📦 النواقص</button>
+        <button class="${activeTab==='print'?'on':''}" onclick="setTab('print')">🖨️ للطباعة${unprinted>0?` (${unprinted})`:''}</button>
+        <button class="${activeTab==='log'?'on':''}" onclick="setTab('log')">📋 السجل</button>
+        <button class="${activeTab==='whcount'?'on':''}" onclick="setTab('whcount')">📊 الجرد</button>
+      </div>
+    </div>
+    <div class="tabsGroup">
+      <div class="tabsLabel">🏪 الفروع</div>
+      <div class="tabs">
+        <button class="${activeTab==='branchtx'?'on':''}" onclick="setTab('branchtx')">🔄 نقل الفروع</button>
+        <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📥 جرد الفروع</button>
+      </div>
     </div>
     <div id="stats" class="stats"></div>
     ${activeTab==='needs' && !selectedCont?`<input id="searchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="onSearch(this.value)" value="${searchTerm}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`:''}
@@ -485,9 +496,13 @@ function drawNeeds(c){
   // شبكة الكونتينرات
   c.innerHTML = contNames.map(cont=>{
     const list = groups[cont];
+    const redistCount = list.filter(n=>n.distributedBefore).length;
     return `<div class="cont"><div class="conth" onclick="enterCont('${cont.replace(/'/g,'')}')">
       <div class="nm">📦 ${cont}</div>
-      <div style="display:flex;align-items:center;gap:8px"><span class="badge">${list.length} صنف</span><span style="color:#5b6b85">←</span></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        ${redistCount>0?`<span style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#1a1207;border-radius:100px;padding:2px 10px;font-size:11px;font-weight:900">🔁 ${redistCount} إعادة</span>`:''}
+        <span class="badge">${list.length} صنف</span><span style="color:#5b6b85">←</span>
+      </div>
     </div></div>`;
   }).join("");
 }
@@ -743,8 +758,9 @@ function renderCounts(c){
         ${staleRow}
       </div>`;
     }).join("");
+    const isOpen = q ? true : (cntOpenBranch[branch] === true);
     return `<div class="log" style="margin-bottom:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px;background:#141d33;border-bottom:1px solid #1f2940">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px;background:#141d33;border-bottom:1px solid #1f2940;cursor:pointer" onclick="cntToggle('${branch.replace(/'/g,'')}')">
         <div><div style="font-weight:900;font-size:14px;color:#fff">🏪 ${branch}</div><div style="font-size:11px;color:#7cb3e8;margin-top:2px">👤 ${emp}</div></div>
         <div style="display:flex;gap:6px;align-items:center;font-size:10px">
           <div style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);border-radius:10px;padding:5px 12px;text-align:center">
@@ -753,12 +769,15 @@ function renderCounts(c){
           </div>
           ${short>0?`<span style="background:rgba(248,113,113,0.15);color:#f87171;border-radius:100px;padding:3px 9px;font-weight:900">${short} نقص</span>`:''}
           ${over>0?`<span style="background:rgba(251,191,36,0.15);color:#fbbf24;border-radius:100px;padding:3px 9px;font-weight:900">${over} زيادة</span>`:''}
+          <span style="color:#5b6b85;font-size:13px">${isOpen?'▲':'▼'}</span>
         </div>
       </div>
-      <div style="padding:8px 10px 10px">${rows}</div>
+      ${isOpen?`<div style="padding:8px 10px 10px">${rows}</div>`:''}
     </div>`;
   }).join("");
 }
+let cntOpenBranch = {};
+function cntToggle(br){ cntOpenBranch[br] = !cntOpenBranch[br]; renderCounts(document.getElementById("content")); }
 
 let btxSearch = "";
 let btxOpenBranch = {};
