@@ -1255,6 +1255,9 @@ function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
 // ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
 export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {}, onSaveSettings }) {
   const [container, setContainer] = useState(null);
+  const scrollPos = useRef(0);
+  const saveScroll = () => { scrollPos.current = window.scrollY || document.documentElement.scrollTop || 0; };
+  const restoreScroll = () => { requestAnimationFrame(()=>{ window.scrollTo(0, scrollPos.current); }); };
   const [factory,   setFactory]   = useState(null);
   const [selected,  setSelected]  = useState(null);
   const [redMax,    setRedMax]    = useState(30);
@@ -1323,14 +1326,16 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   if (factory) {
     const f = factories.find(x=>x.code===factory);
     return <ProductList items={factoryItems} images={images} periods={periods} settings={settings} redMax={redMax} greenMin={greenMin}
-      onSelect={setSelected} onBack={()=>setFactory(null)}
+      onSelect={setSelected} onBack={()=>{ setFactory(null); restoreScroll(); }}
       factoryCode={f?.code} factoryName={f?.name} onSaveFactoryName={saveFactoryName}
       title={`🏭 ${f?.code}${f?.name?` · ${f.name}`:""}`} />;
   }
 
   if (container) {
     return <FactoriesView container={container} factories={factories} allItems={factories.flatMap(f=>f.items)} images={images} periods={periods} settings={settings} redMax={redMax} greenMin={greenMin}
-      setRedMax={setRedMax} setGreenMin={setGreenMin} onSelectFactory={setFactory} onBack={()=>setContainer(null)} />;
+      setRedMax={setRedMax} setGreenMin={setGreenMin}
+      onSelectFactory={(code)=>{ saveScroll(); setFactory(code); }}
+      onBack={()=>{ setContainer(null); restoreScroll(); }} />;
   }
 
   if (showSearch) {
