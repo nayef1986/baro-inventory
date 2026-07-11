@@ -423,6 +423,7 @@ function renderApp(){
 }
 let searchTerm = "";
 let logSearch = "";
+let logSort = "recent";
 async function refreshAll(){
   showToast("جاري التحديث…");
   SALES_MAP = null; currentNeeds = []; approvedNow = {};
@@ -837,18 +838,36 @@ function renderLog(c){
     if (!byProd[t.barcode]) byProd[t.barcode] = { name:t.name, barcode:t.barcode, items:[] };
     byProd[t.barcode].items.push(t);
   });
-  let list = Object.values(byProd).sort((a,b)=>{
-    const la = Math.max(...a.items.map(x=>x.date)), lb = Math.max(...b.items.map(x=>x.date));
-    return lb-la;
-  });
+  let list = Object.values(byProd);
   // بحث بالباركود أو الاسم
   const lq = (logSearch||"").trim().toLowerCase();
   if (lq) list = list.filter(pr => (pr.barcode||"").toLowerCase().includes(lq) || (pr.name||"").toLowerCase().includes(lq));
 
-  const searchBox = `<input id="logSearchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="logSearch=this.value;renderLog(document.getElementById('content'))" value="${logSearch}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:12px" />`;
+  // الترتيب: الأحدث / الأكثر توزيعاً
+  if (logSort === "most") {
+    list.sort((a,b)=> b.items.reduce((s,t)=>s+num(t.qty),0) - a.items.reduce((s,t)=>s+num(t.qty),0));
+  } else {
+    list.sort((a,b)=>{ const la=Math.max(...a.items.map(x=>x.date)), lb=Math.max(...b.items.map(x=>x.date)); return lb-la; });
+  }
+
+  // إجماليات
+  const totalProds = list.length;
+  const totalQtyAll = list.reduce((s,pr)=>s+pr.items.reduce((ss,t)=>ss+num(t.qty),0),0);
+
+  const searchBox = `<input id="logSearchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="logSearch=this.value;renderLog(document.getElementById('content'))" value="${logSearch}" style="width:100%;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:10px" />`;
+
+  const statsBar = `<div style="display:flex;gap:8px;margin-bottom:10px">
+    <div style="flex:1;background:rgba(124,179,232,0.1);border:1px solid rgba(124,179,232,0.25);border-radius:11px;padding:9px;text-align:center"><div style="font-size:19px;font-weight:900;color:#7cb3e8">${totalProds}</div><div style="font-size:10px;color:#5b6b85">منتج وُزّع</div></div>
+    <div style="flex:1;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);border-radius:11px;padding:9px;text-align:center"><div style="font-size:19px;font-weight:900;color:#4ade80">${fmtN(totalQtyAll)}</div><div style="font-size:10px;color:#5b6b85">قطعة</div></div>
+  </div>`;
+
+  const sortBar = `<div style="display:flex;gap:6px;margin-bottom:12px">
+    <button onclick="logSort='recent';renderLog(document.getElementById('content'))" style="flex:1;padding:8px;border-radius:9px;border:1px solid ${logSort!=='most'?'#2563eb':'#2d3a52'};background:${logSort!=='most'?'#2563eb':'#141b2d'};color:${logSort!=='most'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">🕐 الأحدث</button>
+    <button onclick="logSort='most';renderLog(document.getElementById('content'))" style="flex:1;padding:8px;border-radius:9px;border:1px solid ${logSort==='most'?'#2563eb':'#2d3a52'};background:${logSort==='most'?'#2563eb':'#141b2d'};color:${logSort==='most'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📊 الأكثر توزيعاً</button>
+  </div>`;
 
   if (list.length === 0){ c.innerHTML = searchBox + `<div class="empty">${lq?`لا نتائج لـ "${logSearch}"`:"لا توزيعات بعد"}</div>`; return; }
-  c.innerHTML = searchBox + list.map(pr=>{
+  c.innerHTML = searchBox + statsBar + sortBar + list.map(pr=>{
     const img = IMAGES?.[pr.barcode];
     const isOpen = openLog === pr.barcode;
     const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
