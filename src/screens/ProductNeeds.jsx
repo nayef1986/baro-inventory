@@ -570,7 +570,7 @@ const StatCard = memo(({ h, images, onImg, bad }) => {
         <div className="flex-1 min-w-0">
           <div className="font-bold text-slate-100 text-sm truncate">{h.p.name}{h.winner?" 🎉":""}{h.star?" ⭐":""}</div>
           <div className="font-mono text-sm font-black text-slate-300 tracking-wide">{h.p.barcode}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">🏭 {getFactoryCode(h.p.barcode)}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">🏭 {getFactoryCode(h.p.barcode)} · 🏷️ {getCategoryName(h.p.barcode, settings)}</div>
         </div>
         <div className="text-center shrink-0">
           <div className={`text-lg font-black ${h.soldPct<30?"text-rose-400":h.soldPct>70?"text-emerald-400":"text-slate-300"}`}>{fmtPct(h.soldPct)}</div>
@@ -782,7 +782,7 @@ const ProductDetail = memo(({ product, periods, images, settings, onBack }) => {
         <div class="hd">
           ${img ? `<img src="${img}"/>` : `<div style="width:110px;height:110px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:40px">📦</div>`}
           <div class="bc"><svg id="bcsvg"></svg><div class="bcnum">${product.barcode}</div>
-          <div class="meta">🏭 ${factory}${facName?` · ${facName}`:""} · 📦 ${product.container ?? ""}</div></div>
+          <div class="meta">🏭 ${factory}${facName?` · ${facName}`:""} · 🏷️ ${getCategoryName(product.barcode, settings)} · 📦 ${product.container ?? ""}</div></div>
         </div>
         <div class="tot">
           <div><div class="v">${fmtN(data.bought)}</div><div class="l">جاء</div></div>
@@ -1019,7 +1019,7 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
                 <div className="flex-1 min-w-0" onClick={()=>onSelect(x.p)} style={{cursor:"pointer"}}>
                   <div className="font-bold text-slate-100 text-sm leading-tight">{x.p.name}</div>
                   <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={x.p.barcode} /></div>
-                  <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(x.p.barcode)}{(settings?.factories?.[getFactoryCode(x.p.barcode)])?` · ${settings.factories[getFactoryCode(x.p.barcode)]}`:""}</div>
+                  <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(x.p.barcode)}{(settings?.factories?.[getFactoryCode(x.p.barcode)])?` · ${settings.factories[getFactoryCode(x.p.barcode)]}`:""} · 🏷️ {getCategoryName(x.p.barcode, settings)}</div>
                   <ContainerQtys product={x.p} />
                 </div>
                 <div onClick={()=>onSelect(x.p)} style={{fontSize:"20px",fontWeight:"900",color:c.txt,cursor:"pointer"}} className="shrink-0">{fmtPct(x.soldPct)}</div>
@@ -1576,7 +1576,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                           <div className="flex-1 min-w-0">
                             <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
                             <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
-                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""} · 🏷️ {getCategoryName(h.p.barcode, settings)}</div>
                           </div>
                         </div>
                         <div className="flex gap-1.5 flex-wrap mt-2">
@@ -1660,7 +1660,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                           <div className="flex-1 min-w-0">
                             <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
                             <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
-                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""} · 🏷️ {getCategoryName(h.p.barcode, settings)}</div>
                             <ContainerQtys product={h.p} />
                           </div>
                           <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
@@ -1750,7 +1750,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                           <div className="flex-1 min-w-0">
                             <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
                             <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
-                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""} · 🏷️ {getCategoryName(h.p.barcode, settings)}</div>
                             <ContainerQtys product={h.p} />
                           </div>
                           <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
