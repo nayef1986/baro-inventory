@@ -1351,6 +1351,10 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     const factories = { ...(settings?.factories ?? {}), [code]: name };
     if (onSaveSettings) await onSaveSettings({ ...settings, factories });
   };
+  const saveCategoryName = async (code, name) => {
+    const categories = { ...(settings?.categories ?? {}), [code]: name };
+    if (onSaveSettings) await onSaveSettings({ ...settings, categories });
+  };
 
   const calcItem = (p) => {
     const bought  = totalPurchases(p);
@@ -1536,6 +1540,16 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         <div className="space-y-2">
           {catList.map((c, i) => {
             const catName = settings?.categories?.[c.code];
+            // الاسم المقترح = أكثر أول كلمة تكرارًا في أسماء منتجات الفئة
+            const suggestName = (() => {
+              const freq = {};
+              c.items.forEach(it => {
+                const w = (it.p.name || "").trim().split(/\s+/)[0];
+                if (w && w.length > 1) freq[w] = (freq[w] || 0) + 1;
+              });
+              const top = Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+              return top ? top[0] : "";
+            })();
             const isTop = i === 0, isBottom = i === catList.length - 1 && catList.length > 1;
             const open = openCatCode === c.code;
             return (
@@ -1545,11 +1559,13 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{isTop?"🏆":isBottom?"🐌":"🏷️"}</span>
                       <div>
-                        <div className="font-black text-slate-100">{c.code}{catName?` · ${catName}`:""}</div>
+                        <div className="font-black text-slate-100">{c.code}{catName ? ` · ${catName}` : suggestName ? ` · ${suggestName}` : ""}</div>
                         <div className="text-[11px] text-slate-400 font-bold">📦 {c.items.length} منتج</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button onClick={async e=>{ e.stopPropagation(); const n = window.prompt(`اسم الفئة ${c.code}:`, catName || suggestName || ""); if (n !== null) await saveCategoryName(c.code, n.trim()); }}
+                        className="text-xs bg-slate-600 text-white px-2.5 py-1 rounded-lg font-bold">✏️</button>
                       <button onClick={e=>{ e.stopPropagation(); printCategoryReport(c, catName, images, settings?.brandName ?? "ALBAROO"); }}
                         className="text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-bold">🖨️</button>
                       <div className="text-left">
@@ -1780,16 +1796,14 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
-          <div className="text-xs text-slate-500">اختر كونتينر → مصنع → منتج</div>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={()=>setShowSearch(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-bold">🔍 بحث</button>
-          <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-bold">⭐ الأبطال</button>
-          <button onClick={()=>setShowBad(true)} className="bg-rose-700 text-white px-3 py-2 rounded-xl text-sm font-bold">⚠️ السيئين</button>
-          <button onClick={()=>setShowCats(true)} className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-sm font-bold">🏷️ الفئات</button>
+      <div>
+        <div className="font-black text-slate-100 text-lg">🔍 احتياج المنتجات</div>
+        <div className="text-xs text-slate-500 mb-3">اختر كونتينر → مصنع → منتج</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button onClick={()=>setShowSearch(true)} className="bg-blue-600 text-white py-2.5 rounded-xl text-sm font-bold">🔍 بحث</button>
+          <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white py-2.5 rounded-xl text-sm font-bold">⭐ الأبطال</button>
+          <button onClick={()=>setShowBad(true)} className="bg-rose-700 text-white py-2.5 rounded-xl text-sm font-bold">⚠️ السيئين</button>
+          <button onClick={()=>setShowCats(true)} className="bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ الفئات</button>
         </div>
       </div>
       <div className="space-y-2">
