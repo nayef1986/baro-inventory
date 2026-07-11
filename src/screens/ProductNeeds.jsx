@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect, memo } from "react";
 import {
   totalPurchases, soldAllPeriods, getFactoryCode,
   arabicIncludes, num, allContainers, fmtN, fmtM, fmtPct,
-  getBranchRemaining,
+  getBranchRemaining, getCategoryCode, getCategoryName,
 } from "../lib/calc.js";
 import { loadBranchCounts, loadTransfers } from "../lib/storage.js";
 import OfferBuilder from "./OfferBuilder.jsx";
@@ -1184,6 +1184,72 @@ function printHeroesReport(groups, contNames, images, brandName, onlyCont = null
   if (w) { w.document.write(html); w.document.close(); }
 }
 
+// ─── تقرير فئة واحدة ─────────────────────────────────────────
+function printCategoryReport(cat, catName, images, brandName) {
+  const d = new Date();
+  const dnum = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+  const title = cat.code + (catName ? ` · ${catName}` : "");
+  const imgCell = (bc) => { const im = images?.[bc]; return im ? `<img src="${im}" class="th"/>` : `<div class="noimg">📦</div>`; };
+  const rows = cat.items.map(h => `
+    <tr>
+      <td class="imgc">${imgCell(h.p.barcode)}</td>
+      <td class="nm">${h.p.name}</td>
+      <td class="bc">${h.p.barcode}</td>
+      <td>${fmtN(h.bought)}</td><td>${fmtN(h.sold)}</td><td>${fmtN(h.closing)}</td>
+      <td class="pct">${fmtPct(h.soldPct)}</td><td>${Math.round(h.margin)}%</td>
+      <td>${fmtN(h.buyPrice)}</td><td>${fmtN(h.sell)}</td>
+    </tr>`).join("");
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>فئة ${title}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+      *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+      body{background:#f1f5f9;color:#1a1a1a}
+      .tb{position:fixed;top:0;left:0;right:0;background:#312e81;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+      .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+      .bk{background:#334155;color:#fff}.pr{background:#4f46e5;color:#fff}
+      .page{max-width:900px;margin:70px auto 30px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+      .hd{display:flex;justify-content:space-between;border-bottom:3px solid #4f46e5;padding-bottom:14px;margin-bottom:18px}
+      .brand{font-size:26px;font-weight:900;color:#0f172a;letter-spacing:2px}
+      .ttl{font-size:16px;color:#4f46e5;margin-top:2px;font-weight:900}
+      .ref{text-align:left;font-size:13px;color:#64748b}
+      .sum{display:flex;gap:10px;margin-bottom:18px}
+      .sc{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:11px;text-align:center}
+      .sc b{display:block;font-size:20px;font-weight:900;color:#4f46e5}
+      .sc span{font-size:11px;color:#64748b}
+      table{width:100%;border-collapse:collapse}
+      th{background:#e2e8f0;padding:8px 4px;font-size:11px;color:#334155}
+      td{border:1px solid #e2e8f0;padding:6px 4px;text-align:center;font-size:12px;vertical-align:middle}
+      td.imgc{width:50px;padding:3px}
+      .th{width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+      .noimg{width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f1f5f9;border-radius:7px;margin:0 auto}
+      td.nm{text-align:right;font-weight:700;color:#0f172a;font-size:13px}
+      td.bc{font-family:monospace;font-size:12px;font-weight:900}
+      td.pct{color:#4f46e5;font-weight:900;font-size:14px}
+      tr:nth-child(even) td{background:#fafbfc}
+      @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+    </style></head><body>
+    <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="page">
+      <div class="hd">
+        <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">🏷️ فئة ${title}</div></div>
+        <div class="ref">📅 ${dnum}<br><b>${cat.items.length}</b> منتج</div>
+      </div>
+      <div class="sum">
+        <div class="sc"><b>${fmtN(cat.bought)}</b><span>جاء</span></div>
+        <div class="sc"><b>${fmtN(cat.sold)}</b><span>باع</span></div>
+        <div class="sc"><b>${fmtPct(cat.soldPct)}</b><span>نسبة البيع</span></div>
+        <div class="sc"><b>${Math.round(cat.margin)}%</b><span>هامش</span></div>
+        <div class="sc"><b>${fmtM(cat.profit)}</b><span>ربح</span></div>
+      </div>
+      <table>
+        <thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 // ─── تقرير السيئين المتكامل ──────────────────────────────────
 function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
   if (onlyCont) { contNames = [onlyCont]; }
@@ -1264,6 +1330,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [greenMin,  setGreenMin]  = useState(60);
   const [showHeroes, setShowHeroes] = useState(false);
   const [showBad, setShowBad] = useState(false);
+  const [showCats, setShowCats] = useState(false);
+  const [openCatCode, setOpenCatCode] = useState(null);
   const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
   const [openHeroCont, setOpenHeroCont] = useState(null);
   const [heroViewImg, setHeroViewImg] = useState(null);
@@ -1416,6 +1484,121 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     );
   }
 
+  if (showCats) {
+    // تجميع المنتجات بالفئة
+    const cats = {};
+    products.forEach(p => {
+      const code = getCategoryCode(p.barcode);
+      if (!cats[code]) cats[code] = { code, items: [], bought:0, sold:0, revenue:0, cost:0 };
+      const x = calcItem(p);
+      const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+      const sell = num(p.sellPrice);
+      const m = buyPrice > 0 ? ((sell - buyPrice) / buyPrice) * 100 : 0;
+      cats[code].items.push({ ...x, buyPrice, sell, margin:m });
+      cats[code].bought += x.bought;
+      cats[code].sold += x.sold;
+      cats[code].revenue += x.sold * sell;
+      cats[code].cost += x.sold * buyPrice;
+    });
+    const catList = Object.values(cats).map(c => {
+      const soldPct = c.bought > 0 ? (c.sold / c.bought) * 100 : 0;
+      const margin = c.cost > 0 ? ((c.revenue - c.cost) / c.cost) * 100 : 0;
+      const profit = c.revenue - c.cost;
+      c.items.sort((a,b)=> b.soldPct - a.soldPct);
+      return { ...c, soldPct, margin, profit, score: soldPct + margin };
+    }).sort((a,b) => b.score - a.score);
+
+    const best = catList[0];
+    const worst = catList[catList.length - 1];
+
+    return (
+      <div className="space-y-3">
+        {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
+        <button onClick={()=>setShowCats(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
+        <div className="font-black text-slate-100 text-lg">🏷️ تحليل الفئات ({catList.length})</div>
+        <div className="text-xs text-slate-500">الفئة = 3 أرقام قبل حرف B · الباركود 69 = ميكب · مرتّبة من الأقوى للأضعف</div>
+
+        {best && worst && catList.length > 1 && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-emerald-950/40 border border-emerald-700/40 rounded-xl p-3">
+              <div className="text-[11px] text-emerald-400 font-bold mb-1">🏆 أقوى فئة</div>
+              <div className="font-black text-slate-100">{best.code}{settings?.categories?.[best.code]?` · ${settings.categories[best.code]}`:""}</div>
+              <div className="text-xs text-slate-400 mt-1">بيع {fmtPct(best.soldPct)} · هامش {Math.round(best.margin)}%</div>
+            </div>
+            <div className="bg-rose-950/40 border border-rose-700/40 rounded-xl p-3">
+              <div className="text-[11px] text-rose-400 font-bold mb-1">🐌 أضعف فئة</div>
+              <div className="font-black text-slate-100">{worst.code}{settings?.categories?.[worst.code]?` · ${settings.categories[worst.code]}`:""}</div>
+              <div className="text-xs text-slate-400 mt-1">بيع {fmtPct(worst.soldPct)} · هامش {Math.round(worst.margin)}%</div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {catList.map((c, i) => {
+            const catName = settings?.categories?.[c.code];
+            const isTop = i === 0, isBottom = i === catList.length - 1 && catList.length > 1;
+            const open = openCatCode === c.code;
+            return (
+              <div key={c.code} className={`rounded-2xl border overflow-hidden ${isTop?"border-emerald-700/40 bg-emerald-950/20":isBottom?"border-rose-700/40 bg-rose-950/20":"border-slate-700 bg-slate-800/50"}`}>
+                <div onClick={()=>setOpenCatCode(open?null:c.code)} className="p-3 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{isTop?"🏆":isBottom?"🐌":"🏷️"}</span>
+                      <div>
+                        <div className="font-black text-slate-100">{c.code}{catName?` · ${catName}`:""}</div>
+                        <div className="text-[11px] text-slate-400 font-bold">📦 {c.items.length} منتج</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={e=>{ e.stopPropagation(); printCategoryReport(c, catName, images, settings?.brandName ?? "ALBAROO"); }}
+                        className="text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-bold">🖨️</button>
+                      <div className="text-left">
+                        <div className={`text-lg font-black ${c.soldPct>60?"text-emerald-400":c.soldPct<30?"text-rose-400":"text-amber-400"}`}>{fmtPct(c.soldPct)}</div>
+                      </div>
+                      <span className="text-slate-500 text-sm">{open?"▲":"▼"}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 mt-2.5">
+                    <div className="bg-blue-950/40 rounded-lg py-1.5 text-center"><div className="text-sm font-black text-blue-300">{fmtN(c.bought)}</div><div className="text-[9px] text-slate-500">جاء</div></div>
+                    <div className="bg-amber-950/40 rounded-lg py-1.5 text-center"><div className="text-sm font-black text-amber-300">{fmtN(c.sold)}</div><div className="text-[9px] text-slate-500">باع</div></div>
+                    <div className="bg-purple-950/40 rounded-lg py-1.5 text-center"><div className="text-sm font-black text-purple-300">{Math.round(c.margin)}%</div><div className="text-[9px] text-slate-500">هامش</div></div>
+                    <div className="bg-emerald-950/40 rounded-lg py-1.5 text-center"><div className="text-sm font-black text-emerald-300">{fmtM(c.profit)}</div><div className="text-[9px] text-slate-500">ربح</div></div>
+                  </div>
+                </div>
+                {open && (
+                  <div className="px-2.5 pb-2.5 space-y-2 border-t border-slate-700/50 pt-2">
+                    {c.items.map(h => (
+                      <div key={h.p.barcode} className="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800">
+                        <div className="flex items-start gap-3">
+                          {images?.[h.p.barcode]
+                            ? <img src={images[h.p.barcode]} alt="" onClick={()=>setHeroViewImg({src:images[h.p.barcode],name:h.p.name})} className="w-16 h-16 rounded-lg object-cover shrink-0 cursor-zoom-in" />
+                            : <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center text-2xl shrink-0">📦</div>}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-100 text-sm leading-tight">{h.p.name}</div>
+                            <div className="mt-1" onClick={e=>e.stopPropagation()}><CopyBarcode barcode={h.p.barcode} /></div>
+                            <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""}</div>
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap mt-2">
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(h.bought)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-900/30 text-amber-300">باع {fmtN(h.sold)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300">باقي {fmtN(h.closing)}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-lg ${h.soldPct>60?"bg-emerald-900/30 text-emerald-300":h.soldPct<30?"bg-rose-900/40 text-rose-300":"bg-amber-900/30 text-amber-300"}`}>نسبة {fmtPct(h.soldPct)}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-lg ${h.margin<5?"bg-rose-900/40 text-rose-300":"bg-purple-900/30 text-purple-300"}`}>هامش {Math.round(h.margin)}%</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-red-900/20 text-red-300">جملة {fmtN(h.buyPrice)}﷼</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-900/20 text-emerald-300">بيع {fmtN(h.sell)}﷼</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
   if (showBad) {
     const isBad = (soldPct, margin) => soldPct < 30 || margin < 5;
     const bads = products.map(p => {
@@ -1606,6 +1789,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           <button onClick={()=>setShowSearch(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-bold">🔍 بحث</button>
           <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-bold">⭐ الأبطال</button>
           <button onClick={()=>setShowBad(true)} className="bg-rose-700 text-white px-3 py-2 rounded-xl text-sm font-bold">⚠️ السيئين</button>
+          <button onClick={()=>setShowCats(true)} className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-sm font-bold">🏷️ الفئات</button>
         </div>
       </div>
       <div className="space-y-2">
