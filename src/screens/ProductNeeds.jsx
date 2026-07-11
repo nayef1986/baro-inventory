@@ -1493,7 +1493,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     const cats = {};
     products.forEach(p => {
       const code = getCategoryCode(p.barcode);
-      if (!cats[code]) cats[code] = { code, items: [], bought:0, sold:0, revenue:0, cost:0 };
+      if (!cats[code]) cats[code] = { code, items: [], bought:0, sold:0, revenue:0, cost:0, branchSold:{} };
       const x = calcItem(p);
       const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
       const sell = num(p.sellPrice);
@@ -1503,6 +1503,13 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       cats[code].sold += x.sold;
       cats[code].revenue += x.sold * sell;
       cats[code].cost += x.sold * buyPrice;
+      // مبيعات كل فرع لهذا المنتج → تُجمّع على مستوى الفئة
+      periods.forEach(per => {
+        Object.entries(per.sales ?? {}).forEach(([branch, d]) => {
+          const q = num(d[p.barcode]?.qty ?? 0);
+          if (q > 0) cats[code].branchSold[branch] = (cats[code].branchSold[branch] ?? 0) + q;
+        });
+      });
     });
     const catList = Object.values(cats).map(c => {
       const soldPct = c.bought > 0 ? (c.sold / c.bought) * 100 : 0;
@@ -1583,6 +1590,42 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                 </div>
                 {open && (
                   <div className="px-2.5 pb-2.5 space-y-2 border-t border-slate-700/50 pt-2">
+                    {(() => {
+                      const branchArr = Object.entries(c.branchSold).sort((a,b)=>b[1]-a[1]);
+                      if (branchArr.length === 0) return null;
+                      const top = branchArr[0], bottom = branchArr[branchArr.length-1];
+                      const maxQty = top[1];
+                      const totalCatSold = branchArr.reduce((s,[,q])=>s+q, 0);
+                      const pctOf = (q) => totalCatSold > 0 ? (q/totalCatSold)*100 : 0;
+                      return (
+                        <div className="bg-slate-900/60 rounded-xl p-2.5 mb-1">
+                          <div className="text-[11px] font-black text-slate-400 mb-2">🏪 الفروع في هذي الفئة ({branchArr.length})</div>
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div className="bg-emerald-950/40 border border-emerald-700/40 rounded-lg p-2">
+                              <div className="text-[10px] text-emerald-400 font-bold">🟢 أقوى فرع</div>
+                              <div className="font-black text-slate-100 text-sm truncate">{top[0]}</div>
+                              <div className="text-xs text-emerald-300 font-black">{fmtN(top[1])} قطعة · {fmtPct(pctOf(top[1]))}</div>
+                            </div>
+                            <div className="bg-rose-950/40 border border-rose-700/40 rounded-lg p-2">
+                              <div className="text-[10px] text-rose-400 font-bold">🔴 أضعف فرع</div>
+                              <div className="font-black text-slate-100 text-sm truncate">{bottom[0]}</div>
+                              <div className="text-xs text-rose-300 font-black">{fmtN(bottom[1])} قطعة · {fmtPct(pctOf(bottom[1]))}</div>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {branchArr.map(([br, qty]) => (
+                              <div key={br} className="flex items-center gap-2">
+                                <div className="text-[11px] text-slate-300 w-24 truncate shrink-0">{br}</div>
+                                <div className="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                  <div className="h-full bg-gradient-to-l from-indigo-500 to-blue-500 rounded-full" style={{width:`${maxQty>0?(qty/maxQty)*100:0}%`}}></div>
+                                </div>
+                                <div className="text-[11px] font-black text-slate-200 w-16 text-left shrink-0">{fmtN(qty)} · {fmtPct(pctOf(qty))}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {c.items.map(h => (
                       <div key={h.p.barcode} className="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800">
                         <div className="flex items-start gap-3">
