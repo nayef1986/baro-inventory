@@ -1,3 +1,4 @@
+
 // ============================================================
 // calc.js — كل الحسابات معزولة عن الواجهة
 // ============================================================
@@ -361,6 +362,29 @@ export function getFactoryCode(barcode) {
   const str = String(barcode ?? "").trim();
   if (str.length < 5) return str;
   return str.slice(0, 5);
+}
+
+/**
+ * فئة الصنف من الباركود:
+ * - يبدأ بـ 69 → "ميكب" (makeup)
+ * - وإلا → الـ3 أرقام اللي قبل حرف B (مثل 26068616B005 → "616")
+ * - لو ما فيه B → "غير مصنّف"
+ */
+export function getCategoryCode(barcode) {
+  const str = String(barcode ?? "").trim();
+  if (!str) return "غير مصنّف";
+  if (str.startsWith("69")) return "ميكب";
+  const up = str.toUpperCase();
+  const bIdx = up.indexOf("B");
+  if (bIdx >= 3) return str.slice(bIdx - 3, bIdx);
+  return "غير مصنّف";
+}
+
+/** اسم الفئة (من الإعدادات) أو الرقم نفسه */
+export function getCategoryName(barcode, settings) {
+  const code = getCategoryCode(barcode);
+  const names = settings?.categories ?? {};
+  return names[code] ? `${code} · ${names[code]}` : code;
 }
 
 export function allContainers(products) {
