@@ -410,6 +410,7 @@ function printReport(items, title, brandName, images = {}) {
         <div><div class="v">${fmtN(totReorder)}</div><div class="l">إجمالي الاحتياج / Total Reorder</div></div>
         <div><div class="v">${fmtM(totCost)}</div><div class="l">تكلفة الطلب / Order Cost</div></div>
       </div>
+      ${financeSummaryRows(rows)}
     </div></body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); }
@@ -602,10 +603,63 @@ const StatCard = memo(({ h, images, onImg, bad }) => {
 });
 
 // ─── طباعة نتائج البحث ───────────────────────────────────────
+// نسخة تعمل على rows (qtyIn/sold/cost/price) بستايل مدمج — لتقارير التوزيع/النقل/العام
+function financeSummaryRows(rows) {
+  let revenue = 0, costSold = 0, costAll = 0;
+  (rows||[]).forEach(r => {
+    const sold = num(r.sold ?? 0), qtyIn = num(r.qtyIn ?? 0);
+    const price = num(r.price ?? 0), cost = num(r.cost ?? 0);
+    revenue  += sold * price;
+    costSold += sold * cost;
+    costAll  += qtyIn * cost;
+  });
+  const profit = revenue - costSold;
+  const box = (bg,bd,cl,val,lbl) => `<div style="flex:1;min-width:120px;background:${bg};border:1px solid ${bd};border-radius:11px;padding:12px;text-align:center"><b style="display:block;font-size:21px;font-weight:900;color:${cl}">${fmtN(val)}</b><span style="font-size:11px;color:#475569;font-weight:700">${lbl}</span></div>`;
+  return `<div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap">
+    ${box("#ecfdf5","#a7f3d0","#059669",revenue,"💰 إجمالي المبيعات")}
+    ${box("#fef2f2","#fecaca","#dc2626",costSold,"📤 تكلفة المُباع")}
+    ${box("#eff6ff","#bfdbfe","#2563eb",costAll,"📦 تكلفة الكل")}
+    ${box("#f5f3ff","#ddd6fe","#7c3aed",profit,"📈 الربح")}
+  </div>`;
+}
+
+// ─── ملخص مالي مشترك لتقارير الطباعة ─────────────────────────
+// items: مصفوفة فيها {bought, sold, sell/buyPrice} — نحسب الأرقام الأربعة
+function financeSummaryHtml(items) {
+  let revenue = 0, costSold = 0, costAll = 0;
+  items.forEach(it => {
+    const sold = num(it.sold ?? 0);
+    const bought = num(it.bought ?? 0);
+    const sell = num(it.sell ?? it.p?.sellPrice ?? 0);
+    const buy = num(it.buyPrice ?? it.p?.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    revenue  += sold * sell;
+    costSold += sold * buy;
+    costAll  += bought * buy;
+  });
+  const profit = revenue - costSold;
+  return `<div class="finsum">
+    <div class="fs fs-rev"><b>${fmtN(revenue)}</b><span>💰 إجمالي المبيعات</span></div>
+    <div class="fs fs-cs"><b>${fmtN(costSold)}</b><span>📤 تكلفة المُباع</span></div>
+    <div class="fs fs-ca"><b>${fmtN(costAll)}</b><span>📦 تكلفة الكل</span></div>
+    <div class="fs fs-pr"><b>${fmtN(profit)}</b><span>📈 الربح</span></div>
+  </div>`;
+}
+const FINSUM_CSS = `
+  .finsum{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap}
+  .fs{flex:1;min-width:120px;border-radius:11px;padding:12px;text-align:center;border:1px solid #e2e8f0}
+  .fs b{display:block;font-size:21px;font-weight:900;margin-bottom:2px}
+  .fs span{font-size:11px;color:#475569;font-weight:700}
+  .fs-rev{background:#ecfdf5}.fs-rev b{color:#059669}
+  .fs-cs{background:#fef2f2}.fs-cs b{color:#dc2626}
+  .fs-ca{background:#eff6ff}.fs-ca b{color:#2563eb}
+  .fs-pr{background:#f5f3ff}.fs-pr b{color:#7c3aed}
+`;
+
 function printSearchResults(results, calcItem, images, settings, query) {
   if (!results || results.length === 0) { alert("لا نتائج للطباعة"); return; }
   const { greg, hijri } = dateEN();
   const brandName = settings?.brandName ?? "ALBAROO";
+  const finItems = results.map(p => { const x = calcItem(p); return { bought:x.bought, sold:x.sold, sell:num(p.sellPrice), buyPrice:num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0) }; });
   const rows = results.map((p, i) => {
     const x = calcItem(p);
     const sell = num(p.sellPrice);
@@ -655,6 +709,7 @@ function printSearchResults(results, calcItem, images, settings, query) {
     .p{color:#059669;font-weight:900}
     .w{color:#dc2626;font-weight:900}
     tfoot td{background:#f5f5f5;font-weight:900;border-top:2px solid #111}
+    ${FINSUM_CSS}
     .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
     .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
     .bk{background:#334155;color:#fff}.pr{background:#059669;color:#fff}
@@ -681,6 +736,7 @@ function printSearchResults(results, calcItem, images, settings, query) {
         <td colspan="2"></td>
       </tr></tfoot>
     </table>
+    ${financeSummaryHtml(finItems)}
     </div>
   </body></html>`;
 
@@ -1170,6 +1226,7 @@ function printHeroesReport(groups, contNames, images, brandName, onlyCont = null
       td.pct{color:#16a34a;font-weight:900;font-size:14px}
       td.mrg{color:#7c3aed;font-weight:900}
       tr:nth-child(even) td{background:#fafbfc}
+      ${FINSUM_CSS}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
@@ -1178,6 +1235,7 @@ function printHeroesReport(groups, contNames, images, brandName, onlyCont = null
         <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⭐ تقرير الأبطال${onlyCont?` — 📦 ${onlyCont}`:" — المنتجات الرابحة والمفضّلة"}</div></div>
         <div class="ref">📅 ${dnum}<br><b>${total}</b> بطل · ${contNames.length} كونتينر</div>
       </div>
+      ${financeSummaryHtml(contNames.flatMap(c=>groups[c]))}
       ${sections}
     </div></body></html>`;
   const w = window.open("", "_blank");
@@ -1216,6 +1274,7 @@ function printCategoryReport(cat, catName, images, brandName) {
       .sc{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:11px;text-align:center}
       .sc b{display:block;font-size:20px;font-weight:900;color:#4f46e5}
       .sc span{font-size:11px;color:#64748b}
+      ${FINSUM_CSS}
       table{width:100%;border-collapse:collapse}
       th{background:#e2e8f0;padding:8px 4px;font-size:11px;color:#334155}
       td{border:1px solid #e2e8f0;padding:6px 4px;text-align:center;font-size:12px;vertical-align:middle}
@@ -1245,6 +1304,7 @@ function printCategoryReport(cat, catName, images, brandName) {
         <thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      ${financeSummaryHtml(cat.items)}
     </div></body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); }
@@ -1304,6 +1364,7 @@ function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
       td.pct{color:#e11d48;font-weight:900;font-size:14px}
       td.mrg{color:#dc2626;font-weight:900}
       tr:nth-child(even) td{background:#fafbfc}
+      ${FINSUM_CSS}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
@@ -1312,6 +1373,7 @@ function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
         <div><div class="brand">${brandName ?? "ALBAROO"}</div><div class="ttl">⚠️ تقرير السيئين${onlyCont?` — 📦 ${onlyCont}`:" — بيع ضعيف أو هامش ضعيف"}</div></div>
         <div class="ref">📅 ${dnum}<br><b>${total}</b> منتج · ${contNames.length} كونتينر</div>
       </div>
+      ${financeSummaryHtml(contNames.flatMap(c=>groups[c]))}
       ${sections}
     </div></body></html>`;
   const w = window.open("", "_blank");
@@ -1534,12 +1596,12 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             <div className="bg-emerald-950/40 border border-emerald-700/40 rounded-xl p-3">
               <div className="text-[11px] text-emerald-400 font-bold mb-1">🏆 أقوى فئة</div>
               <div className="font-black text-slate-100">{best.code}{settings?.categories?.[best.code]?` · ${settings.categories[best.code]}`:""}</div>
-              <div className="text-xs text-slate-400 mt-1">بيع {fmtPct(best.soldPct)} · هامش {Math.round(best.margin)}%</div>
+              <div className="text-xs text-slate-400 mt-1">باع {fmtN(best.sold)} · نسبة {fmtPct(best.soldPct)} · هامش {Math.round(best.margin)}%</div>
             </div>
             <div className="bg-rose-950/40 border border-rose-700/40 rounded-xl p-3">
               <div className="text-[11px] text-rose-400 font-bold mb-1">🐌 أضعف فئة</div>
               <div className="font-black text-slate-100">{worst.code}{settings?.categories?.[worst.code]?` · ${settings.categories[worst.code]}`:""}</div>
-              <div className="text-xs text-slate-400 mt-1">بيع {fmtPct(worst.soldPct)} · هامش {Math.round(worst.margin)}%</div>
+              <div className="text-xs text-slate-400 mt-1">باع {fmtN(worst.sold)} · نسبة {fmtPct(worst.soldPct)} · هامش {Math.round(worst.margin)}%</div>
             </div>
           </div>
         )}
