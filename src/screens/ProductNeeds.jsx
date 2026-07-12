@@ -1399,6 +1399,11 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [heroViewImg, setHeroViewImg] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(searchQuery), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [searchScan, setSearchScan] = useState(false);
   const [starred, setStarred] = useState(settings?.starred ?? []);
 
@@ -1473,15 +1478,15 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   }
 
   if (showSearch) {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchDebounced.trim().toLowerCase();
     const results = q
       ? products.filter(p => {
           const fac = getFactoryCode(p.barcode);
           const facName = settings?.factories?.[fac] ?? "";
           return p.barcode.toLowerCase().includes(q)
-              || arabicIncludes(p.name, searchQuery)
+              || arabicIncludes(p.name, searchDebounced)
               || fac.includes(q)                        // رقم المصنع
-              || arabicIncludes(facName, searchQuery);  // اسم المصنع
+              || arabicIncludes(facName, searchDebounced);  // اسم المصنع
         })
       : [];
     return (
