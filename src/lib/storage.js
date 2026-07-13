@@ -73,18 +73,51 @@ function cacheClear() {
 
 // ─── موحّد ───────────────────────────────────────────────────
 
+// ─── كاش الصور في IndexedDB (يقلّل egress — الصور تُحمّل مرة واحدة لكل جهاز) ───
+const IDB_NAME = "baro_img_cache", IDB_STORE = "kv";
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(key) {
+  try { const db = await idbOpen(); return await new Promise((res)=>{ const t=db.transaction(IDB_STORE,"readonly").objectStore(IDB_STORE).get(key); t.onsuccess=()=>res(t.result??null); t.onerror=()=>res(null); }); }
+  catch { return null; }
+}
+async function idbSet(key, val) {
+  try { const db = await idbOpen(); const t=db.transaction(IDB_STORE,"readwrite"); t.objectStore(IDB_STORE).put(val, key); } catch {}
+}
+
 async function load(key) {
+  // الصور: كاش IndexedDB أولاً (فوري + بدون egress)، ثم تحديث بالخلفية
+  if (key === KEYS.IMAGES) {
+    const cached = await idbGet("images");
+    if (cached) {
+      // حدّث بالخلفية بدون انتظار (عشان أي صورة جديدة توصل لاحقاً)
+      sbGet(key).then(fresh => { if (fresh) idbSet("images", fresh); }).catch(()=>{});
+      return cached;
+    }
+    const remote = await sbGet(key);
+    if (remote !== null) { idbSet("images", remote); return remote; }
+    return {};
+  }
   const remote = await sbGet(key);
   if (remote !== null) {
-    if (key !== KEYS.IMAGES) cacheSet(key, remote); // الصور ما تُخزّن بالكاش
+    cacheSet(key, remote);
     return remote;
   }
   return cacheGet(key);
 }
 
 async function save(key, value) {
-  // لا نخزّن الصور في الكاش المحلي (تملأ localStorage وتفسد باقي البيانات)
-  if (key !== KEYS.IMAGES) cacheSet(key, value);
+  if (key === KEYS.IMAGES) {
+    idbSet("images", value); // حدّث كاش الصور
+    return await sbSet(key, value);
+  }
+  cacheSet(key, value);
   return await sbSet(key, value);
 }
 
