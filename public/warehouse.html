@@ -315,7 +315,11 @@ function computeNeeds(){
     needs.push({ p, bought, totalSold, closing, branches, distributedBefore, lastDistDate, priorBranches, hasCount, hasStale });
   });
   // نجمّع الموزّع سابقاً فوق (عشان الموظف يلقاها بسرعة)
-  needs.sort((a,b)=> (b.distributedBefore?1:0) - (a.distributedBefore?1:0));
+  // الترتيب: الموزّع سابقاً (يحتاج توزيع مرة أخرى) أولاً، ثم الأكثر متبقّي
+  needs.sort((a,b)=>
+    (b.distributedBefore?1:0) - (a.distributedBefore?1:0)   // الموزّع سابقاً أولاً
+    || b.closing - a.closing                                 // ثم الأكثر متبقّي
+  );
   return needs;
 }
 
@@ -579,6 +583,7 @@ function renderProd(n){
           <span class="ps-buy"><b>${fmtN(n.bought)}</b>مشترى</span>
           <span class="ps-sold"><b>${fmtN(n.totalSold)}</b>اتباع</span>
           <span class="ps-left"><b>${fmtN(n.closing)}</b>باقي</span>
+          <span class="ps-br" style="background:rgba(124,179,232,0.15);color:#7cb3e8;border-radius:7px;padding:2px 7px;font-weight:900"><b>${n.branches.length}</b> فرع يحتاج</span>
         </div>
       </div>
       <span class="arrow" onclick="toggleProd('${safeBc}')">${isOpen?'▲':'▼'}</span>
