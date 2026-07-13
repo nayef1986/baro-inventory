@@ -34,6 +34,7 @@
   /* منتج */
   .prod{background:#141b2d;border:1px solid #1f2940;border-radius:12px;margin-bottom:8px;overflow:hidden}
   .prod.redist{border:2px solid #f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.2)}
+  .prod.bigstock{border:2px solid #22c55e;box-shadow:0 0 14px rgba(34,197,94,0.35)}
   .prodh{display:flex;gap:10px;align-items:center;padding:11px;cursor:pointer}
   .prodh img{width:60px;height:60px;border-radius:10px;object-fit:cover;border:1px solid #2d3a52;background:#fff}
   .prodh .noimg{width:60px;height:60px;border-radius:10px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:26px}
@@ -572,8 +573,12 @@ function renderProd(n){
       </div>
     </div>`;
   }
-  return `<div class="prod${n.distributedBefore?' redist':''}" id="prod_${bc}">
-    ${n.distributedBefore ? `<div style="background:rgba(245,158,11,0.18);border-bottom:1px solid rgba(245,158,11,0.4);padding:6px 11px;font-size:11px;color:#fbbf24;font-weight:900;text-align:center">🔁 وزّع مرة أخرى — فروع تحتاج</div>` : ""}
+  // كمية كبيرة (>60) ولسه ما اتوزّعت → تمييز مميز + "وزّعني الآن"
+  const BIG_STOCK = 60;
+  const bigStock = !n.distributedBefore && n.closing > BIG_STOCK;
+  return `<div class="prod${n.distributedBefore?' redist':''}${bigStock?' bigstock':''}" id="prod_${bc}">
+    ${n.distributedBefore ? `<div style="background:rgba(245,158,11,0.18);border-bottom:1px solid rgba(245,158,11,0.4);padding:6px 11px;font-size:11px;color:#fbbf24;font-weight:900;text-align:center">🔁 وزّع مرة أخرى — فروع تحتاج</div>`
+      : bigStock ? `<div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:7px 11px;font-size:12px;color:#fff;font-weight:900;text-align:center">🔥 وزّعني الآن — ${n.branches.length} فرع يحتاجني · متبقّي ${fmtN(n.closing)}</div>` : ""}
     <div class="prodh">
       ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${img.replace(/'/g,"\\\\'")}','${safeName}')"/>`:`<div class="noimg" onclick="toggleProd('${safeBc}')">📦</div>`}
       <div class="info" onclick="toggleProd('${safeBc}')">
