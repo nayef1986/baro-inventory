@@ -126,9 +126,11 @@ export function parseSalesFile(buffer, label = "") {
 
   const monthRow = rows[1] ?? [];
   const monthKeywords = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
-  const hasMonths = monthRow.some(v => typeof v === "string" && monthKeywords.test(v) && v.trim() !== "الإجمالي");
+  // نعد كم شهر فعلي في الصف — الملف الشهري المتعدد فيه أكثر من شهر
+  const monthCount = monthRow.filter(v => typeof v === "string" && monthKeywords.test(v) && v.trim() !== "الإجمالي").length;
 
-  if (hasMonths) {
+  // نروح لمسار الشهري فقط لو فيه شهرين أو أكثر (ملف متعدد الأشهر)
+  if (monthCount >= 2) {
     const r = parseMonthlyFile(buffer);
     return { period: r.periods?.[0] ?? null, periods: r.periods ?? [], errors: r.errors ?? [], warnings: r.warnings ?? [] };
   }
