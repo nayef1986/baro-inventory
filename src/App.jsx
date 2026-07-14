@@ -2,7 +2,7 @@
 // App.jsx — التطبيق الرئيسي
 // ============================================================
 
-import { useState, useEffect, useCallback, useMemo, useReducer } from "react";
+import { useState, useEffect, useCallback, useMemo, useReducer, Component } from "react";
 import {
   initStorage, loadAll,
   saveProducts, addPeriod, deletePeriod, deleteAllPeriods,
@@ -18,6 +18,36 @@ import ReportsScreen    from "./screens/Reports.jsx";
 import SettingsScreen   from "./screens/Settings.jsx";
 import AIChat           from "./components/AIChat.jsx";
 import { LoadingSpinner, NavBar } from "./components/UI.jsx";
+
+// ─── Error Boundary — يعرض الخطأ بدل الشاشة السوداء ─────────
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { this.setState({ info }); }
+  render() {
+    if (this.state.error) {
+      const msg = String(this.state.error?.message || this.state.error);
+      const stack = String(this.state.info?.componentStack || "").split("\n").slice(0,6).join("\n");
+      return (
+        <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#e2e8f0",padding:"20px",direction:"ltr",textAlign:"left",fontFamily:"monospace"}}>
+          <div style={{fontSize:"18px",fontWeight:"bold",color:"#f87171",marginBottom:"12px",direction:"rtl",textAlign:"right",fontFamily:"system-ui"}}>
+            ⚠️ النظام واجه خطأ — هذي رسالته:
+          </div>
+          <div style={{background:"#1a0e0e",border:"1px solid #f87171",borderRadius:"10px",padding:"14px",fontSize:"13px",color:"#fca5a5",whiteSpace:"pre-wrap",lineHeight:"1.7",wordBreak:"break-word"}}>
+            {msg}
+          </div>
+          <div style={{background:"#060a12",border:"1px solid #1f2940",borderRadius:"10px",padding:"14px",fontSize:"11px",color:"#94a3b8",whiteSpace:"pre-wrap",marginTop:"10px",lineHeight:"1.6"}}>
+            {stack}
+          </div>
+          <button onClick={()=>window.location.reload()} style={{width:"100%",padding:"13px",marginTop:"14px",background:"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"14px",fontWeight:"bold",fontFamily:"system-ui"}}>
+            🔄 إعادة المحاولة
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── State ───────────────────────────────────────────────────
 
@@ -58,6 +88,7 @@ export default function App() {
   const [screen,   setScreen]   = useState("containers");
   const [showAI,   setShowAI]   = useState(false);
   const [aiModel,  setAiModel]  = useState("gemini");
+  const [showUpload, setShowUpload] = useState(false);
 
   // نحسب branchSummary مرة واحدة عند تغيير البيانات
   const branchSummary = useMemo(() => {
@@ -141,11 +172,13 @@ export default function App() {
   }, [state.periods]);
 
   const handleDeletePeriod = useCallback(async (periodId, periodLabel = null) => {
-    // نحذف من Supabase أولاً ونتأكد من النجاح قبل تحديث الواجهة
+    // نحذف من Supabase أولاً (storage يتكفّل بإعادة تحميل الصفحة بعد النجاح)
     const res = await deletePeriod(periodId, periodLabel);
-    if (res && res.ok !== false) {
-      dispatch({ type: "SET_PERIODS", payload: state.periods.filter(p => String(p.id) !== String(periodId) && String(p.label ?? "") !== String(periodLabel ?? "\u0000")) });
-    }
+    // تحديث فوري للواجهة (احتياطي قبل الـreload)
+    dispatch({ type: "SET_PERIODS", payload: state.periods.filter(p =>
+      String(p.id) !== String(periodId) &&
+      (periodLabel == null || String(p.label ?? "") !== String(periodLabel))
+    )});
     return res;
   }, [state.periods]);
 
@@ -242,6 +275,7 @@ export default function App() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-slate-900 text-slate-100">
       {/* هيدر */}
       <header style={{
@@ -270,6 +304,11 @@ export default function App() {
 
           {/* يمين: أزرار أيقونات فقط */}
           <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+            <button onClick={() => setShowUpload(true)} style={{
+              width:"38px",height:"38px",borderRadius:"12px",background:"rgba(16,185,129,0.2)",
+              border:"1px solid rgba(16,185,129,0.3)",display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:"18px",cursor:"pointer",
+            }} title="رفع">📤</button>
             <button onClick={() => window.location.reload()}
               style={{width:"38px",height:"38px",borderRadius:"12px",background:"rgba(34,197,94,0.2)",border:"1px solid rgba(34,197,94,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",cursor:"pointer"}}
               title="تحديث">
@@ -297,6 +336,75 @@ export default function App() {
       <main className="pt-20 pb-24 px-4 max-w-lg mx-auto">
         {SCREENS[screen] ?? SCREENS.containers}
       </main>
+
+      {/* شاشة الرفع — أزرار كبيرة للصفحات المستقلة */}
+      {showUpload && (
+        <div className="fixed inset-0 bg-slate-900 z-40 overflow-y-auto">
+          <div className="px-4 pt-4 pb-24 max-w-lg mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={() => setShowUpload(false)} className="text-blue-400 font-bold text-sm flex items-center gap-1">
+                ← رجوع
+              </button>
+              <div className="font-black text-slate-100">رفع البيانات</div>
+              <div className="w-16" />
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
+              {/* المشتريات */}
+              <a href="/purchases.html" style={{textDecoration:"none"}}>
+                <div style={{
+                  background:"linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+                  border:"1px solid rgba(59,130,246,0.35)",borderRadius:"18px",padding:"24px",
+                  display:"flex",alignItems:"center",gap:"16px",cursor:"pointer",
+                }}>
+                  <div style={{fontSize:"42px"}}>📦</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"19px",fontWeight:"900",color:"#fff"}}>المشتريات</div>
+                    <div style={{fontSize:"13px",color:"#93c5fd",marginTop:"3px"}}>رفع فواتير الكونتينرات</div>
+                  </div>
+                  <div style={{fontSize:"22px",color:"#60a5fa"}}>←</div>
+                </div>
+              </a>
+
+              {/* المبيعات */}
+              <a href="/sales.html" style={{textDecoration:"none"}}>
+                <div style={{
+                  background:"linear-gradient(135deg, rgba(168,85,247,0.18), rgba(147,51,234,0.08))",
+                  border:"1px solid rgba(168,85,247,0.35)",borderRadius:"18px",padding:"24px",
+                  display:"flex",alignItems:"center",gap:"16px",cursor:"pointer",
+                }}>
+                  <div style={{fontSize:"42px"}}>📊</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"19px",fontWeight:"900",color:"#fff"}}>المبيعات</div>
+                    <div style={{fontSize:"13px",color:"#d8b4fe",marginTop:"3px"}}>رفع فترات المبيعات</div>
+                  </div>
+                  <div style={{fontSize:"22px",color:"#a855f7"}}>←</div>
+                </div>
+              </a>
+
+              {/* المستودع */}
+              <a href="/warehouse.html" style={{textDecoration:"none"}}>
+                <div style={{
+                  background:"linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.08))",
+                  border:"1px solid rgba(245,158,11,0.35)",borderRadius:"18px",padding:"24px",
+                  display:"flex",alignItems:"center",gap:"16px",cursor:"pointer",
+                }}>
+                  <div style={{fontSize:"42px"}}>🏬</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"19px",fontWeight:"900",color:"#fff"}}>المستودع</div>
+                    <div style={{fontSize:"13px",color:"#fcd34d",marginTop:"3px"}}>توزيع البضاعة على الفروع</div>
+                  </div>
+                  <div style={{fontSize:"22px",color:"#f59e0b"}}>←</div>
+                </div>
+              </a>
+            </div>
+
+            <div style={{marginTop:"18px",padding:"12px",background:"rgba(255,255,255,0.04)",borderRadius:"12px",fontSize:"12px",color:"#94a3b8",lineHeight:"1.7",textAlign:"center"}}>
+              صفحات مستقلة وآمنة · ترفع البيانات بدون التأثير على النظام
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* شاشة الإعدادات */}
       {showSettings && (
@@ -336,5 +444,6 @@ export default function App() {
       {/* شريط التنقل */}
       <NavBar active={screen} onChange={setScreen} />
     </div>
+    </ErrorBoundary>
   );
 }
