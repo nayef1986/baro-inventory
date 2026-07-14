@@ -239,9 +239,22 @@ export function parseSalesFileFromRows(rows, label = "") {
     return { period: null, errors, warnings };
   }
 
+  // نستخرج اسم الشهر من الملف (لو موجود) بدل التاريخ
+  const monthKw = /(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s*20\d{2}|20\d{2}\s*(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)/;
+  let monthLabel = "";
+  for (let r = 0; r < Math.min(4, rows.length); r++) {
+    for (const cell of (rows[r] ?? [])) {
+      if (typeof cell === "string") {
+        const m = cell.match(monthKw);
+        if (m) { monthLabel = m[0].trim(); break; }
+      }
+    }
+    if (monthLabel) break;
+  }
+
   const period = {
     id:          uuid(),
-    label:       label.trim() || todayStr(),
+    label:       label.trim() || monthLabel || todayStr(),
     uploadDate:  todayStr(),
     sales,
     fingerprint: fingerprint(sales),
