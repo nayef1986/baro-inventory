@@ -172,11 +172,12 @@ export async function loadPeriods() {
   });
   // لو أصلحنا id ناقص، نحفظ النسخة المصلّحة (مرة وحدة)
   if (changed) { sbSet(KEYS.PERIODS, fixed).catch(()=>{}); cacheSet(KEYS.PERIODS, fixed); }
-  return fixed;
+  // نفكّ ضغط الفترات المضغوطة قبل إرجاعها للشاشات
+  return fixed.map(inflatePeriod);
 }
 
 export async function savePeriods(periods) {
-  // نحذف salesNames قبل الحفظ (تكبّر الحجم بلا داعٍ — الأسماء موجودة في المنتجات)
+  // نضغط كل سجل لمصفوفة [qty, totalPrice] بدل كائن بمفاتيح طويلة (يصغّر الحجم ~66%)
   const slim = (periods || []).map(per => {
     if (!per || !per.sales) return per;
     const sales = {};
@@ -184,17 +185,31 @@ export async function savePeriods(periods) {
       sales[branch] = {};
       for (const bc in per.sales[branch]) {
         const rec = per.sales[branch][bc];
-        // نحتفظ فقط بالأرقام الضرورية (qty, orders, totalPrice)
-        sales[branch][bc] = {
-          qty: rec.qty,
-          ...(rec.orders != null ? { orders: rec.orders } : {}),
-          ...(rec.totalPrice != null ? { totalPrice: rec.totalPrice } : {}),
-        };
+        // لو مضغوط أصلاً (مصفوفة) نتركه، وإلا نضغطه
+        if (Array.isArray(rec)) { sales[branch][bc] = rec; }
+        else { sales[branch][bc] = [Number(rec.qty) || 0, Number(rec.totalPrice) || 0]; }
       }
     }
-    return { ...per, sales };
+    return { ...per, sales, _c: 1 }; // _c=1 علامة إن الفترة مضغوطة
   });
   return await save(KEYS.PERIODS, slim);
+}
+
+// يفكّ ضغط الفترة: [qty, totalPrice] → { qty, totalPrice }
+function inflatePeriod(per) {
+  if (!per || !per.sales || !per._c) return per;
+  const sales = {};
+  for (const branch in per.sales) {
+    sales[branch] = {};
+    for (const bc in per.sales[branch]) {
+      const v = per.sales[branch][bc];
+      if (Array.isArray(v)) sales[branch][bc] = { qty: v[0] || 0, totalPrice: v[1] || 0 };
+      else sales[branch][bc] = v;
+    }
+  }
+  const out = { ...per, sales };
+  delete out._c;
+  return out;
 }
 
 export async function addPeriod(period) {
