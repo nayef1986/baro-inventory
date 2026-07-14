@@ -189,10 +189,21 @@ export async function deleteAllPeriods() {
 }
 
 export async function deletePeriod(periodId) {
-  const periods  = await loadPeriods();
-  const filtered = periods.filter(p => p.id !== periodId);
-  if (filtered.length === periods.length) return { ok: false };
-  return { ok: await savePeriods(filtered) };
+  // نجيب أحدث نسخة (نتجاوز الكاش) عشان الحذف يشتغل بدقة
+  let periods = await sbGet(KEYS.PERIODS);
+  if (!Array.isArray(periods)) periods = await loadPeriods();
+  periods = Array.isArray(periods) ? periods : [];
+  const filtered = periods.filter(p => String(p.id) !== String(periodId));
+  if (filtered.length === periods.length) {
+    // ما لقى الفترة — نحدّث الكاش على كل حال ونرجّع نجاح (ربما محذوفة أصلاً)
+    cacheSet(KEYS.PERIODS, filtered);
+    return { ok: true, notFound: true };
+  }
+  // نحفظ مباشرة في Supabase + نحدّث الكاش
+  const ok = await sbSet(KEYS.PERIODS, filtered.slice(-MAX_PERIODS));
+  cacheSet(KEYS.PERIODS, filtered.slice(-MAX_PERIODS));
+  try { await updateMeta(); } catch {}
+  return { ok };
 }
 
 // ─── Settings ────────────────────────────────────────────────
