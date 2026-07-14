@@ -168,8 +168,6 @@ export function parseSalesFileFromRows(rows, label = "") {
     if (!val || typeof val !== "string") return;
     const str = val.trim();
     if (!str) return;
-    // نتجاهل الفروع غير المستخدمة
-    if (str.includes("غير مستخدَم") || str.includes("غير مستخدم")) return;
 
     // دائماً نأخذ الاسم الكامل قبل القوس (نتجاهل محتوى القوس — يوحّد الفروع)
     let name = str.replace(/\s*\(.*$/, "").trim();
