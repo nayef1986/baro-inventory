@@ -145,13 +145,29 @@ export function parseSalesFileFromRows(rows, label = "") {
     return { period: null, errors: ["الملف أقل من 5 صفوف"], warnings: [] };
   }
 
-  const branchRow = rows[1] ?? [];
+  // ─ كشف صف الفروع تلقائياً (قد يكون في صف 1 أو 2 حسب تنسيق الملف)
+  // صف الفروع = الصف اللي فيه أكثر خلايا نصية طويلة (أسماء فروع)
+  const looksLikeBranch = (s) => {
+    if (!s || typeof s !== "string") return false;
+    const t = s.trim();
+    // اسم فرع: نص طويل، غالباً فيه قوس أو شرطة أو أرقام فرع
+    return t.length > 6 && (t.includes("(") || t.includes("-") || /\d{3,4}/.test(t));
+  };
+  let branchRowIdx = 1;
+  let bestCount = -1;
+  for (let r = 0; r < Math.min(4, rows.length); r++) {
+    const cnt = (rows[r] ?? []).filter(looksLikeBranch).length;
+    if (cnt > bestCount) { bestCount = cnt; branchRowIdx = r; }
+  }
+  const branchRow = rows[branchRowIdx] ?? [];
   const branches  = {};
 
   branchRow.forEach((val, colIdx) => {
     if (!val || typeof val !== "string") return;
     const str = val.trim();
     if (!str) return;
+    // نتجاهل الفروع غير المستخدمة
+    if (str.includes("غير مستخدَم") || str.includes("غير مستخدم")) return;
 
     // دائماً نأخذ الاسم الكامل قبل القوس (نتجاهل محتوى القوس — يوحّد الفروع)
     let name = str.replace(/\s*\(.*$/, "").trim();
@@ -166,14 +182,22 @@ export function parseSalesFileFromRows(rows, label = "") {
   });
 
   if (Object.keys(branches).length === 0) {
-    errors.push("لم يُعثر على أي فرع في الصف الثاني");
+    errors.push("لم يُعثر على أي فرع في صفوف الترويسة");
     return { period: null, errors, warnings };
+  }
+
+  // ─ كشف صف بداية المنتجات: بعد صف الترويسة (الطلب/كمية المنتج/...)
+  // نبحث عن أول صف فيه [باركود] في العمود الأول
+  let dataStart = branchRowIdx + 2; // افتراضي: بعد صف الفروع + صف العناوين
+  for (let r = branchRowIdx + 1; r < Math.min(branchRowIdx + 5, rows.length); r++) {
+    const first = String(rows[r]?.[0] ?? "").trim();
+    if (/\[[^\]]+\]/.test(first)) { dataStart = r; break; }
   }
 
   const sales = {};
   Object.values(branches).forEach(b => { sales[b] = {}; });
 
-  for (let i = 4; i < rows.length; i++) {
+  for (let i = dataStart; i < rows.length; i++) {
     const row    = rows[i];
     const rawKey = String(row[0] ?? "").trim();
 
