@@ -19,6 +19,8 @@ const KEYS = {
   TRANSFERS:"baro_transfers_v2",
 };
 
+const MAX_PERIODS = 52; // أقصى عدد فترات محفوظة
+
 // ─── Supabase REST ───────────────────────────────────────────
 
 async function sbGet(key) {
@@ -65,7 +67,12 @@ function cacheGet(key) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 function cacheSet(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  try {
+    const str = JSON.stringify(value);
+    // localStorage محدود ~5 ميجا — لو البيانات كبيرة نتخطّاها (نعتمد على Supabase)
+    if (str.length > 2_000_000) { try { localStorage.removeItem(key); } catch {} return; }
+    localStorage.setItem(key, str);
+  } catch {}
 }
 function cacheClear() {
   try { Object.values(KEYS).forEach(k => localStorage.removeItem(k)); } catch {}
@@ -169,7 +176,25 @@ export async function loadPeriods() {
 }
 
 export async function savePeriods(periods) {
-  return await save(KEYS.PERIODS, periods);
+  // نحذف salesNames قبل الحفظ (تكبّر الحجم بلا داعٍ — الأسماء موجودة في المنتجات)
+  const slim = (periods || []).map(per => {
+    if (!per || !per.sales) return per;
+    const sales = {};
+    for (const branch in per.sales) {
+      sales[branch] = {};
+      for (const bc in per.sales[branch]) {
+        const rec = per.sales[branch][bc];
+        // نحتفظ فقط بالأرقام الضرورية (qty, orders, totalPrice)
+        sales[branch][bc] = {
+          qty: rec.qty,
+          ...(rec.orders != null ? { orders: rec.orders } : {}),
+          ...(rec.totalPrice != null ? { totalPrice: rec.totalPrice } : {}),
+        };
+      }
+    }
+    return { ...per, sales };
+  });
+  return await save(KEYS.PERIODS, slim);
 }
 
 export async function addPeriod(period) {
@@ -223,6 +248,10 @@ export async function deletePeriod(periodId, periodLabel = null) {
   const ok = await sbSet(KEYS.PERIODS, trimmed);
   cacheSet(KEYS.PERIODS, trimmed);
   try { await updateMeta(); } catch {}
+  // نعيد تحميل الصفحة عشان الواجهة تعكس الحذف فوراً (تتجنب مشكلة الحالة القديمة)
+  if (ok && typeof window !== "undefined") {
+    setTimeout(() => window.location.reload(), 400);
+  }
   return { ok };
 }
 
