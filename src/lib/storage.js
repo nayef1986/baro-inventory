@@ -153,7 +153,19 @@ export async function saveProducts(products) {
 // ─── Periods ─────────────────────────────────────────────────
 
 export async function loadPeriods() {
-  return (await load(KEYS.PERIODS)) ?? [];
+  const periods = (await load(KEYS.PERIODS)) ?? [];
+  // نضمن id لكل فترة (الفترات القديمة قد تكون بدون id → الحذف الفردي يفشل)
+  let changed = false;
+  const fixed = periods.map((p, i) => {
+    if (p && (p.id == null || p.id === "")) {
+      changed = true;
+      return { ...p, id: `p_${i}_${p.uploadDate ?? ""}_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}` };
+    }
+    return p;
+  });
+  // لو أصلحنا id ناقص، نحفظ النسخة المصلّحة (مرة وحدة)
+  if (changed) { sbSet(KEYS.PERIODS, fixed).catch(()=>{}); cacheSet(KEYS.PERIODS, fixed); }
+  return fixed;
 }
 
 export async function savePeriods(periods) {
@@ -188,18 +200,39 @@ export async function deleteAllPeriods() {
   return { ok: true };
 }
 
-export async function deletePeriod(periodId) {
+export async function deletePeriod(periodId, periodLabel = null) {
   // نجيب أحدث نسخة (نتجاوز الكاش) عشان الحذف يشتغل بدقة
   let periods = await sbGet(KEYS.PERIODS);
   if (!Array.isArray(periods)) periods = await loadPeriods();
   periods = Array.isArray(periods) ? periods : [];
-  const filtered = periods.filter(p => String(p.id) !== String(periodId));
+  // نطابق بالـid أولاً
+  let filtered = periods.filter(p => String(p?.id ?? "") !== String(periodId));
+  // لو ما انحذف شي والـid فاضي/قديم → نجرّب بالتسمية (احتياطي)
+  if (filtered.length === periods.length && periodLabel != null) {
+    let removedOne = false;
+    filtered = periods.filter(p => {
+      if (!removedOne && String(p?.label ?? "") === String(periodLabel)) { removedOne = true; return false; }
+      return true;
+    });
+  }
   if (filtered.length === periods.length) {
-    // ما لقى الفترة — نحدّث الكاش على كل حال ونرجّع نجاح (ربما محذوفة أصلاً)
     cacheSet(KEYS.PERIODS, filtered);
     return { ok: true, notFound: true };
   }
-  // نحفظ مباشرة في Supabase + نحدّث الكاش
+  const trimmed = filtered.slice(-MAX_PERIODS);
+  const ok = await sbSet(KEYS.PERIODS, trimmed);
+  cacheSet(KEYS.PERIODS, trimmed);
+  try { await updateMeta(); } catch {}
+  return { ok };
+}
+
+// حذف فترة بالفهرس (احتياطي — لو الـid ناقص)
+export async function deletePeriodByIndex(index) {
+  let periods = await sbGet(KEYS.PERIODS);
+  if (!Array.isArray(periods)) periods = await loadPeriods();
+  periods = Array.isArray(periods) ? periods : [];
+  if (index < 0 || index >= periods.length) return { ok: false };
+  const filtered = periods.filter((_, i) => i !== index);
   const ok = await sbSet(KEYS.PERIODS, filtered.slice(-MAX_PERIODS));
   cacheSet(KEYS.PERIODS, filtered.slice(-MAX_PERIODS));
   try { await updateMeta(); } catch {}
