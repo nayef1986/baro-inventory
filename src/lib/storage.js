@@ -177,25 +177,7 @@ export async function loadPeriods() {
 }
 
 export async function savePeriods(periods) {
-  // نحذف salesNames فقط (تكبّر الحجم بلا داعٍ) — نحافظ على صيغة { qty, totalPrice }
-  // مهم: صفحات HTML (المستودع/الفروع) تقرأ v.qty مباشرة — لا نغيّر الصيغة
-  const slim = (periods || []).map(per => {
-    if (!per || !per.sales) return per;
-    const sales = {};
-    for (const branch in per.sales) {
-      sales[branch] = {};
-      for (const bc in per.sales[branch]) {
-        const rec = per.sales[branch][bc];
-        if (!rec) continue;
-        sales[branch][bc] = {
-          qty: Number(rec.qty) || 0,
-          ...(rec.totalPrice != null ? { totalPrice: Number(rec.totalPrice) || 0 } : {}),
-        };
-      }
-    }
-    return { ...per, sales };
-  });
-  return await save(KEYS.PERIODS, slim);
+  return await save(KEYS.PERIODS, periods);
 }
 
 // يفكّ ضغط الفترات المضغوطة من نسخة قديمة (توافق للخلف)
