@@ -177,7 +177,8 @@ export async function loadPeriods() {
 }
 
 export async function savePeriods(periods) {
-  // نضغط كل سجل لمصفوفة [qty, totalPrice] بدل كائن بمفاتيح طويلة (يصغّر الحجم ~66%)
+  // نحذف salesNames فقط (تكبّر الحجم بلا داعٍ) — نحافظ على صيغة { qty, totalPrice }
+  // مهم: صفحات HTML (المستودع/الفروع) تقرأ v.qty مباشرة — لا نغيّر الصيغة
   const slim = (periods || []).map(per => {
     if (!per || !per.sales) return per;
     const sales = {};
@@ -185,17 +186,19 @@ export async function savePeriods(periods) {
       sales[branch] = {};
       for (const bc in per.sales[branch]) {
         const rec = per.sales[branch][bc];
-        // لو مضغوط أصلاً (مصفوفة) نتركه، وإلا نضغطه
-        if (Array.isArray(rec)) { sales[branch][bc] = rec; }
-        else { sales[branch][bc] = [Number(rec.qty) || 0, Number(rec.totalPrice) || 0]; }
+        if (!rec) continue;
+        sales[branch][bc] = {
+          qty: Number(rec.qty) || 0,
+          ...(rec.totalPrice != null ? { totalPrice: Number(rec.totalPrice) || 0 } : {}),
+        };
       }
     }
-    return { ...per, sales, _c: 1 }; // _c=1 علامة إن الفترة مضغوطة
+    return { ...per, sales };
   });
   return await save(KEYS.PERIODS, slim);
 }
 
-// يفكّ ضغط الفترة: [qty, totalPrice] → { qty, totalPrice }
+// يفكّ ضغط الفترات المضغوطة من نسخة قديمة (توافق للخلف)
 function inflatePeriod(per) {
   if (!per || !per.sales || !per._c) return per;
   const sales = {};
