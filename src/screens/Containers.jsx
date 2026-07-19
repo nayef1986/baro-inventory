@@ -932,8 +932,31 @@ function OrphansScreen({ orphans, products, periods, onUpdateProducts, onBack })
   const [search, setSearch] = useState("");
   const [moving, setMoving] = useState(null);   // الباركود قيد النقل
   const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const containers = useMemo(() => allContainers(products), [products]);
+
+  // ننشئ كل اليتامى دفعة وحدة ككونتينر "بلا فاتورة"
+  const createOrphanContainer = useCallback(async () => {
+    if (busy || orphans.length === 0) return;
+    setBusy(true);
+    const cont = "📋 بلا فاتورة";
+    const date = new Date().toISOString().slice(0,10);
+    const known = new Set(products.map(p => p.barcode));
+    const newProducts = orphans
+      .filter(o => !known.has(o.barcode))
+      .map(o => ({
+        barcode: o.barcode,
+        name: o.name || o.barcode,
+        container: cont,
+        purchases: [{ qty: Math.ceil(num(o.sold) * 1.2), buyPrice: 0, sellPrice: 0, date, container: cont }],
+      }));
+    if (newProducts.length === 0) { setBusy(false); return; }
+    await onUpdateProducts([...products, ...newProducts]);
+    setMsg(`✅ أُنشئ كونتينر "بلا فاتورة" — ${newProducts.length} منتج. المستودع يستقبل منه الآن، وتقدر تنقل منه لكونتينر ثاني.`);
+    setBusy(false);
+    setTimeout(() => setMsg(""), 5000);
+  }, [busy, orphans, products, onUpdateProducts]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -970,6 +993,14 @@ function OrphansScreen({ orphans, products, periods, onUpdateProducts, onBack })
       </div>
 
       {msg && <div style={{background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:"10px", padding:"10px", fontSize:"13px", color:"#6ee7b7", fontWeight:700}}>{msg}</div>}
+
+      {/* زر: إنشاء كل اليتامى دفعة وحدة ككونتينر */}
+      {orphans.length > 0 && (
+        <button onClick={createOrphanContainer} disabled={busy}
+          style={{width:"100%", background:busy?"#334155":"linear-gradient(135deg,#16a34a,#15803d)", color:"#fff", border:"none", borderRadius:"12px", padding:"14px", fontSize:"14px", fontWeight:900, fontFamily:"Cairo,sans-serif", cursor:busy?"default":"pointer"}}>
+          {busy ? "جاري الإنشاء…" : `📋 أنشئ كونتينر "بلا فاتورة" (${orphans.length} باركود دفعة وحدة)`}
+        </button>
+      )}
 
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالباركود أو الاسم…"
         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm" />
