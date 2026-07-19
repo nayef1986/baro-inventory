@@ -13,7 +13,7 @@ import { parsePurchaseFile, applyPurchases, reversePurchases } from "../lib/pars
 import {
   containerSummary, allContainers, allFactoryCodes,
   getFactoryCode, arabicIncludes, calcProduct,
-  branchNeed, allBranches, num,
+  branchNeed, allBranches, num, findOrphanBarcodes,
 } from "../lib/calc.js";
 import { exportContainerReport, printContainerReport } from "../lib/exporters.js";
 
@@ -860,6 +860,22 @@ const ContainerList = memo(({ products, periods, onSelect }) => {
 
 export default function ContainersScreen({ products, periods, settings, images, onUpdateProducts, onSaveImage, onRemoveImage, onDeleteContainer }) {
   const [selected, setSelected] = useState(null);
+  const [showOrphans, setShowOrphans] = useState(false);
+
+  // الباركودات اللي لها مبيعات بس ما لها فاتورة مشتريات
+  const orphans = useMemo(() => findOrphanBarcodes(products, periods), [products, periods]);
+
+  if (showOrphans) {
+    return (
+      <OrphansScreen
+        orphans={orphans}
+        products={products}
+        periods={periods}
+        onUpdateProducts={onUpdateProducts}
+        onBack={() => setShowOrphans(false)}
+      />
+    );
+  }
 
   if (selected) {
     return (
@@ -880,12 +896,123 @@ export default function ContainersScreen({ products, periods, settings, images, 
   return (
     <div className="space-y-4">
       <UploadSection products={products} onUpdate={onUpdateProducts} />
+
+      {/* فاتورة يتيمة: باركودات لها مبيعات بلا فاتورة مشتريات */}
+      {orphans.length > 0 && (
+        <button onClick={() => setShowOrphans(true)} className="w-full text-right">
+          <div style={{
+            background:"linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.06))",
+            border:"1px solid rgba(245,158,11,0.35)", borderRadius:"16px", padding:"16px",
+            display:"flex", alignItems:"center", gap:"14px",
+          }}>
+            <div style={{fontSize:"32px"}}>📋</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:"16px", fontWeight:900, color:"#fff"}}>بلا فاتورة مشتريات</div>
+              <div style={{fontSize:"12px", color:"#fcd34d", marginTop:"2px"}}>
+                {orphans.length} باركود له مبيعات — اضغط لضمّها لكونتينر
+              </div>
+            </div>
+            <div style={{fontSize:"20px", color:"#f59e0b"}}>←</div>
+          </div>
+        </button>
+      )}
+
       {products.length > 0 && (
         <div>
           <SectionHeader icon="📦" title="الكونتينرات" subtitle="اضغط للتفاصيل" />
           <ContainerList products={products} periods={periods} onSelect={setSelected} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── شاشة الباركودات اليتيمة ─────────────────────────────────
+function OrphansScreen({ orphans, products, periods, onUpdateProducts, onBack }) {
+  const [search, setSearch] = useState("");
+  const [moving, setMoving] = useState(null);   // الباركود قيد النقل
+  const [msg, setMsg] = useState("");
+
+  const containers = useMemo(() => allContainers(products), [products]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return orphans;
+    return orphans.filter(o => o.barcode.toLowerCase().includes(q) || arabicIncludes(o.name || "", q));
+  }, [orphans, search]);
+
+  // ننقل الباركود لكونتينر مختار (كمية شراء 0 مبدئياً)
+  const moveToContainer = useCallback(async (orphan, container) => {
+    const newProduct = {
+      barcode: orphan.barcode,
+      name: orphan.name || orphan.barcode,
+      container,
+      purchases: [{ qty: 0, buyPrice: 0, sellPrice: 0, date: new Date().toISOString().slice(0,10), container }],
+    };
+    await onUpdateProducts([...products, newProduct]);
+    setMoving(null);
+    setMsg(`✅ ${orphan.barcode} → ${container} (عدّل الكمية من الكونتينر)`);
+    setTimeout(() => setMsg(""), 3500);
+  }, [products, onUpdateProducts]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="text-blue-400 font-bold text-sm">← رجوع</button>
+        <div className="font-black text-slate-100">📋 بلا فاتورة مشتريات</div>
+        <div className="w-12" />
+      </div>
+
+      <div style={{background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"12px", padding:"12px", fontSize:"12px", color:"#fcd34d", lineHeight:1.7}}>
+        هذي الباركودات لها مبيعات لكن ما لها فاتورة مشتريات. اختر كونتينر لكل وحد لتضمّها — كمية الشراء تبدأ بـ0، عدّلها من الكونتينر بعدين.
+      </div>
+
+      {msg && <div style={{background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:"10px", padding:"10px", fontSize:"13px", color:"#6ee7b7", fontWeight:700}}>{msg}</div>}
+
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالباركود أو الاسم…"
+        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm" />
+
+      <div className="text-xs text-slate-500">{filtered.length} باركود</div>
+
+      <div className="space-y-2">
+        {filtered.map(o => (
+          <div key={o.barcode} style={{background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"12px"}}>
+            <div className="flex items-start justify-between gap-2">
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontFamily:"monospace", fontSize:"15px", fontWeight:900, color:"#fff", letterSpacing:"1px"}}>{o.barcode}</div>
+                {o.name && <div style={{fontSize:"12px", color:"#94a3b8", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{o.name}</div>}
+                <div style={{display:"flex", gap:"10px", marginTop:"6px", fontSize:"11px"}}>
+                  <span style={{color:"#fbbf24"}}>مباع: <b>{fmtN(o.sold)}</b></span>
+                  <span style={{color:"#64748b"}}>·</span>
+                  <span style={{color:"#60a5fa"}}>{o.branchCount} فرع</span>
+                </div>
+              </div>
+            </div>
+
+            {moving === o.barcode ? (
+              <div style={{marginTop:"10px"}}>
+                <div style={{fontSize:"11px", color:"#94a3b8", marginBottom:"6px"}}>اختر الكونتينر:</div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:"6px"}}>
+                  {containers.map(c => (
+                    <button key={c} onClick={() => moveToContainer(o, c)}
+                      style={{background:"#2563eb", color:"#fff", border:"none", borderRadius:"8px", padding:"7px 12px", fontSize:"12px", fontWeight:700, cursor:"pointer"}}>
+                      {c}
+                    </button>
+                  ))}
+                  {containers.length === 0 && <div style={{fontSize:"12px", color:"#f87171"}}>لا توجد كونتينرات — ارفع فاتورة شراء أولاً</div>}
+                </div>
+                <button onClick={() => setMoving(null)} style={{marginTop:"8px", fontSize:"12px", color:"#94a3b8", background:"none", border:"none", cursor:"pointer"}}>إلغاء</button>
+              </div>
+            ) : (
+              <button onClick={() => setMoving(o.barcode)}
+                style={{width:"100%", marginTop:"10px", background:"rgba(37,99,235,0.15)", border:"1px solid rgba(37,99,235,0.3)", color:"#60a5fa", borderRadius:"9px", padding:"9px", fontSize:"13px", fontWeight:700, cursor:"pointer"}}>
+                📦 نقل لكونتينر
+              </button>
+            )}
+          </div>
+        ))}
+        {filtered.length === 0 && <EmptyState icon="✅" title="ما فيه باركودات يتيمة" subtitle="كل الباركودات لها فاتورة مشتريات" />}
+      </div>
     </div>
   );
 }
