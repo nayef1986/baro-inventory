@@ -26,6 +26,9 @@ const ProductEditModal = memo(({ product, products, container, onSave, onClose }
   const [disabled,  setDisabled]  = useState(!!product.disabled);
   const [saving,    setSaving]    = useState(false);
   const [err,       setErr]       = useState("");
+  // كمية المشتريات الحالية (مجموع كل الدفعات)
+  const currentQty = (product.purchases ?? []).reduce((s, x) => s + num(x.qty), 0);
+  const [qty,       setQty]       = useState(currentQty);
 
   const handleSave = async () => {
     const newBc = String(barcode).trim();
@@ -37,9 +40,20 @@ const ProductEditModal = memo(({ product, products, container, onSave, onClose }
       return;
     }
     setSaving(true);
+    const newQty = Math.max(0, num(qty));
     const updated = products.map(p => {
       if (p.barcode !== product.barcode) return p;
-      return { ...p, barcode: newBc, name: name.trim(), sellPrice: num(sellPrice), disabled };
+      let purchases = p.purchases ?? [];
+      // لو الكمية تغيّرت، نعدّلها: نضبط أول دفعة على الكمية الجديدة ونشيل الباقي
+      if (newQty !== currentQty) {
+        if (purchases.length === 0) {
+          purchases = [{ container: container ?? p.container, qty: newQty, buyPrice: 0, sellPrice: num(sellPrice), date: new Date().toISOString().slice(0,10) }];
+        } else {
+          // نعدّل أول دفعة على الكمية الجديدة، ونصفّر باقي الدفعات (نبقيها للسجل بكمية 0)
+          purchases = purchases.map((pur, i) => i === 0 ? { ...pur, qty: newQty } : { ...pur, qty: 0 });
+        }
+      }
+      return { ...p, barcode: newBc, name: name.trim(), sellPrice: num(sellPrice), disabled, purchases };
     });
     await onSave(updated);
     setSaving(false);
@@ -66,6 +80,11 @@ const ProductEditModal = memo(({ product, products, container, onSave, onClose }
             <label className="text-xs text-slate-400 font-bold block mb-1">سعر البيع</label>
             <input type="number" value={sellPrice} onChange={e => setSellPrice(e.target.value)}
               className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">كمية المشتريات {qty != currentQty && <span className="text-amber-400">(معدّلة من {fmtN(currentQty)})</span>}</label>
+            <input type="number" value={qty} onChange={e => setQty(e.target.value)} min="0"
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-none focus:border-blue-500" />
           </div>
 
           {/* إطفاء/تشغيل */}
