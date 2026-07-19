@@ -1404,24 +1404,35 @@ async function qrTorch(){
 function qrSuccess(code){
   if (!code) return;
   const t = window._scanTarget; if (!t) return;
+  window._scanTarget = null; // نمنع الالتقاط المزدوج فوراً
   if (navigator.vibrate) navigator.vibrate(70);
-  const msg=document.getElementById("scanMsg");
-  if (msg){ msg.textContent="✓ "+code; msg.style.color="#4ade80"; }
-  const finish = ()=>{
-    closeScanner();
-    const el=document.getElementById(t.targetId);
-    if (el) el.value=code;
-    if (t.setter==="searchTerm"){ searchTerm=code; drawNeeds(document.getElementById("content")); }
-    else { setSearchVar(t.setter, code); const fn=_renderMap[t.renderFn]; if(fn) fn(document.getElementById("content")); }
-    showToast("🔍 بحث: "+code);
-  };
-  if (_html5Qr){ _html5Qr.stop().then(finish).catch(finish); } else finish();
+
+  // 1) نحدّث البحث فوراً (قبل إيقاف الكاميرا — ما ننتظر أي promise)
+  const el = document.getElementById(t.targetId);
+  if (el) el.value = code;
+  if (t.setter==="searchTerm"){ searchTerm = code; }
+  else { setSearchVar(t.setter, code); }
+
+  // 2) نوقف الكاميرا ونشيل الشاشة (مرة وحدة، آمن)
+  const ov = document.getElementById("scanOverlay");
+  const cleanup = ()=>{ if(ov) ov.remove(); _html5Qr=null; _torchOn=false; };
+  const qr = _html5Qr; _html5Qr = null; // نفرّغ المرجع عشان ما ينستدعى مرتين
+  if (qr){ try { qr.stop().then(cleanup).catch(cleanup); } catch { cleanup(); } }
+  else cleanup();
+
+  // 3) نعيد رسم النتائج + رسالة
+  if (t.setter==="searchTerm"){ drawNeeds(document.getElementById("content")); }
+  else { const fn=_renderMap[t.renderFn]; if(fn) fn(document.getElementById("content")); }
+  showToast("🔍 بحث: "+code);
 }
 
 function closeScanner(){
-  const ov=document.getElementById("scanOverlay");
-  const done=()=>{ if(ov) ov.remove(); _html5Qr=null; _torchOn=false; window._scanTarget=null; };
-  if (_html5Qr){ _html5Qr.stop().then(done).catch(done); } else done();
+  window._scanTarget = null;
+  const ov = document.getElementById("scanOverlay");
+  const done = ()=>{ if(ov) ov.remove(); _html5Qr=null; _torchOn=false; };
+  const qr = _html5Qr; _html5Qr = null; // نفرّغ المرجع (يمنع استدعاء stop مرتين)
+  if (qr){ try { qr.stop().then(done).catch(done); } catch { done(); } }
+  else done();
 }
 
 async function init(){
