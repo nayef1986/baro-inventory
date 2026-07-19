@@ -943,16 +943,18 @@ function OrphansScreen({ orphans, products, periods, onUpdateProducts, onBack })
 
   // ننقل الباركود لكونتينر مختار (كمية شراء 0 مبدئياً)
   const moveToContainer = useCallback(async (orphan, container) => {
+    // كمية الشراء = المباع + 20% (تطلع موجبة وتظهر في النواقص صح — تعدّلها لاحقاً)
+    const buyQty = Math.ceil(num(orphan.sold) * 1.2);
     const newProduct = {
       barcode: orphan.barcode,
       name: orphan.name || orphan.barcode,
       container,
-      purchases: [{ qty: 0, buyPrice: 0, sellPrice: 0, date: new Date().toISOString().slice(0,10), container }],
+      purchases: [{ qty: buyQty, buyPrice: 0, sellPrice: 0, date: new Date().toISOString().slice(0,10), container }],
     };
     await onUpdateProducts([...products, newProduct]);
     setMoving(null);
-    setMsg(`✅ ${orphan.barcode} → ${container} (عدّل الكمية من الكونتينر)`);
-    setTimeout(() => setMsg(""), 3500);
+    setMsg(`✅ ${orphan.barcode} → ${container} · شراء: ${buyQty} (مباع ${num(orphan.sold)} +20%)`);
+    setTimeout(() => setMsg(""), 4000);
   }, [products, onUpdateProducts]);
 
   return (
@@ -964,7 +966,7 @@ function OrphansScreen({ orphans, products, periods, onUpdateProducts, onBack })
       </div>
 
       <div style={{background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"12px", padding:"12px", fontSize:"12px", color:"#fcd34d", lineHeight:1.7}}>
-        هذي الباركودات لها مبيعات لكن ما لها فاتورة مشتريات. اختر كونتينر لكل وحد لتضمّها — كمية الشراء تبدأ بـ0، عدّلها من الكونتينر بعدين.
+        هذي الباركودات لها مبيعات لكن ما لها فاتورة مشتريات. اختر كونتينر لكل وحد لتضمّها — كمية الشراء تُحسب تلقائياً (المباع + 20%)، عدّلها من الكونتينر بعدين.
       </div>
 
       {msg && <div style={{background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:"10px", padding:"10px", fontSize:"13px", color:"#6ee7b7", fontWeight:700}}>{msg}</div>}
