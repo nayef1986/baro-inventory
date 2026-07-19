@@ -536,4 +536,31 @@ export function branchTrendAnalysis(products, periods) {
   }).sort((a, b) => b.totalRev - a.totalRev);
 }
 
+// باركودات لها مبيعات لكن ما لها فاتورة مشتريات (يتيمة)
+export function findOrphanBarcodes(products, periods) {
+  const known = new Set((products ?? []).map(p => p.barcode));
+  const orphans = {}; // barcode → { barcode, name, sold, revenue, branches:Set }
+  (periods ?? []).forEach(per => {
+    Object.entries(per.sales ?? {}).forEach(([branch, data]) => {
+      Object.entries(data ?? {}).forEach(([bc, v]) => {
+        if (known.has(bc)) return;              // له فاتورة → نتجاهله
+        const qty = num(v?.qty ?? 0);
+        if (qty <= 0) return;
+        if (!orphans[bc]) orphans[bc] = { barcode: bc, name: "", sold: 0, revenue: 0, branches: new Set(), salesNames: new Set() };
+        orphans[bc].sold += qty;
+        orphans[bc].revenue += num(v?.totalPrice ?? 0);
+        orphans[bc].branches.add(branch);
+        (v?.salesNames ?? []).forEach(n => n && orphans[bc].salesNames.add(n));
+      });
+    });
+  });
+  return Object.values(orphans).map(o => ({
+    barcode: o.barcode,
+    name: [...o.salesNames][0] || "",          // نأخذ أول اسم من المبيعات
+    sold: o.sold,
+    revenue: o.revenue,
+    branchCount: o.branches.size,
+  })).sort((a, b) => b.sold - a.sold);
+}
+
 export { MIN_STOCK };
