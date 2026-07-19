@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مدير المستودع — ALBAROO</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
   *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
@@ -1287,197 +1288,140 @@ _renderMap.renderCounts = renderCounts;
 _renderMap.renderBranchTx = renderBranchTx;
 _renderMap.renderLog = renderLog;
 
-// ═══ ماسح الباركود بالكاميرا (زوم قوي + التقاط سلس) ═══════════
-let _scanStream = null, _scanLoop = null, _scanTrack = null;
-
-// نحمّل ZXing من عدة مصادر (لو فشل الأول نجرّب الثاني)
-async function loadZXing(){
-  if (window.ZXing) return true;
+// ═══ ماسح الباركود — html5-qrcode (الأوثق عالمياً) ═══════════
+let _html5Qr = null;
+async function loadQrLib(){
+  if (window.Html5Qrcode) return true;
   const urls = [
-    "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js",
-    "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js",
-    "https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js",
+    "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
+    "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js",
   ];
   for (const url of urls){
     try {
       await new Promise((res,rej)=>{
-        const s = document.createElement("script");
-        s.src = url; s.onload = res; s.onerror = rej;
-        setTimeout(rej, 8000); // مهلة 8 ثواني
+        const s=document.createElement("script");
+        s.src=url; s.onload=res; s.onerror=rej;
+        setTimeout(rej,8000);
         document.head.appendChild(s);
       });
-      if (window.ZXing) return true;
+      if (window.Html5Qrcode) return true;
     } catch {}
   }
   return false;
 }
 
 async function openScanner(targetId, setter, renderFn){
+  window._scanTarget = { targetId, setter, renderFn };
   const ov = document.createElement("div");
   ov.id = "scanOverlay";
   ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:600;display:flex;flex-direction:column";
   ov.innerHTML = `
-    <div style="position:relative;flex:1;overflow:hidden">
-      <video id="scanVideo" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover"></video>
-      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
-        <div style="width:80%;max-width:340px;height:150px;border:3px solid #4ade80;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45)">
-          <div style="height:2px;background:#4ade80;box-shadow:0 0 8px #4ade80;animation:sl 1.6s ease-in-out infinite"></div>
-        </div>
-      </div>
-      <div style="position:absolute;top:14px;right:14px;left:14px;display:flex;justify-content:space-between;align-items:center">
-        <button onclick="closeScanner()" style="background:rgba(0,0,0,0.65);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:100px;padding:10px 18px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">✕ إغلاق</button>
-        <button id="torchBtn" onclick="toggleTorch()" style="background:rgba(0,0,0,0.65);color:#fbbf24;border:1px solid rgba(255,255,255,0.25);border-radius:100px;padding:10px 16px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer;display:none">🔦</button>
-      </div>
-      <div id="scanMsg" style="position:absolute;bottom:96px;right:0;left:0;text-align:center;color:#4ade80;font-family:'Cairo';font-weight:900;font-size:14px;text-shadow:0 2px 6px #000">جاري تجهيز الكاميرا…</div>
-      <!-- إدخال يدوي احتياطي -->
-      <div id="manualBox" style="position:absolute;bottom:20px;right:14px;left:14px;display:none">
-        <div style="display:flex;gap:7px">
-          <input id="manualBc" placeholder="اكتب الباركود يدوياً" style="flex:1;background:rgba(255,255,255,0.95);border:none;border-radius:11px;padding:12px;font-size:15px;font-weight:900;font-family:'Cairo';text-align:center" />
-          <button onclick="manualSubmit()" style="background:#16a34a;color:#fff;border:none;border-radius:11px;padding:0 18px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">بحث</button>
-        </div>
-      </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;background:#0a0e1a">
+      <button onclick="closeScanner()" style="background:#334155;color:#fff;border:none;border-radius:100px;padding:10px 18px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">✕ إغلاق</button>
+      <div style="color:#4ade80;font-family:'Cairo';font-weight:900;font-size:15px">📷 مسح الباركود</div>
+      <button id="torchBtn" onclick="qrTorch()" style="background:#1a2236;color:#fbbf24;border:none;border-radius:100px;padding:10px 16px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer;display:none">🔦</button>
     </div>
-    <div id="zoomBar" style="background:#0a0e1a;padding:14px 16px 20px;display:none">
+    <div id="qrReader" style="flex:1;width:100%;overflow:hidden"></div>
+    <div id="zoomBar" style="background:#0a0e1a;padding:12px 16px 18px;display:none">
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:#94a3b8;font-family:'Cairo';font-size:13px;font-weight:900">🔍 زوم</span>
-        <input id="zoomRange" type="range" min="1" max="8" step="0.1" value="1" oninput="setZoom(this.value)" style="flex:1;accent-color:#4ade80;height:28px" />
-        <span id="zoomVal" style="color:#4ade80;font-family:'Cairo';font-size:13px;font-weight:900;min-width:34px;text-align:center">1x</span>
-      </div>
-      <div style="display:flex;gap:7px;margin-top:9px">
-        ${[1,2,3,5].map(z=>`<button onclick="setZoom(${z});document.getElementById('zoomRange').value=${z}" style="flex:1;background:#1a2236;border:1px solid #2d3a52;color:#cbd5e1;border-radius:9px;padding:9px;font-family:'Cairo';font-weight:900;font-size:13px;cursor:pointer">${z}x</button>`).join("")}
+        <span style="color:#94a3b8;font-family:'Cairo';font-size:13px;font-weight:900">🔍</span>
+        <input id="zoomRange" type="range" min="1" max="5" step="0.1" value="1" oninput="qrZoom(this.value)" style="flex:1;accent-color:#4ade80;height:26px" />
+        <span id="zoomVal" style="color:#4ade80;font-family:'Cairo';font-size:13px;font-weight:900;min-width:32px;text-align:center">1x</span>
       </div>
     </div>
-    <style>@keyframes sl{0%{transform:translateY(0)}50%{transform:translateY(146px)}100%{transform:translateY(0)}}</style>`;
+    <div id="scanMsg" style="text-align:center;color:#7cb3e8;font-family:'Cairo';font-size:13px;padding:0 0 14px;background:#0a0e1a">وجّه الكاميرا على الباركود</div>`;
   document.body.appendChild(ov);
-  window._scanTarget = { targetId, setter, renderFn };
+
+  const ok = await loadQrLib();
+  if (!ok || !window.Html5Qrcode){
+    document.getElementById("scanMsg").textContent = "تعذّر تحميل القارئ — تحقق من الإنترنت";
+    document.getElementById("scanMsg").style.color = "#f87171";
+    return;
+  }
 
   try {
-    _scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode:{ideal:"environment"}, width:{ideal:1920}, height:{ideal:1080} }, audio:false
+    _html5Qr = new Html5Qrcode("qrReader", {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.QR_CODE,
+      ],
+      verbose: false
     });
-    const video = document.getElementById("scanVideo");
-    video.srcObject = _scanStream;
-    await video.play();
-
-    _scanTrack = _scanStream.getVideoTracks()[0];
-    const caps = _scanTrack.getCapabilities ? _scanTrack.getCapabilities() : {};
-    if (caps.zoom){
-      const zb = document.getElementById("zoomBar"), zr = document.getElementById("zoomRange");
-      zb.style.display = "block";
-      zr.min = caps.zoom.min; zr.max = caps.zoom.max; zr.step = caps.zoom.step || 0.1;
-      const startZoom = Math.min(2, caps.zoom.max);
-      zr.value = startZoom; setZoom(startZoom);
-    }
-    if (caps.torch) document.getElementById("torchBtn").style.display = "block";
-    try { await _scanTrack.applyConstraints({ advanced:[{focusMode:"continuous"}] }); } catch {}
-
-    const msg = document.getElementById("scanMsg");
-    if (msg) msg.textContent = "وجّه الكاميرا على الباركود";
-    startDetect(video, targetId, setter, renderFn);
+    const config = {
+      fps: 12,
+      qrbox: (w,h)=>{ const m=Math.min(w,h); return { width: Math.floor(m*0.82), height: Math.floor(m*0.5) }; },
+      aspectRatio: 1.4,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    };
+    await _html5Qr.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText)=>{ qrSuccess(decodedText); },
+      ()=>{} // نتجاهل أخطاء كل فريم
+    );
+    // زوم + فلاش لو مدعوم
+    setTimeout(setupZoomTorch, 800);
   } catch(e){
-    const msg = document.getElementById("scanMsg");
-    if (msg){ msg.textContent = "تعذّر فتح الكاميرا — تأكد من الإذن"; msg.style.color = "#f87171"; }
-    document.getElementById("manualBox").style.display = "block";
+    document.getElementById("scanMsg").textContent = "تعذّر فتح الكاميرا — تأكد من الإذن";
+    document.getElementById("scanMsg").style.color = "#f87171";
   }
 }
 
-function setZoom(v){
-  const val = parseFloat(v);
-  const el = document.getElementById("zoomVal");
-  if (el) el.textContent = val.toFixed(1).replace(/\.0$/,"")+"x";
-  if (_scanTrack) { try { _scanTrack.applyConstraints({ advanced:[{zoom:val}] }); } catch {} }
+function setupZoomTorch(){
+  try {
+    const caps = _html5Qr.getRunningTrackCapabilities();
+    if (caps && caps.zoom){
+      const zb=document.getElementById("zoomBar"), zr=document.getElementById("zoomRange");
+      if (zb && zr){
+        zb.style.display="block";
+        zr.min=caps.zoom.min; zr.max=caps.zoom.max; zr.step=caps.zoom.step||0.1;
+        const z=Math.min(2,caps.zoom.max); zr.value=z; qrZoom(z);
+      }
+    }
+    if (caps && caps.torch){ const tb=document.getElementById("torchBtn"); if(tb) tb.style.display="block"; }
+  } catch {}
 }
-async function toggleTorch(){
-  if (!_scanTrack) return;
-  const on = _scanTrack.getSettings().torch;
-  try { await _scanTrack.applyConstraints({ advanced:[{torch:!on}] });
-    document.getElementById("torchBtn").style.background = !on ? "rgba(251,191,36,0.3)" : "rgba(0,0,0,0.65)";
+function qrZoom(v){
+  const val=parseFloat(v);
+  const el=document.getElementById("zoomVal"); if(el) el.textContent=val.toFixed(1).replace(/\.0$/,"")+"x";
+  try { _html5Qr.applyVideoConstraints({ advanced:[{zoom:val}] }); } catch {}
+}
+let _torchOn=false;
+async function qrTorch(){
+  _torchOn=!_torchOn;
+  try { await _html5Qr.applyVideoConstraints({ advanced:[{torch:_torchOn}] });
+    const tb=document.getElementById("torchBtn"); if(tb) tb.style.background=_torchOn?"rgba(251,191,36,0.3)":"#1a2236";
   } catch {}
 }
 
-function scanDone(code){
+function qrSuccess(code){
   if (!code) return;
   const t = window._scanTarget; if (!t) return;
-  if (navigator.vibrate) navigator.vibrate(60);
-  const msg = document.getElementById("scanMsg");
-  if (msg){ msg.textContent = "✓ "+code; msg.style.color="#4ade80"; }
-  setTimeout(()=>{
+  if (navigator.vibrate) navigator.vibrate(70);
+  const msg=document.getElementById("scanMsg");
+  if (msg){ msg.textContent="✓ "+code; msg.style.color="#4ade80"; }
+  const finish = ()=>{
     closeScanner();
-    const el = document.getElementById(t.targetId);
-    if (el) el.value = code;
-    if (t.setter==="searchTerm"){ searchTerm = code; drawNeeds(document.getElementById("content")); }
+    const el=document.getElementById(t.targetId);
+    if (el) el.value=code;
+    if (t.setter==="searchTerm"){ searchTerm=code; drawNeeds(document.getElementById("content")); }
     else { setSearchVar(t.setter, code); const fn=_renderMap[t.renderFn]; if(fn) fn(document.getElementById("content")); }
     showToast("🔍 بحث: "+code);
-  }, 300);
-}
-function manualSubmit(){
-  const v = (document.getElementById("manualBc")?.value || "").trim();
-  if (v) scanDone(v);
-}
-
-async function startDetect(video, targetId, setter, renderFn){
-  const msg = document.getElementById("scanMsg");
-  // نبدأ بـZXing مباشرة — أوثق للباركود (خاصة Code128)
-  if (msg) msg.textContent = "جاري تحميل القارئ…";
-  const ok = await loadZXing();
-  if (ok && window.ZXing){
-    try {
-      const hints = new Map();
-      const F = window.ZXing.BarcodeFormat, H = window.ZXing.DecodeHintType;
-      if (F && H){
-        hints.set(H.POSSIBLE_FORMATS, [F.CODE_128,F.EAN_13,F.EAN_8,F.CODE_39,F.UPC_A,F.UPC_E,F.ITF,F.CODABAR]);
-        hints.set(H.TRY_HARDER, true);
-      }
-      const reader = new window.ZXing.BrowserMultiFormatReader(hints, 300); // يفحص كل 300ms
-      window._zxReader = reader;
-      if (msg){ msg.textContent = "وجّه الكاميرا على الباركود"; msg.style.color = "#4ade80"; }
-      reader.decodeFromVideoElement(video, (result, err)=>{
-        if (result){ try{reader.reset();}catch{} scanDone(result.getText()); }
-      });
-      // مؤقت: لو ما قرأ خلال 12 ثانية، نعرض الإدخال اليدوي كخيار
-      window._scanFallback = setTimeout(()=>{
-        const mb = document.getElementById("manualBox");
-        if (mb && document.getElementById("scanOverlay")){ mb.style.display = "block"; }
-      }, 12000);
-      return;
-    } catch(e){}
-  }
-  // بديل: BarcodeDetector (لو ZXing ما تحمّل)
-  if ("BarcodeDetector" in window){
-    try {
-      const fmts = await window.BarcodeDetector.getSupportedFormats().catch(()=>null);
-      const want = ["code_128","ean_13","ean_8","code_39","upc_a","upc_e","itf","codabar"];
-      const use = fmts ? want.filter(f=>fmts.includes(f)) : want;
-      if (use.length){
-        const det = new BarcodeDetector({ formats: use });
-        if (msg){ msg.textContent = "وجّه الكاميرا على الباركود"; msg.style.color = "#4ade80"; }
-        const tick = async ()=>{
-          if (!document.getElementById("scanOverlay")) return;
-          try {
-            const codes = await det.detect(video);
-            if (codes && codes.length){ scanDone(codes[0].rawValue); return; }
-          } catch {}
-          setTimeout(tick, 200); // فحص كل 200ms (مو كل frame — أخف)
-        };
-        tick();
-        return;
-      }
-    } catch {}
-  }
-  // ما نفع — إدخال يدوي
-  if (msg){ msg.textContent = "القارئ ما اشتغل — اكتب الباركود يدوياً"; msg.style.color="#fbbf24"; }
-  const mb = document.getElementById("manualBox");
-  if (mb){ mb.style.display = "block"; setTimeout(()=>document.getElementById("manualBc")?.focus(), 200); }
+  };
+  if (_html5Qr){ _html5Qr.stop().then(finish).catch(finish); } else finish();
 }
 
 function closeScanner(){
-  if (_scanLoop) cancelAnimationFrame(_scanLoop);
-  if (window._scanFallback){ clearTimeout(window._scanFallback); window._scanFallback=null; }
-  if (window._zxReader){ try{ window._zxReader.reset(); }catch{} window._zxReader=null; }
-  if (_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; }
-  _scanTrack = null; window._scanTarget = null;
-  const ov = document.getElementById("scanOverlay");
-  if (ov) ov.remove();
+  const ov=document.getElementById("scanOverlay");
+  const done=()=>{ if(ov) ov.remove(); _html5Qr=null; _torchOn=false; window._scanTarget=null; };
+  if (_html5Qr){ _html5Qr.stop().then(done).catch(done); } else done();
 }
 
 async function init(){
