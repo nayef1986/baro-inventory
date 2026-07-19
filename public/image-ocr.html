@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ربط الصور بالباركود — البارو</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
+  body{background:#0a0e1a;color:#e2e8f0;min-height:100vh;padding:16px 14px 40px}
+  .wrap{max-width:640px;margin:0 auto}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .head h1{font-size:19px;font-weight:900;color:#fff}
+  .head p{font-size:11px;color:#64748b;margin-top:2px}
+  .back{background:rgba(37,99,235,0.15);border:1px solid rgba(37,99,235,0.3);color:#60a5fa;border-radius:100px;padding:7px 14px;font-size:12px;font-weight:700;text-decoration:none}
+
+  .drop{background:linear-gradient(135deg,rgba(37,99,235,0.1),rgba(29,78,216,0.04));border:2px dashed rgba(59,130,246,0.4);border-radius:18px;padding:34px 20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:16px}
+  .drop:active{transform:scale(0.99)}
+  .drop.over{border-color:#3b82f6;background:rgba(37,99,235,0.18)}
+  .drop .ico{font-size:44px;margin-bottom:10px}
+  .drop .t{font-size:16px;font-weight:900;color:#fff}
+  .drop .s{font-size:12px;color:#93c5fd;margin-top:4px}
+
+  .bar{background:#1a2236;border-radius:100px;height:10px;overflow:hidden;margin-bottom:6px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:100px;width:0;transition:width .4s ease}
+  .barTxt{font-size:12px;color:#94a3b8;text-align:center;margin-bottom:16px;font-weight:700}
+
+  .row{display:flex;align-items:center;gap:12px;background:#141b2d;border:1px solid #1f2940;border-radius:14px;padding:10px;margin-bottom:9px;opacity:0;transform:translateY(12px);animation:slideIn .45s cubic-bezier(.2,.8,.2,1) forwards}
+  @keyframes slideIn{to{opacity:1;transform:translateY(0)}}
+  .row img{width:60px;height:60px;border-radius:10px;object-fit:cover;background:#0a0e1a;flex-shrink:0;cursor:pointer}
+  .row .mid{flex:1;min-width:0}
+  .row .bc{font-family:monospace;font-size:17px;font-weight:900;letter-spacing:1px;color:#fff;min-height:22px;word-break:break-all}
+  .row .cursor{display:inline-block;width:2px;height:17px;background:#4ade80;margin-right:2px;vertical-align:middle;animation:blink .8s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .row .fn{font-size:10px;color:#64748b;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .st{flex-shrink:0;font-size:22px;width:30px;text-align:center}
+  .row.done{border-color:rgba(74,222,128,0.3)}
+  .row.warn{border-color:rgba(251,191,36,0.3)}
+  .row.fail{border-color:rgba(248,113,113,0.3)}
+  .row .edit{width:100%;background:#0a0e1a;border:1px solid #2d3a52;color:#fff;border-radius:8px;padding:7px 10px;font-size:15px;font-family:monospace;font-weight:900;margin-top:5px;text-align:center}
+  .spin{display:inline-block;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  .actions{position:sticky;bottom:0;background:linear-gradient(transparent,#0a0e1a 30%);padding-top:20px;margin-top:8px;display:flex;gap:9px}
+  .btn{flex:1;border:none;border-radius:13px;padding:14px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer}
+  .btn.approve{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}
+  .btn.approve:disabled{background:#334155;color:#64748b}
+  .btn.export{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#cbd5e1;flex:0 0 auto;padding:14px 18px}
+
+  .toast{position:fixed;bottom:24px;right:50%;transform:translateX(50%) translateY(100px);background:#16a34a;color:#fff;padding:12px 22px;border-radius:100px;font-weight:900;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);transition:.35s;z-index:100;white-space:nowrap}
+  .toast.show{transform:translateX(50%) translateY(0)}
+  .toast.err{background:#dc2626}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+  .stat{background:#141b2d;border:1px solid #1f2940;border-radius:12px;padding:10px;text-align:center}
+  .stat .v{font-size:20px;font-weight:900}
+  .stat .l{font-size:10px;color:#64748b;margin-top:2px}
+  .imgOverlay{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:200;padding:20px}
+  .imgOverlay img{max-width:100%;max-height:90vh;border-radius:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>🏷️ ربط الصور بالباركود</h1>
+      <p>ارفع صور فيها الباركود مكتوب — تُقرأ وتُربط تلقائياً</p>
+    </div>
+    <a href="/" class="back">← النظام</a>
+  </div>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <div class="ico">📸</div>
+    <div class="t">اختر الصور أو اسحبها هنا</div>
+    <div class="s">كل صورة فيها رقم الباركود مكتوب</div>
+  </label>
+
+  <div id="progWrap" style="display:none">
+    <div class="bar"><i id="progFill"></i></div>
+    <div class="barTxt" id="progTxt">جاري القراءة…</div>
+  </div>
+
+  <div id="statsWrap" class="stats" style="display:none">
+    <div class="stat"><div class="v" style="color:#4ade80" id="stDone">0</div><div class="l">✓ مقروء</div></div>
+    <div class="stat"><div class="v" style="color:#fbbf24" id="stWarn">0</div><div class="l">⚠️ راجعه</div></div>
+    <div class="stat"><div class="v" style="color:#f87171" id="stFail">0</div><div class="l">❌ فشل</div></div>
+  </div>
+
+  <div id="rows"></div>
+
+  <div class="actions" id="actions" style="display:none">
+    <button class="btn export" onclick="exportExcel()">📊 Excel</button>
+    <button class="btn approve" id="approveBtn" onclick="approveAll()">✅ اعتمد الكل</button>
+  </div>
+</div>
+
+<div class="imgOverlay" id="imgOverlay" onclick="this.style.display='none'"><img id="imgBig" src=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const IMAGES_KEY = "baro_images_v2";
+
+let ITEMS = []; // { id, dataUrl, name, barcode, status: 'pending'|'reading'|'done'|'warn'|'fail' }
+
+const $ = id => document.getElementById(id);
+const drop = $("drop"), fileInp = $("file");
+
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); handleFiles(e.dataTransfer.files); });
+fileInp.addEventListener("change", e => handleFiles(e.target.files));
+
+function toast(msg, err){ const t=$("toast"); t.textContent=msg; t.className="toast show"+(err?" err":""); setTimeout(()=>t.className="toast",2200); }
+
+// نضغط الصورة لتقليل الحجم قبل الحفظ
+function compress(dataUrl, maxW=700, quality=0.72){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const scale = Math.min(1, maxW/img.width);
+      const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+      const c = document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      res(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = ()=>res(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+async function handleFiles(files){
+  const imgs = [...files].filter(f => f.type.startsWith("image/"));
+  if (!imgs.length) return;
+  $("progWrap").style.display = "block";
+  $("statsWrap").style.display = "grid";
+  $("actions").style.display = "flex";
+
+  // نقرأ كل الصور أولاً
+  const start = ITEMS.length;
+  for (const f of imgs){
+    const dataUrl = await new Promise(r => { const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(f); });
+    const compressed = await compress(dataUrl);
+    ITEMS.push({ id: "i"+Date.now()+Math.random().toString(36).slice(2,6), dataUrl: compressed, name: f.name, barcode: "", status: "pending" });
+  }
+  renderRows();
+
+  // نعالج صورة صورة (الحركة: صف صف)
+  for (let i = start; i < ITEMS.length; i++){
+    updateProgress(i - start, ITEMS.length - start);
+    ITEMS[i].status = "reading"; updateRow(i);
+    const bc = await readBarcode(ITEMS[i].dataUrl);
+    if (bc){ ITEMS[i].barcode = ""; ITEMS[i].status = bc.length >= 8 ? "done" : "warn"; await typeBarcode(i, bc); }
+    else { ITEMS[i].status = "fail"; }
+    updateRow(i); updateStats();
+  }
+  updateProgress(ITEMS.length - start, ITEMS.length - start);
+  $("progTxt").textContent = "✓ خلص — راجع النتائج واعتمد";
+  updateApproveBtn();
+}
+
+function updateProgress(done, total){
+  const pct = total ? Math.round(done/total*100) : 0;
+  $("progFill").style.width = pct + "%";
+  $("progTxt").textContent = `جاري القراءة… ${done}/${total}`;
+}
+
+// نستدعي API قراءة الباركود (نفس اللي في النظام)
+async function readBarcode(dataUrl){
+  try {
+    const base64 = dataUrl.split(",")[1];
+    const r = await fetch("/api/scan-barcode", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: base64 })
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.barcode || (data.candidates && data.candidates[0]) || null;
+  } catch { return null; }
+}
+
+// حركة: الباركود يُكتب حرف حرف
+function typeBarcode(i, bc){
+  return new Promise(res=>{
+    let n = 0;
+    const el = document.querySelector(`#row_${ITEMS[i].id} .bc`);
+    const tick = ()=>{
+      n++;
+      ITEMS[i].barcode = bc.slice(0, n);
+      if (el) el.innerHTML = ITEMS[i].barcode + (n < bc.length ? '<span class="cursor"></span>' : '');
+      if (n < bc.length) setTimeout(tick, 45);
+      else res();
+    };
+    tick();
+  });
+}
+
+function renderRows(){
+  $("rows").innerHTML = ITEMS.map((it,i)=>rowHtml(it,i)).join("");
+}
+function rowHtml(it, i){
+  const stIco = { pending:"⏳", reading:'<span class="spin">⏳</span>', done:"✅", warn:"⚠️", fail:"❌" }[it.status] || "";
+  const cls = ["done","warn","fail"].includes(it.status) ? " "+it.status : "";
+  const editable = it.status === "warn" || it.status === "fail" || it.status === "done";
+  return `<div class="row${cls}" id="row_${it.id}" style="animation-delay:${i*40}ms">
+    <img src="${it.dataUrl}" onclick="showImg('${it.id}')">
+    <div class="mid">
+      <div class="bc">${it.barcode || (it.status==="reading"?'<span style="color:#64748b;font-size:12px">جاري القراءة…</span>':'<span style="color:#64748b;font-size:12px">—</span>')}</div>
+      <div class="fn">${it.name}</div>
+      ${editable ? `<input class="edit" value="${it.barcode}" placeholder="اكتب الباركود" oninput="editBc('${it.id}',this.value)">` : ''}
+    </div>
+    <div class="st">${stIco}</div>
+  </div>`;
+}
+function updateRow(i){
+  const el = document.getElementById("row_"+ITEMS[i].id);
+  if (el) el.outerHTML = rowHtml(ITEMS[i], i);
+}
+function editBc(id, val){
+  const it = ITEMS.find(x=>x.id===id);
+  if (!it) return;
+  it.barcode = val.trim();
+  it.status = it.barcode.length >= 8 ? "done" : (it.barcode ? "warn" : "fail");
+  const row = document.getElementById("row_"+id);
+  if (row){ row.className = "row " + it.status; row.querySelector(".st").innerHTML = {done:"✅",warn:"⚠️",fail:"❌"}[it.status]; }
+  updateStats(); updateApproveBtn();
+}
+
+function updateStats(){
+  $("stDone").textContent = ITEMS.filter(x=>x.status==="done").length;
+  $("stWarn").textContent = ITEMS.filter(x=>x.status==="warn").length;
+  $("stFail").textContent = ITEMS.filter(x=>x.status==="fail").length;
+}
+function updateApproveBtn(){
+  const ready = ITEMS.filter(x=>x.barcode && x.barcode.length>=6).length;
+  const btn = $("approveBtn");
+  btn.disabled = ready === 0;
+  btn.textContent = ready ? `✅ اعتمد (${ready} صورة)` : "✅ اعتمد الكل";
+}
+
+function showImg(id){ const it=ITEMS.find(x=>x.id===id); if(it){ $("imgBig").src=it.dataUrl; $("imgOverlay").style.display="flex"; } }
+
+// نعتمد: نربط كل صورة بباركودها ونحفظ في Supabase
+async function approveAll(){
+  const ready = ITEMS.filter(x => x.barcode && x.barcode.length >= 6);
+  if (!ready.length){ toast("ما فيه باركود صالح", true); return; }
+  const btn = $("approveBtn"); btn.disabled = true; btn.textContent = "جاري الحفظ…";
+  try {
+    // نجيب الصور الحالية من Supabase
+    let images = {};
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/baro_store?key=eq.${IMAGES_KEY}&select=value`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      });
+      const rows = await r.json();
+      if (rows && rows[0] && rows[0].value) images = rows[0].value;
+    } catch {}
+    // نضيف الصور الجديدة (الباركود = المفتاح)
+    ready.forEach(it => { images[it.barcode] = it.dataUrl; });
+    // نحفظ
+    const up = await fetch(`${SUPABASE_URL}/rest/v1/baro_store`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", apikey: SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, Prefer:"resolution=merge-duplicates" },
+      body: JSON.stringify({ key: IMAGES_KEY, value: images })
+    });
+    if (!up.ok) throw new Error("فشل الحفظ");
+    toast(`✅ رُبطت ${ready.length} صورة بالباركود`);
+    // نشيل المعتمدة
+    ITEMS = ITEMS.filter(x => !ready.includes(x));
+    renderRows(); updateStats(); updateApproveBtn();
+    if (ITEMS.length === 0){ $("progTxt").textContent = "✓ تمّ اعتماد كل الصور"; }
+  } catch(e){
+    toast("فشل الحفظ — حاول مرة ثانية", true);
+    btn.disabled = false;
+  }
+  updateApproveBtn();
+}
+
+// تصدير جدول Excel (CSV) — الصورة (اسم الملف) + الباركود
+function exportExcel(){
+  const rows = [["اسم الصورة","الباركود","الحالة"]];
+  ITEMS.forEach(it => rows.push([it.name, it.barcode, it.status]));
+  const csv = "\uFEFF" + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `باركود_الصور_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+</script>
+</body>
+</html>
