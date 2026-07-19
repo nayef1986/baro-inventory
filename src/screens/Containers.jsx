@@ -29,6 +29,13 @@ const ProductEditModal = memo(({ product, products, container, onSave, onClose }
   // كمية المشتريات الحالية (مجموع كل الدفعات)
   const currentQty = (product.purchases ?? []).reduce((s, x) => s + num(x.qty), 0);
   const [qty,       setQty]       = useState(currentQty);
+  // الكونتينر الحالي + قائمة كل الكونتينرات (للنقل)
+  const currentCont = product.container ?? container ?? "";
+  const [cont,      setCont]      = useState(currentCont);
+  const allConts = useMemo(() => {
+    const set = new Set(products.map(p => p.container).filter(Boolean));
+    return [...set].sort();
+  }, [products]);
 
   const handleSave = async () => {
     const newBc = String(barcode).trim();
@@ -41,19 +48,23 @@ const ProductEditModal = memo(({ product, products, container, onSave, onClose }
     }
     setSaving(true);
     const newQty = Math.max(0, num(qty));
+    const newCont = String(cont).trim() || currentCont;
     const updated = products.map(p => {
       if (p.barcode !== product.barcode) return p;
       let purchases = p.purchases ?? [];
-      // لو الكمية تغيّرت، نعدّلها: نضبط أول دفعة على الكمية الجديدة ونشيل الباقي
+      // لو الكمية تغيّرت، نضبط أول دفعة على الكمية الجديدة
       if (newQty !== currentQty) {
         if (purchases.length === 0) {
-          purchases = [{ container: container ?? p.container, qty: newQty, buyPrice: 0, sellPrice: num(sellPrice), date: new Date().toISOString().slice(0,10) }];
+          purchases = [{ container: newCont, qty: newQty, buyPrice: 0, sellPrice: num(sellPrice), date: new Date().toISOString().slice(0,10) }];
         } else {
-          // نعدّل أول دفعة على الكمية الجديدة، ونصفّر باقي الدفعات (نبقيها للسجل بكمية 0)
           purchases = purchases.map((pur, i) => i === 0 ? { ...pur, qty: newQty } : { ...pur, qty: 0 });
         }
       }
-      return { ...p, barcode: newBc, name: name.trim(), sellPrice: num(sellPrice), disabled, purchases };
+      // لو الكونتينر تغيّر، ننقل المنتج + دفعاته للكونتينر الجديد
+      if (newCont !== currentCont) {
+        purchases = purchases.map(pur => ({ ...pur, container: newCont }));
+      }
+      return { ...p, barcode: newBc, name: name.trim(), sellPrice: num(sellPrice), disabled, container: newCont, purchases };
     });
     await onSave(updated);
     setSaving(false);
@@ -85,6 +96,18 @@ const ProductEditModal = memo(({ product, products, container, onSave, onClose }
             <label className="text-xs text-slate-400 font-bold block mb-1">كمية المشتريات {qty != currentQty && <span className="text-amber-400">(معدّلة من {fmtN(currentQty)})</span>}</label>
             <input type="number" value={qty} onChange={e => setQty(e.target.value)} min="0"
               className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-bold block mb-1">الكونتينر {cont !== currentCont && <span className="text-amber-400">(ينتقل إلى {cont})</span>}</label>
+            <select value={allConts.includes(cont) ? cont : "__new__"} onChange={e => { if (e.target.value === "__new__") setCont(""); else setCont(e.target.value); }}
+              className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500">
+              {allConts.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="__new__">➕ كونتينر جديد…</option>
+            </select>
+            {!allConts.includes(cont) && (
+              <input value={cont} onChange={e => setCont(e.target.value)} placeholder="اكتب اسم الكونتينر الجديد"
+                className="w-full bg-slate-700 border border-blue-500 text-slate-100 rounded-xl px-3 py-2.5 text-sm mt-2 focus:outline-none" />
+            )}
           </div>
 
           {/* إطفاء/تشغيل */}
