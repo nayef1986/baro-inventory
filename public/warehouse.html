@@ -1416,29 +1416,8 @@ function manualSubmit(){
 }
 
 async function startDetect(video, targetId, setter, renderFn){
-  // 1) BarcodeDetector (الأسرع — مدعوم في أندرويد/كروم)
-  if ("BarcodeDetector" in window){
-    try {
-      const fmts = await window.BarcodeDetector.getSupportedFormats().catch(()=>null);
-      const want = ["code_128","ean_13","ean_8","code_39","upc_a","upc_e","itf","codabar"];
-      const use = fmts ? want.filter(f=>fmts.includes(f)) : want;
-      if (use.length){
-        const det = new BarcodeDetector({ formats: use });
-        const tick = async ()=>{
-          if (!document.getElementById("scanOverlay")) return;
-          try {
-            const codes = await det.detect(video);
-            if (codes && codes.length){ scanDone(codes[0].rawValue); return; }
-          } catch {}
-          _scanLoop = requestAnimationFrame(tick);
-        };
-        tick();
-        return;
-      }
-    } catch {}
-  }
-  // 2) ZXing (آيفون/سفاري وغيره)
   const msg = document.getElementById("scanMsg");
+  // نبدأ بـZXing مباشرة — أوثق للباركود (خاصة Code128)
   if (msg) msg.textContent = "جاري تحميل القارئ…";
   const ok = await loadZXing();
   if (ok && window.ZXing){
@@ -1449,14 +1428,43 @@ async function startDetect(video, targetId, setter, renderFn){
         hints.set(H.POSSIBLE_FORMATS, [F.CODE_128,F.EAN_13,F.EAN_8,F.CODE_39,F.UPC_A,F.UPC_E,F.ITF,F.CODABAR]);
         hints.set(H.TRY_HARDER, true);
       }
-      const reader = new window.ZXing.BrowserMultiFormatReader(hints);
+      const reader = new window.ZXing.BrowserMultiFormatReader(hints, 300); // يفحص كل 300ms
       window._zxReader = reader;
-      if (msg) msg.textContent = "وجّه الكاميرا على الباركود";
-      reader.decodeFromVideoElement(video, (result)=>{ if (result){ try{reader.reset();}catch{} scanDone(result.getText()); } });
+      if (msg){ msg.textContent = "وجّه الكاميرا على الباركود"; msg.style.color = "#4ade80"; }
+      reader.decodeFromVideoElement(video, (result, err)=>{
+        if (result){ try{reader.reset();}catch{} scanDone(result.getText()); }
+      });
+      // مؤقت: لو ما قرأ خلال 12 ثانية، نعرض الإدخال اليدوي كخيار
+      window._scanFallback = setTimeout(()=>{
+        const mb = document.getElementById("manualBox");
+        if (mb && document.getElementById("scanOverlay")){ mb.style.display = "block"; }
+      }, 12000);
       return;
+    } catch(e){}
+  }
+  // بديل: BarcodeDetector (لو ZXing ما تحمّل)
+  if ("BarcodeDetector" in window){
+    try {
+      const fmts = await window.BarcodeDetector.getSupportedFormats().catch(()=>null);
+      const want = ["code_128","ean_13","ean_8","code_39","upc_a","upc_e","itf","codabar"];
+      const use = fmts ? want.filter(f=>fmts.includes(f)) : want;
+      if (use.length){
+        const det = new BarcodeDetector({ formats: use });
+        if (msg){ msg.textContent = "وجّه الكاميرا على الباركود"; msg.style.color = "#4ade80"; }
+        const tick = async ()=>{
+          if (!document.getElementById("scanOverlay")) return;
+          try {
+            const codes = await det.detect(video);
+            if (codes && codes.length){ scanDone(codes[0].rawValue); return; }
+          } catch {}
+          setTimeout(tick, 200); // فحص كل 200ms (مو كل frame — أخف)
+        };
+        tick();
+        return;
+      }
     } catch {}
   }
-  // 3) ما نفع — نعطيه إدخال يدوي بدل ما نوقف
+  // ما نفع — إدخال يدوي
   if (msg){ msg.textContent = "القارئ ما اشتغل — اكتب الباركود يدوياً"; msg.style.color="#fbbf24"; }
   const mb = document.getElementById("manualBox");
   if (mb){ mb.style.display = "block"; setTimeout(()=>document.getElementById("manualBc")?.focus(), 200); }
@@ -1464,6 +1472,7 @@ async function startDetect(video, targetId, setter, renderFn){
 
 function closeScanner(){
   if (_scanLoop) cancelAnimationFrame(_scanLoop);
+  if (window._scanFallback){ clearTimeout(window._scanFallback); window._scanFallback=null; }
   if (window._zxReader){ try{ window._zxReader.reset(); }catch{} window._zxReader=null; }
   if (_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; }
   _scanTrack = null; window._scanTarget = null;
