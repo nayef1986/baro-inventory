@@ -355,6 +355,7 @@ function injectOrphans(){
 // النواقص مقسّمة بالكونتينر
 function computeNeeds(){
   if (!SALES_MAP) SALES_MAP = buildSalesMap();
+  if (_txIndex === null) buildTxIndex(); // الفهرس مرة وحدة (الحل الجذري للأداء)
   const needs = [];
   PRODUCTS.forEach(p=>{
     const bought = totalPurchases(p);
