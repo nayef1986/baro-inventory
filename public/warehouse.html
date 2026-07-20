@@ -553,8 +553,8 @@ function renderApp(){
     ${activeTab==='branchtx'?`<div style="display:flex;gap:7px;margin-bottom:10px"><input id="btxSearchBox" placeholder="🔍 بحث بالباركود/الفرع/رقم الفاتورة…" oninput="onSearchType('btxSearchBox','btxSearch','renderBranchTx',this.value)" value="${btxSearch}" style="flex:1;min-width:0;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:10px" /><button onclick="openScanner('btxSearchBox','btxSearch','renderBranchTx')" style="background:#7c3aed;border:none;border-radius:12px;padding:0 15px;font-size:20px;cursor:pointer;flex-shrink:0" title="بحث بالكاميرا">📷</button></div>`:''}
     ${activeTab==='log'?`<div style="display:flex;gap:7px;margin-bottom:10px"><input id="logSearchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="onSearchType('logSearchBox','logSearch','renderLog',this.value)" value="${logSearch}" style="flex:1;min-width:0;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:10px" /><button onclick="openScanner('logSearchBox','logSearch','renderLog')" style="background:#7c3aed;border:none;border-radius:12px;padding:0 15px;font-size:20px;cursor:pointer;flex-shrink:0" title="بحث بالكاميرا">📷</button></div>`:''}
     <div id="content"></div>`;
-  perf("renderStats", renderStats);
-  perf("renderContent", renderContent);
+  renderStats();
+  renderContent();
 }
 let searchTerm = "";
 let logSearch = "";
@@ -575,7 +575,6 @@ async function refreshAll(){
     }
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
     loadRegions();
-    injectOrphans(); // نضيف الباركودات اليتيمة للنواقص تلقائياً
     DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
     showToast("تم التحديث ✓");
   } catch(e){ DATA_LOADED = false; showToast("تعذّر التحديث"); }
@@ -1649,29 +1648,15 @@ function closeScanner(){
 }
 
 async function init(){
-  const diag = (msg) => { const a=document.getElementById("app"); if(a) a.innerHTML = `<div style="padding:40px;text-align:center;color:#7cb3e8;font-family:Cairo"><div style="font-size:32px;margin-bottom:12px">⏳</div><div style="font-size:14px">${msg}</div></div>`; };
   try {
-    diag("جاري تحميل البيانات…");
     const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
-    diag(`تحميل: ${PRODUCTS.length} منتج · ${TRANSFERS.length} تحويل · ${PERIODS.length} فترة`);
-    console.log(`📊 البيانات: منتجات=${PRODUCTS.length} تحويلات=${TRANSFERS.length} فترات=${PERIODS.length} صور=${Object.keys(IMAGES).length}`);
-    diag("تنظيم المناطق…"); loadRegions();
-    diag("فحص الباركودات اليتيمة…");
-    const beforeOrphan = PRODUCTS.length;
-    perf("injectOrphans", injectOrphans);
-    const orphanCount = PRODUCTS.length - beforeOrphan;
-    console.log(`📋 يتامى محقونة: ${orphanCount} (المنتجات صارت ${PRODUCTS.length})`);
-    if (orphanCount > 500) console.warn(`⚠️ يتامى كثيرة (${orphanCount}) — قد تبطّئ الحساب`);
-    diag(`بناء الفهارس… (${PRODUCTS.length} منتج · ${orphanCount} يتيم)`);
-    if(_txIndex===null) buildTxIndex();
+    loadRegions();
     DATA_LOADED = (prods !== null);
-    diag("عرض الشاشة…");
   } catch(e){
-    console.error("خطأ init:", e);
-    document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة<br><span style="font-size:11px;color:#f87171">${e.message||e}</span></div>`;
+    document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
     return;
   }
   renderApp();
