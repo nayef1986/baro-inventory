@@ -291,7 +291,10 @@ function buildSalesMap(){
 
 // نضيف الباركودات اليتيمة (لها مبيعات بس ما لها فاتورة) كمنتجات مؤقتة
 // كمية الشراء = المباع + 20% → تظهر في النواقص فوراً بدون نقل
+let _orphansInjected = false;
 function injectOrphans(){
+  if (_orphansInjected) return; // مرة وحدة فقط (يمنع التكرار الثقيل)
+  _orphansInjected = true;
   const known = new Set(PRODUCTS.map(p=>p.barcode));
   const orphanAgg = {}; // barcode → { sold, names:Set }
   PERIODS.forEach(per=>{
@@ -826,6 +829,13 @@ function renderCounts(c){
   const counted = Object.values(COUNTS||{});
   // نضيف المنتجات اللي لها تحويل من المستودع بس مو مجرودة (عشان تظهر برضه)
   const countedKeys = new Set(counted.map(e=>e.barcode+"_"+e.branch));
+  // نحسب إجمالي الوارد من المستودع لكل (باركود_فرع) مرة وحدة — بدل تكرار الفلترة
+  const txTotals = {};
+  TRANSFERS.forEach(t=>{
+    if (!(t.from==="المستودع"||t.from==="المستودع الرئيسي") || !t.printed) return;
+    const key = t.barcode+"_"+t.to;
+    txTotals[key] = (txTotals[key]||0) + num(t.qty);
+  });
   const transferOnly = [];
   const seenTx = new Set();
   TRANSFERS.forEach(t=>{
@@ -833,7 +843,7 @@ function renderCounts(c){
     const key = t.barcode+"_"+t.to;
     if (countedKeys.has(key) || seenTx.has(key)) return; // مجرود أصلاً أو مضاف
     seenTx.add(key);
-    transferOnly.push({ barcode:t.barcode, name:t.name, branch:t.to, emp:"—", count:null, calc:0, soldAtCount:0, date:0, _transferOnly:true });
+    transferOnly.push({ barcode:t.barcode, name:t.name, branch:t.to, emp:"—", count:null, calc:0, soldAtCount:0, date:0, _transferOnly:true, _txTotal: txTotals[key]||0 });
   });
   const entries = counted.concat(transferOnly);
   const q = (countSearch||"").trim().toLowerCase();
@@ -856,7 +866,7 @@ function renderCounts(c){
       const isTxOnly = e._transferOnly;
       // منتج مو مجرود (بس له تحويل): نعرض الوارد فقط
       if (isTxOnly){
-        const totalIn = distributedAfter(e.barcode, e.branch, 0); // كل الوارد من المستودع
+        const totalIn = e._txTotal || 0; // محسوب مسبقاً (خفيف)
         return `<div style="background:#0f1626;border-radius:9px;padding:8px 10px;margin-top:6px">
           <div style="display:flex;gap:9px;align-items:center">
           ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(e.name||'').replace(/'/g,'')}')" style="width:42px;height:42px;border-radius:8px;object-fit:cover;background:#fff;cursor:pointer"/>`:`<div style="width:42px;height:42px;border-radius:8px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>`}
