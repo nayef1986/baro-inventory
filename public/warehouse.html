@@ -257,14 +257,29 @@ function copyBarcode(bc){
 }
 
 // إجمالي الموزّع لفرع معين (كل التوزيعات المُرحّلة للسجل — مو بس آخر أسبوع)
-function totalDistributed(bc, branch){
-  return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && t.printed)
-    .reduce((s,t)=>s+num(t.qty),0);
+let _txIndex = null;
+function buildTxIndex(){
+  _txIndex = {};
+  TRANSFERS.forEach(t=>{
+    if (!t.printed) return;
+    const key = t.barcode+"_"+t.to;
+    if (!_txIndex[key]) _txIndex[key] = { total:0, items:[] };
+    _txIndex[key].total += num(t.qty);
+    _txIndex[key].items.push(t);
+  });
 }
-// التحويلات من المستودع لهذا الفرع بعد وقت معيّن (وقت الجرد) — تزيد المتبقي
+function totalDistributed(bc, branch){
+  if (_txIndex === null) buildTxIndex();
+  return _txIndex[bc+"_"+branch]?.total || 0;
+}
+// التحويلات بعد وقت معيّن (وقت الجرد)
 function distributedAfter(bc, branch, sinceTs){
-  return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && t.printed && num(t.date) > num(sinceTs))
-    .reduce((s,t)=>s+num(t.qty),0);
+  if (_txIndex === null) buildTxIndex();
+  const rec = _txIndex[bc+"_"+branch];
+  if (!rec) return 0;
+  let s = 0;
+  for (const t of rec.items){ if (num(t.date) > num(sinceTs)) s += num(t.qty); }
+  return s;
 }
 
 function recentTransfer(bc, branch){
@@ -411,7 +426,7 @@ async function saveProduct(bc){
     added.push(b.branch);
   });
   if (added.length === 0){ showToast("ما فيه فروع معتمدة"); return; }
-  await save("baro_transfers_v2", TRANSFERS);
+  _txIndex = null; await save("baro_transfers_v2", TRANSFERS);
   showToast(`✓ اعتُمد ${added.length} فرع — في تبويب الطباعة`);
   SALES_MAP = null;
   // نعلّم المنتج "معتمد" بدون إعادة حساب أو إعادة رسم كامل (نحافظ على المكان تماماً)
@@ -426,7 +441,7 @@ async function saveProduct(bc){
 async function cancelTransferByDate(date, name){
   if (!confirm(`إلغاء توزيع "${name}"؟\nالكمية سترجع.`)) return;
   TRANSFERS = TRANSFERS.filter(t=>t.date !== date);
-  await save("baro_transfers_v2", TRANSFERS);
+  _txIndex = null; await save("baro_transfers_v2", TRANSFERS);
   SALES_MAP = null;
   showToast("أُلغيت — رجعت الكمية");
   renderContent();
@@ -436,7 +451,7 @@ async function cancelTransferByDate(date, name){
 async function deleteProduct(bc, name){
   if (!confirm(`حذف كل توزيعات "${name}"؟\nكل الكميات سترجع.`)) return;
   TRANSFERS = TRANSFERS.filter(t=>t.barcode !== bc);
-  await save("baro_transfers_v2", TRANSFERS);
+  _txIndex = null; await save("baro_transfers_v2", TRANSFERS);
   SALES_MAP = null;
   openLog = null;
   showToast("حُذف المنتج — رجعت الكميات");
@@ -510,7 +525,7 @@ let logSearch = "";
 let logSort = "recent";
 async function refreshAll(){
   showToast("جاري التحديث…");
-  SALES_MAP = null; currentNeeds = []; approvedNow = {};
+  SALES_MAP = null; currentNeeds = []; approvedNow = {}; _txIndex = null;
   try {
     const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
