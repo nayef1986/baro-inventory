@@ -261,6 +261,11 @@ function totalDistributed(bc, branch){
   return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && t.printed)
     .reduce((s,t)=>s+num(t.qty),0);
 }
+// التحويلات من المستودع لهذا الفرع بعد وقت معيّن (وقت الجرد) — تزيد المتبقي
+function distributedAfter(bc, branch, sinceTs){
+  return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && t.printed && num(t.date) > num(sinceTs))
+    .reduce((s,t)=>s+num(t.qty),0);
+}
 
 function recentTransfer(bc, branch){
   const now = Date.now();
@@ -339,15 +344,21 @@ function computeNeeds(){
       let counted = false, staleCount = false, soldAfter = 0;
       if (cnt){
         const soldAtCount = num(cnt.soldAtCount);
-        soldAfter = Math.max(0, bsold - soldAtCount); // باع كم بعد الجرد
-        if (soldAfter > num(cnt.count)){
-          // 🔴 باع بعد الجرد أكثر من اللي جرده → الجرد صار غلط، ننبّه ونرجع للحساب
-          staleCount = true;
-        } else {
-          // ✅ الجرد سليم: الباقي الفعلي = المجرود − اللي باعه بعد الجرد
-          remaining = num(cnt.count) - soldAfter;
+        // التحويلات من المستودع لهذا الفرع بعد وقت الجرد (تزيد المتبقي)
+        const distAfterCount = distributedAfter(p.barcode, branch, num(cnt.date));
+        if (bsold >= soldAtCount){
+          // ✅ الوضع الطبيعي: المبيعات زادت من وقت الجرد
+          soldAfter = bsold - soldAtCount;                 // باع كم بعد الجرد
+          remaining = num(cnt.count) - soldAfter + distAfterCount; // − المباع بعده + التحويلات بعده
           counted = true;
+        } else {
+          // 🔴 المبيع الحالي أقل من وقت الجرد = المبيعات حُذفت/رُفعت من جديد
+          //    المرجع القديم مات → نعتبر الجرد نظيفاً: نطرح كل المبيعات الحالية للفرع + نضيف التحويلات
+          remaining = num(cnt.count) - bsold + distAfterCount;
+          if (remaining < 0){ staleCount = true; }        // الجرد قديم فعلاً → ننبّه
+          else counted = true;
         }
+        if (remaining < 0) remaining = 0;
       }
       return { branch, sold:bsold, given, remaining, recent, distributed, counted, staleCount, soldAfter, countVal: cnt?num(cnt.count):null };
     }).filter(b=> b.remaining < threshold).sort((a,b)=>a.remaining-b.remaining);
@@ -832,10 +843,16 @@ function renderCounts(c){
       const d = new Date(e.date);
       const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+" "+(d.getHours()+"").padStart(2,"0")+":"+(d.getMinutes()+"").padStart(2,"0");
       // 🔴 كشف الجرد الغلط: باع بعد الجرد أكثر من المجرود
-      let soldAfterNow = 0;
-      PERIODS.forEach(per=>{ const bd = per.sales?.[e.branch]; if (bd) soldAfterNow += num(bd[e.barcode]?.qty??0); });
-      soldAfterNow = Math.max(0, soldAfterNow - num(e.soldAtCount));
+      let soldNow = 0;
+      PERIODS.forEach(per=>{ const bd = per.sales?.[e.branch]; if (bd) soldNow += num(bd[e.barcode]?.qty??0); });
+      const soldAfterNow = Math.max(0, soldNow - num(e.soldAtCount));
       const stale = soldAfterNow > num(e.count);
+      // ✅ المتبقي الآن = المجرود − المبيعات بعد الجرد + التحويلات بعد الجرد (يتحدّث)
+      const distAfter = distributedAfter(e.barcode, e.branch, num(e.date));
+      let liveRemaining;
+      if (soldNow >= num(e.soldAtCount)) liveRemaining = num(e.count) - soldAfterNow + distAfter;
+      else liveRemaining = num(e.count) - soldNow + distAfter; // المبيعات حُذفت/تغيّرت → نظيف
+      liveRemaining = Math.max(0, liveRemaining);
       const staleRow = stale ? `<div style="background:rgba(248,113,113,0.12);border-radius:7px;padding:5px 9px;margin-top:5px;font-size:11px;color:#fca5a5;font-weight:700">🔴 باع ${fmtN(soldAfterNow)} بعد جرده (${fmtN(e.count)}) — راجع الموظف</div>` : "";
       return `<div style="background:${stale?'rgba(248,113,113,0.06)':'#0f1626'};border:${stale?'1px solid rgba(248,113,113,0.3)':'none'};border-radius:9px;padding:8px 10px;margin-top:6px">
         <div style="display:flex;gap:9px;align-items:center">
@@ -846,9 +863,9 @@ function renderCounts(c){
           <div style="font-size:10px;color:#a89fc4;margin-top:2px">👤 ${e.emp||"؟"}</div>
         </div>
         <div style="display:flex;gap:5px;text-align:center">
-          <div style="background:rgba(91,155,213,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#7cb3e8">${fmtN(e.calc)}</div><div style="font-size:8px;color:#5b6b85">محسوب</div></div>
-          <div style="background:rgba(255,255,255,0.06);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#fff">${fmtN(e.count)}</div><div style="font-size:8px;color:#5b6b85">فعلي</div></div>
-          <div style="background:${dc}22;border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:${dc}">${diff>0?"+":""}${diff}</div><div style="font-size:8px;color:#5b6b85">فرق</div></div>
+          <div style="background:rgba(255,255,255,0.06);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#fff">${fmtN(e.count)}</div><div style="font-size:8px;color:#5b6b85">جرده</div></div>
+          <div style="background:rgba(74,222,128,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#4ade80">${fmtN(liveRemaining)}</div><div style="font-size:8px;color:#5b6b85">متبقي الآن</div></div>
+          ${distAfter>0?`<div style="background:rgba(124,179,232,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#7cb3e8">+${fmtN(distAfter)}</div><div style="font-size:8px;color:#5b6b85">وصله</div></div>`:''}
         </div>
         </div>
         ${staleRow}
