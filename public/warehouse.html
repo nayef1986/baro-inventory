@@ -284,6 +284,35 @@ function buildSalesMap(){
   return map;
 }
 
+// نضيف الباركودات اليتيمة (لها مبيعات بس ما لها فاتورة) كمنتجات مؤقتة
+// كمية الشراء = المباع + 20% → تظهر في النواقص فوراً بدون نقل
+function injectOrphans(){
+  const known = new Set(PRODUCTS.map(p=>p.barcode));
+  const orphanAgg = {}; // barcode → { sold, names:Set }
+  PERIODS.forEach(per=>{
+    Object.values(per.sales??{}).forEach(d=>{
+      Object.entries(d).forEach(([bc,v])=>{
+        if (known.has(bc)) return;
+        const q = num(v?.qty??0);
+        if (q<=0) return;
+        if (!orphanAgg[bc]) orphanAgg[bc] = { sold:0, names:new Set() };
+        orphanAgg[bc].sold += q;
+        (v?.salesNames??[]).forEach(n=>n && orphanAgg[bc].names.add(n));
+      });
+    });
+  });
+  const orphanProducts = Object.entries(orphanAgg).map(([bc,o])=>({
+    barcode: bc,
+    name: [...o.names][0] || bc,
+    container: "📋 بلا فاتورة",
+    _orphan: true,
+    purchases: [{ qty: Math.ceil(o.sold * 1.2), buyPrice: 0, sellPrice: 0, container: "📋 بلا فاتورة" }],
+  }));
+  if (orphanProducts.length){
+    PRODUCTS = PRODUCTS.concat(orphanProducts);
+  }
+}
+
 // النواقص مقسّمة بالكونتينر
 function computeNeeds(){
   if (!SALES_MAP) SALES_MAP = buildSalesMap();
@@ -478,6 +507,7 @@ async function refreshAll(){
       return;
     }
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
+    injectOrphans(); // نضيف الباركودات اليتيمة للنواقص تلقائياً
     DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
     showToast("تم التحديث ✓");
   } catch(e){ DATA_LOADED = false; showToast("تعذّر التحديث"); }
@@ -1441,6 +1471,7 @@ async function init(){
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
+    injectOrphans(); // نضيف الباركودات اليتيمة للنواقص تلقائياً
     // ✅ نعتبر التحميل ناجحاً فقط لو وصلنا هنا بدون خطأ. لو prods=null (مفتاح فاضي فعلاً) الحفظ يبقى محمياً بالحارس
     DATA_LOADED = (prods !== null);
   } catch(e){
