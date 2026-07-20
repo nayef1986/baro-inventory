@@ -518,6 +518,7 @@ async function refreshAll(){
       return;
     }
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
+    loadRegions();
     injectOrphans(); // نضيف الباركودات اليتيمة للنواقص تلقائياً
     DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
     showToast("تم التحديث ✓");
@@ -862,10 +863,11 @@ function renderCounts(c){
           <div style="font-family:monospace;font-size:11px;color:#94a3b8">${e.barcode} · ${ds}</div>
           <div style="font-size:10px;color:#a89fc4;margin-top:2px">👤 ${e.emp||"؟"}</div>
         </div>
-        <div style="display:flex;gap:5px;text-align:center">
+        <div style="display:flex;gap:4px;text-align:center;flex-wrap:wrap;justify-content:flex-end">
           <div style="background:rgba(255,255,255,0.06);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#fff">${fmtN(e.count)}</div><div style="font-size:8px;color:#5b6b85">جرده</div></div>
+          <div style="background:rgba(248,113,113,0.1);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#f87171">−${fmtN(soldAfterNow)}</div><div style="font-size:8px;color:#5b6b85">مباع بعده</div></div>
+          <div style="background:rgba(124,179,232,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#7cb3e8">+${fmtN(distAfter)}</div><div style="font-size:8px;color:#5b6b85">وصله</div></div>
           <div style="background:rgba(74,222,128,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#4ade80">${fmtN(liveRemaining)}</div><div style="font-size:8px;color:#5b6b85">متبقي الآن</div></div>
-          ${distAfter>0?`<div style="background:rgba(124,179,232,0.12);border-radius:6px;padding:4px 7px"><div style="font-size:15px;font-weight:900;color:#7cb3e8">+${fmtN(distAfter)}</div><div style="font-size:8px;color:#5b6b85">وصله</div></div>`:''}
         </div>
         </div>
         ${staleRow}
@@ -1296,35 +1298,101 @@ function waBranchLink(branch){
   const msg = `رابط جرد فرع ${branch}:\n${link}\n\nافتح الرابط، اكتب اسمك، وحدّث الكميات الفعلية.`;
   window.open("https://wa.me/?text="+encodeURIComponent(msg), "_blank");
 }
+let REGIONS = {}; // { "منطقة": ["فرع1","فرع2"] }
+async function loadRegions(){
+  try { const r = await load("baro_regions_v2"); REGIONS = r ?? {}; } catch { REGIONS = {}; }
+}
+function branchRegion(branch){
+  for (const reg in REGIONS){ if ((REGIONS[reg]||[]).includes(branch)) return reg; }
+  return "بدون منطقة";
+}
+async function saveRegions(){
+  try { await save("baro_regions_v2", REGIONS); } catch {}
+}
+function assignRegion(branch, region){
+  // نشيله من أي منطقة قديمة
+  for (const reg in REGIONS){ REGIONS[reg] = (REGIONS[reg]||[]).filter(b=>b!==branch); }
+  // نحطه في الجديدة (لو مو "بدون منطقة")
+  if (region && region !== "بدون منطقة"){
+    if (!REGIONS[region]) REGIONS[region] = [];
+    if (!REGIONS[region].includes(branch)) REGIONS[region].push(branch);
+  }
+  // ننظّف المناطق الفاضية
+  Object.keys(REGIONS).forEach(reg=>{ if ((REGIONS[reg]||[]).length===0) delete REGIONS[reg]; });
+  saveRegions();
+  showBranchLinks(); // نعيد الرسم
+}
+function addRegion(){
+  const name = (prompt("اسم المنطقة الجديدة:")||"").trim();
+  if (!name) return;
+  if (!REGIONS[name]) REGIONS[name] = [];
+  saveRegions();
+  showBranchLinks();
+}
+
 function showBranchLinks(){
   const closed = SETTINGS?.closedBranches ?? [];
-  const branches = allBranchesList();
+  // نخفي الفروv المغلقة
+  const branches = allBranchesList().filter(b => !closed.includes(b));
+  const regionNames = [...new Set([...Object.keys(REGIONS), "بدون منطقة"])];
+  // نجمّع الفروع حسب المنطقة
+  const grouped = {};
+  branches.forEach(b => { const r = branchRegion(b); (grouped[r] = grouped[r] || []).push(b); });
+  // ترتيب: المناطق المعرّفة أولاً، "بدون منطقة" أخيراً
+  const orderedRegions = Object.keys(REGIONS).filter(r=>grouped[r]?.length).sort();
+  if (grouped["بدون منطقة"]?.length) orderedRegions.push("بدون منطقة");
+
   const ov = document.createElement("div");
   ov.id = "branchLinksOverlay";
   ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;overflow:auto;padding:16px;-webkit-overflow-scrolling:touch";
+
+  const branchCard = (b) => {
+    const safeB = b.replace(/'/g,"\\'");
+    const curRegion = branchRegion(b);
+    const regionOpts = [...Object.keys(REGIONS), "بدون منطقة"]
+      .filter((v,i,a)=>a.indexOf(v)===i)
+      .map(r=>`<option value="${r}" ${r===curRegion?'selected':''}>${r}</option>`).join("");
+    return `<div style="background:#141b2d;border:1px solid #1f2940;border-radius:12px;padding:13px;margin-bottom:9px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;gap:8px">
+        <div style="font-weight:900;font-size:15px;color:#fff">🏪 ${b}</div>
+        <select onchange="assignRegion('${safeB}',this.value)" style="background:#0f1626;border:1px solid #2d3a52;color:#7cb3e8;border-radius:8px;padding:5px 8px;font-family:'Cairo';font-size:11px;font-weight:700;cursor:pointer">
+          ${regionOpts}
+        </select>
+      </div>
+      <div style="background:#0f1626;border:1px solid #2d3a52;border-radius:8px;padding:8px 10px;font-family:monospace;font-size:10px;color:#94a3b8;word-break:break-all;margin-bottom:8px;line-height:1.5">${branchLink(b)}</div>
+      <div style="display:flex;gap:7px">
+        <button onclick="copyBranchLink('${safeB}')" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">📋 نسخ</button>
+        <a href="${branchLink(b)}" target="_blank" rel="noopener" style="flex:1;background:#7c3aed;color:#fff;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';text-decoration:none;display:flex;align-items:center;justify-content:center">🔗 فتح</a>
+        <a href="https://wa.me/?text=${encodeURIComponent('رابط جرد فرع '+b+':\n'+branchLink(b)+'\n\nافتح الرابط، اكتب اسمك، وحدّث الكميات الفعلية.')}" target="_blank" rel="noopener" style="flex:1;background:#16a34a;color:#fff;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';text-decoration:none;display:flex;align-items:center;justify-content:center">💬 واتساب</a>
+      </div>
+    </div>`;
+  };
+
+  const regionBlock = (reg) => {
+    const list = (grouped[reg]||[]).sort();
+    if (!list.length) return "";
+    // زر واتساب جماعي للمنطقة
+    return `<div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;padding:9px 12px;background:linear-gradient(135deg,rgba(37,99,235,0.15),rgba(29,78,216,0.05));border:1px solid rgba(59,130,246,0.3);border-radius:11px">
+        <span style="font-size:16px">📍</span>
+        <span style="font-size:15px;font-weight:900;color:#fff;flex:1">${reg}</span>
+        <span style="background:rgba(59,130,246,0.2);color:#93c5fd;font-size:11px;font-weight:900;padding:3px 10px;border-radius:100px">${list.length} فرع</span>
+      </div>
+      ${list.map(branchCard).join("")}
+    </div>`;
+  };
+
   ov.innerHTML = `
     <div style="max-width:560px;margin:0 auto">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="font-size:18px;font-weight:900;color:#fff">🔗 روابط جرد الفروع</div>
         <button onclick="document.getElementById('branchLinksOverlay').remove()" style="background:#334155;color:#fff;border:none;border-radius:10px;padding:9px 16px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">✕ إغلاق</button>
       </div>
-      <div style="background:rgba(91,155,213,0.08);border:1px solid rgba(91,155,213,0.2);border-radius:10px;padding:11px 13px;font-size:12px;color:#7cb3e8;margin-bottom:14px;line-height:1.7">أرسل لكل فرع رابطه (واتساب). الموظف يفتحه، يكتب اسمه، ويحدّث الكميات الفعلية. النتيجة تظهر لك في تبويب 📊 الجرد.</div>
-      ${branches.length===0 ? `<div style="text-align:center;padding:40px;color:#5b6b85">لا فروع</div>` : branches.map(b=>{
-        const isClosed = closed.includes(b);
-        const safeB = b.replace(/'/g,"\\'");
-        return `<div style="background:#141b2d;border:1px solid ${isClosed?'rgba(248,113,113,0.3)':'#1f2940'};border-radius:12px;padding:13px;margin-bottom:9px;${isClosed?'opacity:0.6':''}">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
-            <div style="font-weight:900;font-size:15px;color:#fff">🏪 ${b}</div>
-            ${isClosed?`<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:900;padding:2px 8px;border-radius:100px">مقفل</span>`:''}
-          </div>
-          <div style="background:#0f1626;border:1px solid #2d3a52;border-radius:8px;padding:8px 10px;font-family:monospace;font-size:10px;color:#94a3b8;word-break:break-all;margin-bottom:8px;line-height:1.5">${branchLink(b)}</div>
-          <div style="display:flex;gap:7px">
-            <button onclick="copyBranchLink('${safeB}')" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">📋 نسخ</button>
-            <a href="${branchLink(b)}" target="_blank" rel="noopener" style="flex:1;background:#7c3aed;color:#fff;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';text-decoration:none;display:flex;align-items:center;justify-content:center">🔗 فتح</a>
-            <a href="https://wa.me/?text=${encodeURIComponent('رابط جرد فرع '+b+':\n'+branchLink(b)+'\n\nافتح الرابط، اكتب اسمك، وحدّث الكميات الفعلية.')}" target="_blank" rel="noopener" style="flex:1;background:#16a34a;color:#fff;border-radius:9px;padding:9px;font-size:13px;font-weight:900;font-family:'Cairo';text-decoration:none;display:flex;align-items:center;justify-content:center">💬 واتساب</a>
-          </div>
-        </div>`;
-      }).join("")}
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <div style="flex:1;background:rgba(91,155,213,0.08);border:1px solid rgba(91,155,213,0.2);border-radius:10px;padding:11px 13px;font-size:12px;color:#7cb3e8;line-height:1.6">نظّم الفروع في مناطق. المغلقة مخفية.</div>
+        <button onclick="addRegion()" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:9px 14px;font-family:'Cairo';font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap">➕ منطقة</button>
+      </div>
+      ${branches.length===0 ? `<div style="text-align:center;padding:40px;color:#5b6b85">لا فروv مفتوحة</div>` : orderedRegions.map(regionBlock).join("")}
     </div>`;
   document.body.appendChild(ov);
 }
@@ -1488,6 +1556,7 @@ async function init(){
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
+    loadRegions();
     injectOrphans(); // نضيف الباركودات اليتيمة للنواقص تلقائياً
     // ✅ نعتبر التحميل ناجحاً فقط لو وصلنا هنا بدون خطأ. لو prods=null (مفتاح فاضي فعلاً) الحفظ يبقى محمياً بالحارس
     DATA_LOADED = (prods !== null);
