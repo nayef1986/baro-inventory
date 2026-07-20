@@ -136,16 +136,24 @@ function branchSoldOf(bc){
   PERIODS.forEach(per=>{ const d = per.sales?.[BRANCH]; if (d) sold += num(d[bc]?.qty ?? 0); });
   return sold;
 }
+let _rcvMap = null;
+function buildRcvMap(){
+  _rcvMap = {};
+  TRANSFERS.forEach(t=>{
+    if (t.to!==BRANCH || !t.printed) return;
+    if (!(t.from==="المستودع"||t.from==="المستودع الرئيسي")) return;
+    _rcvMap[t.barcode] = (_rcvMap[t.barcode]||0) + num(t.qty);
+  });
+}
 function receivedFromWh(bc){
-  // كل اللي أرسله المستودع لهذا الفرv (يُحسب فوراً بدون تأكيد استلام)
-  return TRANSFERS.filter(t=>t.barcode===bc && t.to===BRANCH && t.printed && (t.from==="المستودع"||t.from==="المستودع الرئيسي"))
-    .reduce((s,t)=>s+num(t.qty),0);
+  if (_rcvMap === null) buildRcvMap();
+  return _rcvMap[bc] || 0;
 }
 function calcRemaining(bc){
   const sold = branchSoldOf(bc);
   const unit = unitOf(bc);
   const given = Math.ceil(sold/unit)*unit;
-  const received = receivedFromWh(bc);  // الوارد من المستودع (يزيد الرصيد فوراً)
+  const received = receivedFromWh(bc);  // الوارد من المستودع (من الخريطة — خفيف)
   return Math.max(0, given - sold + received);
 }
 
@@ -167,6 +175,7 @@ async function init(){
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_branch_counts_v2"), load("baro_transfers_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; COUNTS = counts ?? {}; TRANSFERS = trans ?? [];
+    _rcvMap = null; // نعيد بناء خريطة الوارد بالبيانات الجديدة
     // الصور منفصلة (كبيرة) — لو فشلت ما تكسر الباقي
     try { IMAGES = (await load("baro_images_v2")) ?? {}; }
     catch(e){ IMAGES = {}; console.warn("تعذّر تحميل الصور", e); }
@@ -418,44 +427,7 @@ function renderReceive(app){
           </div>`;
         }).join("")}`;
 }
-function _oldRenderReceive(app){
-  const pending = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received);
-  const received = TRANSFERS.filter(t=>t.to===BRANCH && t.received);
-  const byBc = {};
-  pending.forEach(t=>{ if(!byBc[t.barcode]) byBc[t.barcode]={name:t.name,barcode:t.barcode,items:[]}; byBc[t.barcode].items.push(t); });
-  const list = Object.values(byBc);
 
-  app.innerHTML = `
-    <div class="hint">📥 هذي البضاعة اللي أرسلها لك المستودع. لما توصلك فعلياً، اضغط "استلمت" — رصيدك يتحدّث تلقائياً.</div>
-    ${list.length===0
-      ? `<div class="empty">${received.length>0?"✅ استلمت كل الشحنات":"لا شحنات جديدة"}</div>`
-      : list.map(pr=>{
-          const img = IMAGES?.[pr.barcode];
-          const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
-          return `<div class="card" style="border-color:rgba(22,163,74,0.3)">
-            <div class="cardh">
-              ${img?`<img src="${img}" onclick="openImgBc('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')"/>`:`<div class="noimg">📦</div>`}
-              <div class="info">
-                <div class="nm">${pr.name||"—"}</div>
-                <div class="bc">${pr.barcode}</div>
-              </div>
-              <div style="text-align:center;background:rgba(22,163,74,0.12);border-radius:9px;padding:7px 11px">
-                <div style="font-size:20px;font-weight:900;color:#4ade80">${fmtN(totalQty)}</div>
-                <div style="font-size:9px;color:#5b6b85">مُرسل</div>
-              </div>
-            </div>
-            <div class="row2" style="margin-top:11px">
-              <div class="counter">
-                <button class="minus" onclick="stepRecv('${pr.barcode.replace(/'/g,'')}',-1,${totalQty})">−</button>
-                <div class="mid"><input type="number" min="0" max="${totalQty}" id="recv_${pr.barcode}" value="${totalQty}" /><div class="cl">كم استلمت فعلياً</div></div>
-                <button class="plus" onclick="stepRecv('${pr.barcode.replace(/'/g,'')}',1,${totalQty})">+</button>
-              </div>
-            </div>
-            <button class="savebtn" style="background:#16a34a" onclick="confirmReceive('${pr.barcode.replace(/'/g,'')}',${totalQty})">✓ تأكيد الاستلام</button>
-          </div>`;
-        }).join("")}
-    ${received.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ استلمت سابقاً: ${received.length} شحنة</div>`:''}`;
-}
 
 // زر +/− لكمية الاستلام
 function stepRecv(bc, delta, max){
