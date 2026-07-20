@@ -131,10 +131,18 @@ function showToast(msg){ const t=document.getElementById("toast"); t.textContent
 function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
 function unitOf(bc){ const p = PRODUCTS.find(x=>x.barcode===bc); const u = num(p?.unitQty ?? 0); return u >= 1 ? u : MIN; }
 
+let _soldMap = null;
+function buildSoldMap(){
+  _soldMap = {};
+  PERIODS.forEach(per=>{
+    const d = per.sales?.[BRANCH];
+    if (!d) return;
+    Object.entries(d).forEach(([bc,v])=>{ _soldMap[bc] = (_soldMap[bc]||0) + num(v?.qty ?? 0); });
+  });
+}
 function branchSoldOf(bc){
-  let sold = 0;
-  PERIODS.forEach(per=>{ const d = per.sales?.[BRANCH]; if (d) sold += num(d[bc]?.qty ?? 0); });
-  return sold;
+  if (_soldMap === null) buildSoldMap();
+  return _soldMap[bc] || 0;
 }
 let _rcvMap = null;
 function buildRcvMap(){
@@ -175,7 +183,7 @@ async function init(){
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_branch_counts_v2"), load("baro_transfers_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; COUNTS = counts ?? {}; TRANSFERS = trans ?? [];
-    _rcvMap = null; // نعيد بناء خريطة الوارد بالبيانات الجديدة
+    _rcvMap = null; _soldMap = null; // نعيد بناء الخرائط بالبيانات الجديدة
     // الصور منفصلة (كبيرة) — لو فشلت ما تكسر الباقي
     try { IMAGES = (await load("baro_images_v2")) ?? {}; }
     catch(e){ IMAGES = {}; console.warn("تعذّر تحميل الصور", e); }
@@ -231,7 +239,12 @@ function branchProductsGrouped(){
     if (!groups[cont]) groups[cont] = [];
     groups[cont].push(p);
   });
-  Object.values(groups).forEach(arr => arr.sort((a,b)=> calcRemaining(b.barcode) - calcRemaining(a.barcode)));
+  // نحسب المتبقي مرة وحدة لكل منتج (بدل استدعاء calcRemaining داخل sort مرات كثيرة)
+  const remCache = {};
+  Object.values(groups).forEach(arr => {
+    arr.forEach(p => { if (remCache[p.barcode] === undefined) remCache[p.barcode] = calcRemaining(p.barcode); });
+    arr.sort((a,b)=> remCache[b.barcode] - remCache[a.barcode]);
+  });
   return groups;
 }
 
