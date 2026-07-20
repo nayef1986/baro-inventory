@@ -258,15 +258,27 @@ function copyBarcode(bc){
 
 // إجمالي الموزّع لفرع معين (كل التوزيعات المُرحّلة للسجل — مو بس آخر أسبوع)
 let _txIndex = null;
+let _txByBc = null; // باركود → تحويلات المستودع (لأداء priorTransfers)
 function buildTxIndex(){
   _txIndex = {};
+  _txByBc = {};
   TRANSFERS.forEach(t=>{
     if (!t.printed) return;
     const key = t.barcode+"_"+t.to;
     if (!_txIndex[key]) _txIndex[key] = { total:0, items:[] };
     _txIndex[key].total += num(t.qty);
     _txIndex[key].items.push(t);
+    // فهرس بالباركود لتحويلات المستودع فقط
+    const fromWh = !t.from || t.from==="المستودع" || t.from==="المستودع الرئيسي";
+    if (fromWh){
+      if (!_txByBc[t.barcode]) _txByBc[t.barcode] = [];
+      _txByBc[t.barcode].push(t);
+    }
   });
+}
+function whTransfersOf(bc){
+  if (_txIndex === null) buildTxIndex();
+  return _txByBc[bc] || [];
 }
 function totalDistributed(bc, branch){
   if (_txIndex === null) buildTxIndex();
@@ -283,9 +295,13 @@ function distributedAfter(bc, branch, sinceTs){
 }
 
 function recentTransfer(bc, branch){
-  const now = Date.now();
-  return TRANSFERS.filter(t=>t.barcode===bc && t.to===branch && (now-t.date) < RECENT_DAYS*86400000)
-    .reduce((s,t)=>s+num(t.qty),0);
+  if (_txIndex === null) buildTxIndex();
+  const rec = _txIndex[bc+"_"+branch];
+  if (!rec) return 0;
+  const now = Date.now(), cutoff = RECENT_DAYS*86400000;
+  let s = 0;
+  for (const t of rec.items){ if ((now-t.date) < cutoff) s += num(t.qty); }
+  return s;
 }
 
 // ✅ المباع/المتبقي: يحسب كل الفروع (يطابق النظام الأساسي)
@@ -383,7 +399,7 @@ function computeNeeds(){
     if (branches.length === 0) return;
     // ✅ هل وزّع المستودع هذا المنتج سابقاً؟ (نقل الفروع فرع→فرv لا يُحسب هنا)
     const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
-    const priorTransfers = TRANSFERS.filter(t=>t.barcode===p.barcode && t.printed && isWh(t.from));
+    const priorTransfers = whTransfersOf(p.barcode); // من الفهرس (خفيف)
     const distributedBefore = priorTransfers.length > 0;
     const lastDistDate = distributedBefore ? Math.max(...priorTransfers.map(t=>num(t.date))) : 0;
     const priorBranches = [...new Set(priorTransfers.map(t=>t.to))];
