@@ -136,11 +136,17 @@ function branchSoldOf(bc){
   PERIODS.forEach(per=>{ const d = per.sales?.[BRANCH]; if (d) sold += num(d[bc]?.qty ?? 0); });
   return sold;
 }
+function receivedFromWh(bc){
+  // كل اللي أرسله المستودع لهذا الفرv (يُحسب فوراً بدون تأكيد استلام)
+  return TRANSFERS.filter(t=>t.barcode===bc && t.to===BRANCH && t.printed && (t.from==="المستودع"||t.from==="المستودع الرئيسي"))
+    .reduce((s,t)=>s+num(t.qty),0);
+}
 function calcRemaining(bc){
   const sold = branchSoldOf(bc);
   const unit = unitOf(bc);
   const given = Math.ceil(sold/unit)*unit;
-  return Math.max(0, given - sold);
+  const received = receivedFromWh(bc);  // الوارد من المستودع (يزيد الرصيد فوراً)
+  return Math.max(0, given - sold + received);
 }
 
 // كل الفروع مرتّبة (لحل رقم الفرع القصير) — نفس ترتيب صفحة الروابط
@@ -371,8 +377,48 @@ function fillAll(){
   showToast(filled>0 ? `⚡ عُبّئ ${filled} منتج بالمحسوب — عدّل واحفظ` : "الكل معبّى مسبقاً");
 }
 
-// ─── تبويب الاستلام ──────────────────────────────────────────
+// ─── تبويب الاستلام (سجل — يُحسب تلقائياً بدون تأكيد) ──────────
 function renderReceive(app){
+  // كل الوارد من المستودv (يُحسب في الرصيد فوراً)
+  const incoming = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && (t.from==="المستودع"||t.from==="المستودع الرئيسي"));
+  const byBc = {};
+  incoming.forEach(t=>{ if(!byBc[t.barcode]) byBc[t.barcode]={name:t.name,barcode:t.barcode,items:[]}; byBc[t.barcode].items.push(t); });
+  const list = Object.values(byBc).sort((a,b)=>{
+    const la = Math.max(...a.items.map(t=>num(t.date))), lb = Math.max(...b.items.map(t=>num(t.date)));
+    return lb - la;
+  });
+  const totalAll = incoming.reduce((s,t)=>s+num(t.qty),0);
+
+  app.innerHTML = `
+    <div class="hint">📥 هذي البضاعة اللي أرسلها لك المستودع — <b>محسوبة في رصيدك تلقائياً</b>. ما تحتاج تأكيد.</div>
+    ${list.length===0
+      ? `<div class="empty">لا شحنات من المستودع</div>`
+      : `<div style="background:rgba(22,163,74,0.1);border:1px solid rgba(22,163,74,0.3);border-radius:12px;padding:12px;margin-bottom:12px;text-align:center">
+           <div style="font-size:24px;font-weight:900;color:#4ade80">${fmtN(totalAll)}</div>
+           <div style="font-size:11px;color:#94a3b8">إجمالي الوارد من المستودع (${list.length} منتج)</div>
+         </div>` +
+        list.map(pr=>{
+          const img = IMAGES?.[pr.barcode];
+          const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
+          const lastDate = new Date(Math.max(...pr.items.map(t=>num(t.date))));
+          const ds = (lastDate.getDate()+"").padStart(2,"0")+"/"+(lastDate.getMonth()+1+"").padStart(2,"0")+" "+(lastDate.getHours()+"").padStart(2,"0")+":"+(lastDate.getMinutes()+"").padStart(2,"0");
+          return `<div class="card" style="border-color:rgba(22,163,74,0.3)">
+            <div class="cardh">
+              ${img?`<img src="${img}" onclick="openImgBc('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')"/>`:`<div class="noimg">📦</div>`}
+              <div class="info">
+                <div class="nm">${pr.name||"—"}</div>
+                <div class="bc">${pr.barcode} · ${ds}</div>
+                ${pr.items.length>1?`<div style="font-size:10px;color:#7cb3e8;margin-top:2px">${pr.items.length} شحنات</div>`:''}
+              </div>
+              <div style="text-align:center;background:rgba(22,163,74,0.12);border-radius:9px;padding:7px 11px">
+                <div style="font-size:20px;font-weight:900;color:#4ade80">${fmtN(totalQty)}</div>
+                <div style="font-size:9px;color:#5b6b85">✓ وصل</div>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}`;
+}
+function _oldRenderReceive(app){
   const pending = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received);
   const received = TRANSFERS.filter(t=>t.to===BRANCH && t.received);
   const byBc = {};
