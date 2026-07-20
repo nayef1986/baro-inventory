@@ -399,11 +399,12 @@ async function saveProduct(bc){
   const n = currentNeeds.find(x=>x.p.barcode===bc);
   if (!n) return;
   const added = [];
+  const batchId = Date.now();
   n.branches.forEach(b=>{
     const key = bc+"_"+b.branch;
     if (excluded[key]) return;
     const qty = num(qtyEdit[key] ?? unitOf(bc));
-    TRANSFERS.push({ barcode:bc, name:n.p.name, from:"المستودع", to:b.branch, qty, sold:b.sold, given:b.given, remaining:b.remaining, date:Date.now(), printed:false });
+    TRANSFERS.push({ barcode:bc, name:n.p.name, from:"المستودع", to:b.branch, qty, sold:b.sold, given:b.given, remaining:b.remaining, date:Date.now(), printed:true, batch:batchId });
     added.push(b.branch);
   });
   if (added.length === 0){ showToast("ما فيه فروع معتمدة"); return; }
@@ -465,7 +466,8 @@ function renderStats(){
 }
 
 function renderApp(){
-  const unprinted = TRANSFERS.filter(t=>!t.printed).length;
+  const _DAY=86400000, _now=Date.now();
+  const unprinted = TRANSFERS.filter(t=> isWh(t.from) && (_now-num(t.date))<_DAY).length;
   document.getElementById("app").innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <div><h1 style="margin:0">🏬 مدير المستودع</h1><div class="sub">توزيع النواقص · ALBAROO</div></div>
@@ -821,7 +823,19 @@ async function saveWhCount(bc, name, calc){
 }
 
 function renderCounts(c){
-  const entries = Object.values(COUNTS||{});
+  const counted = Object.values(COUNTS||{});
+  // نضيف المنتجات اللي لها تحويل من المستودع بس مو مجرودة (عشان تظهر برضه)
+  const countedKeys = new Set(counted.map(e=>e.barcode+"_"+e.branch));
+  const transferOnly = [];
+  const seenTx = new Set();
+  TRANSFERS.forEach(t=>{
+    if (!(t.from==="المستودع"||t.from==="المستودع الرئيسي") || !t.printed) return;
+    const key = t.barcode+"_"+t.to;
+    if (countedKeys.has(key) || seenTx.has(key)) return; // مجرود أصلاً أو مضاف
+    seenTx.add(key);
+    transferOnly.push({ barcode:t.barcode, name:t.name, branch:t.to, emp:"—", count:null, calc:0, soldAtCount:0, date:0, _transferOnly:true });
+  });
+  const entries = counted.concat(transferOnly);
   const q = (countSearch||"").trim().toLowerCase();
   let filtered = entries;
   if (q) filtered = entries.filter(e => (e.barcode||"").toLowerCase().includes(q) || (e.name||"").toLowerCase().includes(q) || (e.branch||"").toLowerCase().includes(q) || (e.emp||"").toLowerCase().includes(q));
@@ -834,13 +848,29 @@ function renderCounts(c){
   c.innerHTML = searchBox + branchNames.map(branch=>{
     const items = byBranch[branch].sort((a,b)=>b.date-a.date);
     const emp = items[0]?.emp || "؟";
-    const diffs = items.map(e=> num(e.count)-num(e.calc));
+    const diffs = items.filter(e=>!e._transferOnly).map(e=> num(e.count)-num(e.calc));
     const short = diffs.filter(d=>d<0).length;
     const over  = diffs.filter(d=>d>0).length;
     const rows = items.map(e=>{
+      const img = IMAGES?.[e.barcode];
+      const isTxOnly = e._transferOnly;
+      // منتج مو مجرود (بس له تحويل): نعرض الوارد فقط
+      if (isTxOnly){
+        const totalIn = distributedAfter(e.barcode, e.branch, 0); // كل الوارد من المستودع
+        return `<div style="background:#0f1626;border-radius:9px;padding:8px 10px;margin-top:6px">
+          <div style="display:flex;gap:9px;align-items:center">
+          ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${(e.name||'').replace(/'/g,'')}')" style="width:42px;height:42px;border-radius:8px;object-fit:cover;background:#fff;cursor:pointer"/>`:`<div style="width:42px;height:42px;border-radius:8px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:900;color:#fff">${e.name||"—"}</div>
+            <div style="font-family:monospace;font-size:11px;color:#94a3b8">${e.barcode}</div>
+            <div style="font-size:10px;color:#fbbf24;margin-top:2px">⚠️ غير مجرود — وارد فقط</div>
+          </div>
+          <div style="background:rgba(124,179,232,0.12);border-radius:6px;padding:4px 9px;text-align:center"><div style="font-size:16px;font-weight:900;color:#7cb3e8">+${fmtN(totalIn)}</div><div style="font-size:8px;color:#5b6b85">وصله</div></div>
+          </div>
+        </div>`;
+      }
       const diff = num(e.count) - num(e.calc);
       const dc = diff<0?"#f87171":diff>0?"#fbbf24":"#4ade80";
-      const img = IMAGES?.[e.barcode];
       const d = new Date(e.date);
       const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+" "+(d.getHours()+"").padStart(2,"0")+":"+(d.getMinutes()+"").padStart(2,"0");
       // 🔴 كشف الجرد الغلط: باع بعد الجرد أكثر من المجرود
@@ -1043,8 +1073,11 @@ function toggleLog(bc){ openLog = (openLog===bc)?null:bc; renderContent(); }
 
 // ─── تبويب جاهز للطباعة ──────────────────────────────────────
 function renderPrintQueue(c){
-  const unprinted = TRANSFERS.filter(t=>!t.printed);
-  if (unprinted.length === 0){ c.innerHTML = `<div class="empty">لا شيء جاهز للطباعة<br><span style="font-size:12px">اعتمد منتجات من تبويب النواقص</span></div>`; return; }
+  // بما إن التحويلات تُحسب فوراً، نعرض تحويلات آخر 24 ساعة للطباعة
+  const DAY = 86400000;
+  const now = Date.now();
+  const unprinted = TRANSFERS.filter(t=> isWh(t.from) && (now - num(t.date)) < DAY);
+  if (unprinted.length === 0){ c.innerHTML = `<div class="empty">لا تحويلات حديثة<br><span style="font-size:12px">اعتمد منتجات من تبويب النواقص</span></div>`; return; }
   // تجميع بالمنتج
   const byProd = {};
   unprinted.forEach(t=>{
@@ -1155,7 +1188,8 @@ function slipCSS(){
 
 // طباعة كل المعتمد غير المطبوع — نفس تصميم النواقص بالضبط
 function printAll(){
-  const unprinted = TRANSFERS.filter(t=>!t.printed);
+  const _DAY2=86400000, _now2=Date.now();
+  const unprinted = TRANSFERS.filter(t=> isWh(t.from) && (_now2-num(t.date))<_DAY2);
   if (unprinted.length === 0) return;
   if (!SALES_MAP) SALES_MAP = buildSalesMap();
   const d = new Date();
