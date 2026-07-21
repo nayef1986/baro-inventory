@@ -974,6 +974,9 @@ function renderCounts(c){
       else liveRemaining = num(e.count) - soldNow + distAfter; // المبيعات حُذفت/تغيّرت → نظيف
       liveRemaining = Math.max(0, liveRemaining);
       const totalReceived = whReceivedTotal(e.barcode, e.branch); // كل الوارد من المستودع
+      // 🔍 تشخيص مؤقت
+      const _rec = _txIndex ? _txIndex[e.barcode+"_"+e.branch] : null;
+      const _diag = _rec ? `تحويلات:${_rec.items.length} | ${_rec.items.map(t=>`${t.from||'فاضي'}→${t.qty}`).join(', ')}` : `مافي مفتاح ${e.barcode}_${e.branch}`;
       const staleRow = stale ? `<div style="background:rgba(248,113,113,0.12);border-radius:7px;padding:5px 9px;margin-top:5px;font-size:11px;color:#fca5a5;font-weight:700">🔴 باع ${fmtN(soldAfterNow)} بعد جرده (${fmtN(e.count)}) — راجع الموظف</div>` : "";
       return `<div style="background:${stale?'rgba(248,113,113,0.06)':'#0f1626'};border:${stale?'1px solid rgba(248,113,113,0.3)':'none'};border-radius:9px;padding:8px 10px;margin-top:6px">
         <div style="display:flex;gap:9px;align-items:center">
@@ -981,6 +984,7 @@ function renderCounts(c){
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:900;color:#fff">${e.name||"—"}</div>
           <div style="font-family:monospace;font-size:11px;color:#94a3b8">${e.barcode} · ${ds}</div>
+          <div style="font-size:9px;color:#fbbf24;margin-top:2px;direction:ltr">${_diag}</div>
           <div style="font-size:10px;color:#a89fc4;margin-top:2px">👤 ${e.emp||"؟"}</div>
         </div>
         <div style="display:flex;gap:4px;text-align:center;flex-wrap:wrap;justify-content:flex-end">
