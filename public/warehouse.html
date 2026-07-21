@@ -1659,15 +1659,23 @@ function closeScanner(){
 }
 
 async function init(){
+  const app = document.getElementById("app");
+  const say = (m) => { if(app) app.innerHTML = `<div style="padding:60px 20px;text-align:center;font-family:Cairo;color:#7cb3e8"><div style="font-size:40px">⏳</div><div style="font-size:16px;margin-top:16px;font-weight:900">${m}</div></div>`; };
   try {
+    say("١- جاري تحميل البيانات من السيرفر…");
     const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
-    loadRegions();
+    say(`٢- تحمّل: ${PRODUCTS.length} منتج · ${TRANSFERS.length} تحويل · ${Object.keys(IMAGES).length} صورة`);
+    await new Promise(r=>setTimeout(r,400));
+    say("٣- تجهيز المناطق…");
+    await loadRegions();
+    say("٤- عرض الواجهة…");
+    await new Promise(r=>setTimeout(r,200));
     DATA_LOADED = (prods !== null);
   } catch(e){
-    document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
+    if(app) app.innerHTML = `<div style="padding:40px;text-align:center;color:#f87171;font-family:Cairo">تعذّر التحميل<br><span style="font-size:12px">${e.message||e}</span></div>`;
     return;
   }
   renderApp();
