@@ -376,7 +376,9 @@ function computeNeeds(){
   if (!SALES_MAP) SALES_MAP = buildSalesMap();
   if (_txIndex === null) buildTxIndex(); // الفهرس مرة وحدة (الحل الجذري للأداء)
   const needs = [];
+  let _cnI = 0;
   PRODUCTS.forEach(p=>{
+    _cnI++;
     const bought = totalPurchases(p);
     const branchSales = SALES_MAP[p.barcode];
     if (!branchSales) return;
@@ -592,12 +594,21 @@ function renderContent(){
   if (activeTab === "print"){ renderPrintQueue(c); return; }
   // النواقص
   if (currentNeeds.length === 0 && !SALES_MAP){
-    c.innerHTML = `<div class="loading"><span class="spin">⏳</span><div style="margin-top:10px;font-size:13px">جاري حساب النواقص…</div></div>`;
-    setTimeout(()=>{ try { currentNeeds = computeNeeds(); } catch(e){ c.innerHTML = `<div class="empty">خطأ في الحساب<br><span style="font-size:11px;color:#f87171">${e.message}</span></div>`; return; } renderStats(); routeNeeds(c); }, 50);
+    c.innerHTML = `<div style="text-align:center;padding:40px"><button onclick="startCompute()" style="background:#2563eb;color:#fff;border:none;border-radius:12px;padding:16px 32px;font-size:16px;font-weight:900;font-family:'Cairo';cursor:pointer">📦 احسب النواقص</button><div style="margin-top:12px;font-size:12px;color:#5b6b85">اضغط لعرض النواقص</div></div>`;
   } else {
     if (!SALES_MAP || currentNeeds.length===0){ try { currentNeeds = computeNeeds(); } catch(e){ c.innerHTML = `<div class="empty">خطأ: ${e.message}</div>`; return; } }
     renderStats(); routeNeeds(c);
   }
+}
+
+function startCompute(){
+  const c = document.getElementById("content");
+  c.innerHTML = `<div class="loading"><span class="spin">⏳</span><div style="margin-top:10px">جاري الحساب…</div></div>`;
+  setTimeout(()=>{
+    try { currentNeeds = computeNeeds(); }
+    catch(e){ c.innerHTML = `<div class="empty">خطأ في الحساب<br><span style="font-size:11px;color:#f87171">${e.message}</span></div>`; return; }
+    renderStats(); routeNeeds(c);
+  }, 30);
 }
 
 function routeNeeds(c){
