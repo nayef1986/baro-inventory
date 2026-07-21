@@ -593,9 +593,9 @@ function renderContent(){
   // النواقص
   if (currentNeeds.length === 0 && !SALES_MAP){
     c.innerHTML = `<div class="loading"><span class="spin">⏳</span><div style="margin-top:10px;font-size:13px">جاري حساب النواقص…</div></div>`;
-    setTimeout(()=>{ currentNeeds = perf("computeNeeds", computeNeeds); renderStats(); routeNeeds(c); }, 50);
+    setTimeout(()=>{ try { currentNeeds = computeNeeds(); } catch(e){ c.innerHTML = `<div class="empty">خطأ في الحساب<br><span style="font-size:11px;color:#f87171">${e.message}</span></div>`; return; } renderStats(); routeNeeds(c); }, 50);
   } else {
-    if (!SALES_MAP || currentNeeds.length===0) currentNeeds = perf("computeNeeds", computeNeeds);
+    if (!SALES_MAP || currentNeeds.length===0){ try { currentNeeds = computeNeeds(); } catch(e){ c.innerHTML = `<div class="empty">خطأ: ${e.message}</div>`; return; } }
     renderStats(); routeNeeds(c);
   }
 }
