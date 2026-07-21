@@ -632,10 +632,10 @@ async function refreshAll(){
   showToast("جاري التحديث…");
   SALES_MAP = null; currentNeeds = []; approvedNow = {}; _txIndex = null;
   try {
+    // نجيب من السيرفر مباشرة (نتجاوز الكاش) عشان التحديث يكون فعلي
     const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
+      fetchRemote("baro_products_v2"), fetchRemote("baro_periods_v2"), fetchRemote("baro_settings_v2"), fetchRemote("baro_images_v2"), fetchRemote("baro_transfers_v2"), fetchRemote("baro_branch_counts_v2"), fetchRemote("baro_wh_counts_v2")
     ]);
-    // 🛡️ لو فشل تحميل المنتجات (null) لا نكتب فاضي فوقها — نوقف ونحذّر
     if (prods === null) {
       DATA_LOADED = false;
       showToast("⚠️ تعذّر تحميل المنتجات — لا تعدّل الآن");
@@ -643,8 +643,10 @@ async function refreshAll(){
       return;
     }
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
+    // نحدّث الكاش بالبيانات الطازجة
+    try { idbSet("baro_products_v2",prods); idbSet("baro_periods_v2",pers); idbSet("baro_transfers_v2",trans); idbSet("baro_branch_counts_v2",counts); idbSet("baro_wh_counts_v2",whc); idbSet("baro_images_v2",imgs); idbSet("baro_settings_v2",sett); } catch {}
     loadRegions();
-    DATA_LOADED = true; // ✅ تحميل ناجح — الحفظ مسموح الآن
+    DATA_LOADED = true;
     showToast("تم التحديث ✓");
   } catch(e){ DATA_LOADED = false; showToast("تعذّر التحديث"); }
   renderApp();
