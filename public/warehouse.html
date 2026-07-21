@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مدير المستودع — ALBAROO</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
   *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
@@ -128,6 +127,7 @@ const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
 const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
 
 let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [], COUNTS = {}, WH_COUNTS = {};
+const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
 
 // ═══ حارس الأداء: يقيس العمليات الثقيلة ويحذّر لو تجاوزت الحد ═══
 const PERF_LIMIT_MS = 400; // لو عملية أخذت أكثر من هذا = تحذير
@@ -420,7 +420,7 @@ function computeNeeds(){
     }).filter(b=> b.remaining < threshold).sort((a,b)=>a.remaining-b.remaining);
     if (branches.length === 0) return;
     // ✅ هل وزّع المستودع هذا المنتج سابقاً؟ (نقل الفروع فرع→فرv لا يُحسب هنا)
-    const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
+
     const priorTransfers = whTransfersOf(p.barcode); // من الفهرس (خفيف)
     const distributedBefore = priorTransfers.length > 0;
     const lastDistDate = distributedBefore ? Math.max(...priorTransfers.map(t=>num(t.date))) : 0;
@@ -555,8 +555,9 @@ function renderApp(){
     ${activeTab==='branchtx'?`<div style="display:flex;gap:7px;margin-bottom:10px"><input id="btxSearchBox" placeholder="🔍 بحث بالباركود/الفرع/رقم الفاتورة…" oninput="onSearchType('btxSearchBox','btxSearch','renderBranchTx',this.value)" value="${btxSearch}" style="flex:1;min-width:0;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:10px" /><button onclick="openScanner('btxSearchBox','btxSearch','renderBranchTx')" style="background:#7c3aed;border:none;border-radius:12px;padding:0 15px;font-size:20px;cursor:pointer;flex-shrink:0" title="بحث بالكاميرا">📷</button></div>`:''}
     ${activeTab==='log'?`<div style="display:flex;gap:7px;margin-bottom:10px"><input id="logSearchBox" placeholder="🔍 بحث بالباركود أو الاسم…" oninput="onSearchType('logSearchBox','logSearch','renderLog',this.value)" value="${logSearch}" style="flex:1;min-width:0;background:#1a2236;border:1px solid #2d3a52;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-family:'Cairo';margin-bottom:10px" /><button onclick="openScanner('logSearchBox','logSearch','renderLog')" style="background:#7c3aed;border:none;border-radius:12px;padding:0 15px;font-size:20px;cursor:pointer;flex-shrink:0" title="بحث بالكاميرا">📷</button></div>`:''}
     <div id="content"></div>`;
-  renderStats();
-  renderContent();
+  const _a=document.getElementById("app");
+  try { renderStats(); } catch(e){ if(_a) _a.innerHTML="خطأ renderStats: "+e.message; return; }
+  try { renderContent(); } catch(e){ if(_a) _a.innerHTML="خطأ renderContent: "+e.message; return; }
 }
 let searchTerm = "";
 let logSearch = "";
@@ -1015,7 +1016,7 @@ function fInvDate(ts){
   return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} · ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function renderBranchTx(c){
-  const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
+
   let txs = TRANSFERS.filter(t => t.printed && !isWh(t.from) && t.to && t.to!=="المستودع" && t.to!=="المستودع الرئيسي");
   const q = (btxSearch||"").trim().toLowerCase();
   if (q) txs = txs.filter(t => (t.barcode||"").toLowerCase().includes(q) || (t.name||"").toLowerCase().includes(q) || (t.from||"").toLowerCase().includes(q) || (t.to||"").toLowerCase().includes(q) || fInvNo(t).toLowerCase().includes(q));
@@ -1659,23 +1660,15 @@ function closeScanner(){
 }
 
 async function init(){
-  const app = document.getElementById("app");
-  const say = (m) => { if(app) app.innerHTML = `<div style="padding:60px 20px;text-align:center;font-family:Cairo;color:#7cb3e8"><div style="font-size:40px">⏳</div><div style="font-size:16px;margin-top:16px;font-weight:900">${m}</div></div>`; };
   try {
-    say("١- جاري تحميل البيانات من السيرفر…");
     const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
       load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
-    say(`٢- تحمّل: ${PRODUCTS.length} منتج · ${TRANSFERS.length} تحويل · ${Object.keys(IMAGES).length} صورة`);
-    await new Promise(r=>setTimeout(r,400));
-    say("٣- تجهيز المناطق…");
     await loadRegions();
-    say("٤- عرض الواجهة…");
-    await new Promise(r=>setTimeout(r,200));
     DATA_LOADED = (prods !== null);
   } catch(e){
-    if(app) app.innerHTML = `<div style="padding:40px;text-align:center;color:#f87171;font-family:Cairo">تعذّر التحميل<br><span style="font-size:12px">${e.message||e}</span></div>`;
+    document.getElementById("app").innerHTML = `<div class="empty">تعذّر الاتصال — حدّث الصفحة</div>`;
     return;
   }
   renderApp();
