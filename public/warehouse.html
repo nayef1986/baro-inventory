@@ -462,6 +462,43 @@ function groupByContainer(needs){
   return g;
 }
 
+// ➕ إضافة فرع يدوياً للتوزيع (حتى لو ما يحتاج) — معزول، ما يخرب حسابات النواقص
+function showAddBranch(bc){
+  const n = currentNeeds.find(x=>x.p.barcode===bc);
+  if (!n) return;
+  // كل الفروع (من المبيعات) عدا اللي أصلاً في التوزيv والمقفلة
+  const closed = SETTINGS?.closedBranches ?? [];
+  const already = new Set(n.branches.map(b=>b.branch));
+  const all = allBranchesList().filter(b=>!closed.includes(b) && !already.has(b));
+  const ov = document.createElement("div");
+  ov.id = "addBranchOv";
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;overflow:auto;padding:16px";
+  ov.innerHTML = `<div style="max-width:480px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:900;color:#fff">➕ أضف فرع لـ ${n.p.name||bc}</div>
+      <button onclick="document.getElementById('addBranchOv').remove()" style="background:#334155;color:#fff;border:none;border-radius:10px;padding:8px 14px;font-family:'Cairo';font-weight:900;cursor:pointer">✕</button>
+    </div>
+    <div style="background:rgba(124,179,232,0.08);border:1px solid rgba(124,179,232,0.2);border-radius:10px;padding:10px;font-size:12px;color:#7cb3e8;margin-bottom:12px">اختر فرعاً لتحويل بضاعة له يدوياً. هذي إضافة يدوية بقرارك — ما تأثّر على حساب النواقص.</div>
+    ${all.length===0 ? `<div style="text-align:center;padding:30px;color:#5b6b85">كل الفروع مضافة أصلاً</div>` :
+      all.map(b=>`<button onclick="addBranchManual('${bc.replace(/'/g,'')}','${b.replace(/'/g,"\\'")}')" style="width:100%;text-align:right;background:#141b2d;border:1px solid #1f2940;border-radius:10px;padding:13px;margin-bottom:8px;color:#fff;font-family:'Cairo';font-weight:700;font-size:14px;cursor:pointer">🏪 ${b}</button>`).join("")}
+  </div>`;
+  document.body.appendChild(ov);
+}
+function addBranchManual(bc, branch){
+  const n = currentNeeds.find(x=>x.p.barcode===bc);
+  if (!n) return;
+  const unit = unitOf(bc);
+  const bsold = (SALES_MAP?.[bc]?.[branch]) ?? 0;
+  const given = toUnit(bsold, unit);
+  // نضيف الفرع لقائمة الفروع بعلامة يدوي
+  n.branches.push({ branch, sold:bsold, given, remaining:0, recent:0, distributed:0, counted:false, staleCount:false, soldAfter:0, countVal:null, _manual:true });
+  document.getElementById("addBranchOv")?.remove();
+  showToast(`أُضيف ${branch} — عدّل الكمية واعتمد`);
+  // نعيد رسم البطاقة
+  openProd = bc;
+  routeNeeds(document.getElementById("content"));
+}
+
 // ─── حفظ توزيع منتج (كل الفروع عدا المستثناة) ────────────────
 async function saveProduct(bc){
   const n = currentNeeds.find(x=>x.p.barcode===bc);
@@ -719,6 +756,7 @@ function renderProd(n){
         ${saveBtn}
         <button class="slip" onclick="printSlip('${safeBc}')">🖨️ بوليصة</button>
       </div>
+      <button onclick="showAddBranch('${safeBc}')" style="width:100%;margin-top:8px;background:rgba(124,179,232,0.12);border:1px dashed rgba(124,179,232,0.4);color:#7cb3e8;border-radius:9px;padding:10px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">➕ أضف فرع يدوياً (حتى لو ما يحتاج)</button>
     </div>`;
   }
   // كمية كبيرة (>60) ولسه ما اتوزّعت → تمييز مميز + "وزّعني الآن"
@@ -974,9 +1012,6 @@ function renderCounts(c){
       else liveRemaining = num(e.count) - soldNow + distAfter; // المبيعات حُذفت/تغيّرت → نظيف
       liveRemaining = Math.max(0, liveRemaining);
       const totalReceived = whReceivedTotal(e.barcode, e.branch); // كل الوارد من المستودع
-      // 🔍 تشخيص مؤقت
-      const _rec = _txIndex ? _txIndex[e.barcode+"_"+e.branch] : null;
-      const _diag = _rec ? `تحويلات:${_rec.items.length} | ${_rec.items.map(t=>`${t.from||'فاضي'}→${t.qty}`).join(', ')}` : `مافي مفتاح ${e.barcode}_${e.branch}`;
       const staleRow = stale ? `<div style="background:rgba(248,113,113,0.12);border-radius:7px;padding:5px 9px;margin-top:5px;font-size:11px;color:#fca5a5;font-weight:700">🔴 باع ${fmtN(soldAfterNow)} بعد جرده (${fmtN(e.count)}) — راجع الموظف</div>` : "";
       return `<div style="background:${stale?'rgba(248,113,113,0.06)':'#0f1626'};border:${stale?'1px solid rgba(248,113,113,0.3)':'none'};border-radius:9px;padding:8px 10px;margin-top:6px">
         <div style="display:flex;gap:9px;align-items:center">
@@ -984,7 +1019,7 @@ function renderCounts(c){
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:900;color:#fff">${e.name||"—"}</div>
           <div style="font-family:monospace;font-size:11px;color:#94a3b8">${e.barcode} · ${ds}</div>
-          <div style="font-size:9px;color:#fbbf24;margin-top:2px;direction:ltr">${_diag}</div>
+
           <div style="font-size:10px;color:#a89fc4;margin-top:2px">👤 ${e.emp||"؟"}</div>
         </div>
         <div style="display:flex;gap:4px;text-align:center;flex-wrap:wrap;justify-content:flex-end">
@@ -1577,8 +1612,7 @@ async function openScanner(targetId, setter, renderFn){
 
   const ok = await loadQrLib();
   if (!ok || !window.Html5Qrcode){
-    document.getElementById("scanMsg").textContent = "تعذّر تحميل القارئ — تحقق من الإنترنت";
-    document.getElementById("scanMsg").style.color = "#f87171";
+    showCameraFallback(targetId, setter, renderFn);
     return;
   }
 
@@ -1607,14 +1641,74 @@ async function openScanner(targetId, setter, renderFn){
       { facingMode: "environment" },
       config,
       (decodedText)=>{ qrSuccess(decodedText); },
-      ()=>{} // نتجاهل أخطاء كل فريم
+      ()=>{}
     );
-    // زوم + فلاش لو مدعوم
     setTimeout(setupZoomTorch, 800);
+    // زر بديل دائماً ظاهر: لو الماسح ما لقط، صوّر
+    addFallbackButton(targetId, setter, renderFn);
   } catch(e){
-    document.getElementById("scanMsg").textContent = "تعذّر فتح الكاميرا — تأكد من الإذن";
-    document.getElementById("scanMsg").style.color = "#f87171";
+    showCameraFallback(targetId, setter, renderFn);
   }
+}
+
+// زر "📸 صوّر الباركود" — يظهر داخل شاشة الماسح كبديل
+function addFallbackButton(targetId, setter, renderFn){
+  const msg = document.getElementById("scanMsg");
+  if (!msg) return;
+  msg.innerHTML = `وجّه الكاميرا على الباركود<br><button onclick="fallbackCapture('${targetId}','${setter}','${renderFn}')" style="margin-top:10px;background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">📸 ما لقط؟ صوّر الباركود</button>`;
+}
+
+// بديل كامل: لو الماسح ما اشتغل نهائياً — كاميرا الجهاز مباشرة
+function showCameraFallback(targetId, setter, renderFn){
+  const reader = document.getElementById("qrReader");
+  const msg = document.getElementById("scanMsg");
+  if (reader) reader.innerHTML = `<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center">
+    <div style="font-size:50px;margin-bottom:16px">📸</div>
+    <div style="color:#fff;font-family:'Cairo';font-size:15px;margin-bottom:20px">الماسح ما اشتغل على جهازك<br>صوّر الباركود بالكاميرا</div>
+    <button onclick="fallbackCapture('${targetId}','${setter}','${renderFn}')" style="background:#7c3aed;color:#fff;border:none;border-radius:12px;padding:14px 28px;font-family:'Cairo';font-weight:900;font-size:16px;cursor:pointer">📸 صوّر الباركود</button>
+  </div>`;
+  if (msg) msg.textContent = "يعمل على أي جوال";
+}
+
+// يفتح كاميرا الجهاز (input file) — يشتغل على أي جوال بلا استثناء
+function fallbackCapture(targetId, setter, renderFn){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*"; inp.capture = "environment";
+  inp.onchange = async () => {
+    const file = inp.files?.[0]; if (!file) return;
+    const reader = document.getElementById("qrReader");
+    if (reader) reader.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#7cb3e8;font-family:'Cairo'"><span class="spin">⏳</span>&nbsp; جاري قراءة الباركود…</div>`;
+    try {
+      const b64 = await fileToBase64(file);
+      const code = await ocrBarcode(b64);
+      if (code){ qrSuccess(code); }
+      else { if(reader) reader.innerHTML = `<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;color:#f87171;font-family:'Cairo'"><div>ما قدرت أقرأ الباركود</div><button onclick="fallbackCapture('${targetId}','${setter}','${renderFn}')" style="margin-top:14px;background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:'Cairo';font-weight:900;cursor:pointer">📸 صوّر مرة ثانية</button></div>`; }
+    } catch(e){
+      if(reader) reader.innerHTML = `<div style="padding:20px;text-align:center;color:#f87171;font-family:'Cairo'">تعذّر — ${e.message}<br><button onclick="fallbackCapture('${targetId}','${setter}','${renderFn}')" style="margin-top:12px;background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:'Cairo';font-weight:900;cursor:pointer">📸 حاول ثانية</button></div>`;
+    }
+  };
+  inp.click();
+}
+
+function fileToBase64(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(",")[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// OCR الباركود عبر السيرفر (نفس اللي في أداة الصور)
+async function ocrBarcode(base64){
+  try {
+    const r = await fetch("/api/scan-barcode", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ image: base64 })
+    });
+    const j = await r.json();
+    return (j.barcode || j.code || j.text || "").trim() || null;
+  } catch { return null; }
 }
 
 function setupZoomTorch(){
