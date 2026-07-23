@@ -395,6 +395,7 @@ function injectOrphans(){
 }
 
 // النواقص مقسّمة بالكونتينر
+let _forcedBarcodes = [];  // منتجات أُضيفت للتوزيع يدوياً (تبقى حتى بعد إعادة الحساب)
 function computeNeeds(){
   if (!SALES_MAP) SALES_MAP = buildSalesMap();
   if (_txIndex === null) buildTxIndex(); // الفهرس مرة وحدة (الحل الجذري للأداء)
@@ -459,7 +460,37 @@ function computeNeeds(){
     (b.distributedBefore?1:0) - (a.distributedBefore?1:0)   // الموزّع سابقاً أولاً
     || b.closing - a.closing                                 // ثم الأكثر متبقّي
   );
+  // نرجّع المنتجات اللي أُضيفت يدوياً للتوزيع (لو مو موجودة أصلاً)
+  _forcedBarcodes.forEach(fbc=>{
+    if (needs.some(n=>n.p.barcode===fbc)) return;
+    const built = buildForcedNeed(fbc);
+    if (built) needs.unshift(built);
+  });
   return needs;
+}
+
+// يبني عنصر توزيع لمنتج مو في النواقص (كل الفروع اللي باعت، مرتّبة بالأقل)
+function buildForcedNeed(bc){
+  const p = PRODUCTS.find(x=>x.barcode===bc);
+  if (!p) return null;
+  if (!SALES_MAP) SALES_MAP = buildSalesMap();
+  const bought = totalPurchases(p);
+  const branchSales = SALES_MAP[bc] || {};
+  const totalSold = Object.values(branchSales).reduce((s,q)=>s+q,0);
+  const closing = Math.max(0, bought - totalSold);
+  const unit = unitOf(bc);
+  const closedB = SETTINGS?.closedBranches ?? [];
+  const branches = Object.entries(branchSales)
+    .filter(([branch])=>!closedB.includes(branch))
+    .map(([branch,bsold])=>{
+      const given = toUnit(bsold, unit);
+      const distributed = totalDistributed(bc, branch);
+      const remaining = Math.max(0, given - bsold + distributed);
+      return { branch, sold:bsold, given, remaining, recent:recentTransfer(bc,branch), distributed, counted:false, staleCount:false, soldAfter:0, countVal:null };
+    })
+    .sort((a,b)=>a.remaining-b.remaining);
+  if (branches.length === 0) return null;
+  return { p, bought, totalSold, closing, branches, distributedBefore:false, lastDistDate:0, priorBranches:[], hasCount:false, hasStale:false, _forced:true };
 }
 
 // تجميع بالكونتينر
@@ -477,6 +508,8 @@ function groupByContainer(needs){
 function showAddBranch(bc){
   const n = currentNeeds.find(x=>x.p.barcode===bc);
   if (!n) return;
+  if (!SALES_MAP) SALES_MAP = buildSalesMap();
+  if (_txIndex === null) buildTxIndex();
   // كل الفروع (من المبيعات) عدا اللي أصلاً في التوزيv والمقفلة
   const closed = SETTINGS?.closedBranches ?? [];
   const already = new Set(n.branches.map(b=>b.branch));
@@ -491,7 +524,28 @@ function showAddBranch(bc){
     </div>
     <div style="background:rgba(124,179,232,0.08);border:1px solid rgba(124,179,232,0.2);border-radius:10px;padding:10px;font-size:12px;color:#7cb3e8;margin-bottom:12px">اختر فرعاً لتحويل بضاعة له يدوياً. هذي إضافة يدوية بقرارك — ما تأثّر على حساب النواقص.</div>
     ${all.length===0 ? `<div style="text-align:center;padding:30px;color:#5b6b85">كل الفروع مضافة أصلاً</div>` :
-      all.map(b=>`<button onclick="addBranchManual('${bc.replace(/'/g,'')}','${b.replace(/'/g,"\\'")}')" style="width:100%;text-align:right;background:#141b2d;border:1px solid #1f2940;border-radius:10px;padding:13px;margin-bottom:8px;color:#fff;font-family:'Cairo';font-weight:700;font-size:14px;cursor:pointer">🏪 ${b}</button>`).join("")}
+      all.map(b=>{
+        // نحسب متبقي هذا الفرع عشان يبان قبل الاختيار
+        const bsold = num(SALES_MAP?.[bc]?.[b] ?? 0);
+        const given = toUnit(bsold, unitOf(bc));
+        let rem = Math.max(0, given - bsold + totalDistributed(bc,b));
+        const cnt = COUNTS?.[bc+"_"+b];
+        let isCounted = false;
+        if (cnt){
+          const sac = num(cnt.soldAtCount);
+          const da = distributedAfter(bc, b, num(cnt.date));
+          rem = Math.max(0, bsold>=sac ? num(cnt.count)-(bsold-sac)+da : num(cnt.count)-bsold+da);
+          isCounted = true;
+        }
+        const col = rem===0?"#f87171":rem<12?"#fbbf24":"#4ade80";
+        return `<button onclick="addBranchManual('${bc.replace(/'/g,'')}','${b.replace(/'/g,"\\'")}')" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:#141b2d;border:1px solid #1f2940;border-radius:10px;padding:12px 13px;margin-bottom:8px;color:#fff;font-family:'Cairo';font-weight:700;font-size:14px;cursor:pointer">
+          <span>🏪 ${b}</span>
+          <span style="display:flex;align-items:center;gap:6px">
+            ${isCounted?`<span style="font-size:9px;color:#4ade80;background:rgba(74,222,128,0.15);padding:2px 6px;border-radius:100px">جرد</span>`:''}
+            <span style="background:${col}22;color:${col};font-size:12px;font-weight:900;padding:3px 10px;border-radius:100px">متبقي ${fmtN(rem)}</span>
+          </span>
+        </button>`;
+      }).join("")}
   </div>`;
   document.body.appendChild(ov);
 }
@@ -504,11 +558,21 @@ function addBranchManual(bc, branch){
   const bsold = num(SALES_MAP?.[bc]?.[branch] ?? 0);
   const given = toUnit(bsold, unit);
   const distributed = totalDistributed(bc, branch);
-  const remaining = Math.max(0, given - bsold + distributed);
-  n.branches.push({ branch, sold:bsold, given, remaining, recent:0, distributed, counted:false, staleCount:false, soldAfter:0, countVal:null, _manual:true });
+  let remaining = Math.max(0, given - bsold + distributed);
+  // ✅ لو الفرع مجرود، نستخدم المتبقي الحقيقي من الجرد (مو المحسوب)
+  const cnt = COUNTS?.[bc+"_"+branch];
+  let counted = false;
+  if (cnt){
+    const soldAtCount = num(cnt.soldAtCount);
+    const distAfter = distributedAfter(bc, branch, num(cnt.date));
+    if (bsold >= soldAtCount) remaining = num(cnt.count) - (bsold - soldAtCount) + distAfter;
+    else remaining = num(cnt.count) - bsold + distAfter;
+    remaining = Math.max(0, remaining);
+    counted = true;
+  }
+  n.branches.push({ branch, sold:bsold, given, remaining, recent:recentTransfer(bc,branch), distributed, counted, staleCount:false, soldAfter:0, countVal: cnt?num(cnt.count):null, _manual:true });
   document.getElementById("addBranchOv")?.remove();
-  showToast(`أُضيف ${branch} — عدّل الكمية واعتمد`);
-  // نعيد رسم البطاقة فقط (بدون إعادة حساب كامل — عشان ما يعلّق)
+  showToast(`أُضيف ${branch} — متبقيه ${fmtN(remaining)}`);
   openProd = bc;
   drawOneCard(bc);
 }
@@ -521,6 +585,36 @@ function drawOneCard(bc){
     tmp.innerHTML = renderProd(n);
     card.replaceWith(tmp.firstElementChild);
   }
+}
+
+// حفظ جرد المستودع من داخل بطاقة المنتج (النواقص)
+async function saveWhCountInCard(bc, name, calc){
+  const inp = document.getElementById("wh_"+bc);
+  if (!inp || inp.value===""){ showToast("اكتب الكمية الفعلية أولاً"); return; }
+  const count = Math.max(0, num(inp.value));
+  WH_COUNTS[bc] = { count, calc, barcode: bc, name, date: Date.now() };
+  await save("baro_wh_counts_v2", WH_COUNTS);
+  showToast(`✓ حُفظ الجرد: ${fmtN(count)}`);
+  drawOneCard(bc);
+}
+
+// يفتح منتج للتوزيع حتى لو مو في النواقص (بعد جرده)
+function openForDistribution(bc){
+  const p = PRODUCTS.find(x=>x.barcode===bc);
+  if (!p){ showToast("المنتج غير موجود"); return; }
+  const existing = currentNeeds.find(x=>x.p.barcode===bc);
+  if (!existing){
+    const built = buildForcedNeed(bc);
+    if (!built){ showToast("ما فيه فروع باعت هذا المنتج"); return; }
+    if (!_forcedBarcodes.includes(bc)) _forcedBarcodes.push(bc);
+    currentNeeds.unshift(built);
+  }
+  activeTab = "needs"; selectedCont = null; searchTerm = bc; openProd = bc;
+  renderApp();
+  requestAnimationFrame(()=>{
+    const card = document.getElementById("prod_"+bc);
+    if (card) card.scrollIntoView({behavior:"smooth", block:"center"});
+  });
 }
 
 // ─── حفظ توزيع منتج (كل الفروع عدا المستثناة) ────────────────
@@ -785,12 +879,30 @@ function renderProd(n){
       ? `<button class="save" style="background:#334155" disabled>✓ تم الاعتماد (${ap} فرع)</button>`
       : `<button class="save" onclick="saveProduct('${safeBc}')">✅ اعتمد التوزيع (${n.branches.length} فرع)</button>`;
     const curUnit = unitOf(bc);
+    const whSaved = WH_COUNTS[bc];
+    const whCalc = whStockOf(bc);
+    const whVal = whSaved ? whSaved.count : "";
+    const countBar = `<div style="background:${whSaved?'rgba(74,222,128,0.08)':'rgba(124,179,232,0.06)'};border:1px solid ${whSaved?'rgba(74,222,128,0.3)':'rgba(124,179,232,0.25)'};border-radius:11px;padding:10px;margin-bottom:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:900;color:#7cb3e8">📊 جرد المستودع</span>
+        <span style="font-size:11px;color:#94a3b8">المحسوب: <b style="color:#7cb3e8">${fmtN(whCalc)}</b>${whSaved?` · <b style="color:#4ade80">جردته ${fmtN(whSaved.count)}</b>`:''}</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div style="flex:1;display:flex;align-items:center;gap:5px;background:#0f172a;border:1px solid #2d3a52;border-radius:9px;padding:4px">
+          <button onclick="whStep('${safeBc}',-1)" style="width:34px;height:34px;border-radius:7px;border:none;background:#1e293b;color:#f87171;font-size:20px;font-weight:900;cursor:pointer">−</button>
+          <input type="number" min="0" id="wh_${bc}" value="${whVal}" placeholder="كم بالمستودع؟" style="flex:1;width:100%;background:transparent;border:none;color:#fff;text-align:center;font-size:19px;font-weight:900;font-family:'Cairo'" />
+          <button onclick="whStep('${safeBc}',1)" style="width:34px;height:34px;border-radius:7px;border:none;background:#1e293b;color:#4ade80;font-size:20px;font-weight:900;cursor:pointer">+</button>
+        </div>
+        <button onclick="saveWhCountInCard('${safeBc}','${safeName}',${whCalc})" style="background:${whSaved?'#334155':'#16a34a'};color:#fff;border:none;border-radius:9px;padding:11px 16px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer;white-space:nowrap">${whSaved?'✓ تعديل':'💾 حفظ'}</button>
+      </div>
+    </div>`;
     const unitBar = `<div class="unitbar">
       <span class="ul">📦 كمية البوكس/الدزينة:</span>
       ${[12,24,36].map(u=>`<button class="ub${curUnit===u?' on':''}" onclick="saveUnitQty('${safeBc}',${u})">${u}</button>`).join("")}
       <input class="uinput" type="number" min="1" value="${curUnit}" onchange="saveUnitQty('${safeBc}',this.value)" title="كمية مخصصة" />
     </div>`;
     body = `<div class="prodbody">
+      ${countBar}
       ${unitBar}
       ${brs}
       <div class="saverow">
@@ -905,32 +1017,25 @@ function renderWhCount(c){
       const actualVal = saved ? saved.count : "";
       const img = IMAGES?.[bc];
       const safeBc = bc.replace(/'/g,'');
-      // المنتج منسدل: اضغط يفتح/يسكّر
-      const pOpen = q ? true : (whOpenProds[bc] === true);
-      const bodyHtml = pOpen ? `
-        <div style="display:flex;gap:7px;align-items:center;margin-top:9px;padding:0 10px">
-          <div style="text-align:center;background:rgba(124,179,232,0.12);border-radius:8px;padding:6px 10px"><div style="font-size:16px;font-weight:900;color:#7cb3e8">${fmtN(calc)}</div><div style="font-size:8px;color:#5b6b85">محسوب</div></div>
-          <div style="flex:1;display:flex;align-items:center;gap:5px;background:#0f172a;border-radius:9px;padding:4px">
-            <button onclick="whStep('${safeBc}',-1)" style="width:34px;height:34px;border-radius:7px;border:none;background:#1e293b;color:#f87171;font-size:20px;font-weight:900;cursor:pointer">−</button>
-            <input type="number" min="0" id="wh_${bc}" value="${actualVal}" placeholder="؟" style="flex:1;width:100%;background:transparent;border:none;color:#fff;text-align:center;font-size:18px;font-weight:900;font-family:'Cairo'" />
-            <button onclick="whStep('${safeBc}',1)" style="width:34px;height:34px;border-radius:7px;border:none;background:#1e293b;color:#4ade80;font-size:20px;font-weight:900;cursor:pointer">+</button>
+      const safeName = (p.name||'').replace(/'/g,'');
+      return `<div style="background:${saved?'rgba(74,222,128,0.06)':'#0f1626'};border:1px solid ${saved?'rgba(74,222,128,0.3)':'#1f2940'};border-radius:12px;margin:9px 0;padding:11px">
+        <div style="display:flex;gap:11px;align-items:center">
+          ${img?`<img src="${img}" onclick="openImg('${(img||'').replace(/'/g,"\\\\'")}','${safeName}')" style="width:62px;height:62px;border-radius:10px;object-fit:cover;background:#fff;cursor:pointer;flex-shrink:0"/>`:`<div style="width:62px;height:62px;border-radius:10px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">📦</div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${p.name||"—"}</div>
+            <div style="font-family:monospace;font-size:20px;font-weight:900;color:#fff;letter-spacing:2px">${bc}</div>
+            <div style="font-size:11px;color:#7cb3e8;margin-top:3px">المحسوب: <b>${fmtN(calc)}</b>${saved?` · <span style="color:#4ade80">جردته ${fmtN(saved.count)}</span>`:''}</div>
           </div>
         </div>
-        <div style="padding:0 10px 10px">
-          <button onclick="saveWhCount('${safeBc}','${(p.name||'').replace(/'/g,'')}',${calc})" style="width:100%;margin-top:8px;background:${saved?'#334155':'#16a34a'};color:#fff;border:none;border-radius:9px;padding:10px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">${saved?'✓ محفوظ — تعديل':'💾 حفظ'}</button>
-          ${saved?`<button onclick="goToNeeds('${safeBc}')" style="width:100%;margin-top:7px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">🚚 وين أوديه؟ — شوف الفروع ووزّع ←</button>`:''}
-        </div>` : "";
-      return `<div style="background:${saved?'rgba(74,222,128,0.05)':'#0f1626'};border:1px solid ${saved?'rgba(74,222,128,0.25)':'#1f2940'};border-radius:11px;margin:8px 0;overflow:hidden">
-        ${saved?`<div style="font-size:11px;color:#4ade80;font-weight:900;padding:8px 10px 0">✓ جردته: ${fmtN(saved.count)}</div>`:''}
-        <div style="display:flex;gap:10px;align-items:center;padding:10px;cursor:pointer">
-          ${img?`<img src="${img}" onclick="event.stopPropagation();openImg('${(img||'').replace(/'/g,"\\\\'")}','${(p.name||'').replace(/'/g,'')}')" style="width:52px;height:52px;border-radius:8px;object-fit:cover;background:#fff;cursor:pointer"/>`:`<div onclick="whToggleProd('${safeBc}')" style="width:52px;height:52px;border-radius:8px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:24px">📦</div>`}
-          <div onclick="whToggleProd('${safeBc}')" style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name||"—"}</div>
-            <div style="font-family:monospace;font-size:17px;font-weight:900;color:#fff;letter-spacing:1.5px;margin-top:3px">${bc}</div>
+        <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+          <div style="flex:1;display:flex;align-items:center;gap:5px;background:#0f172a;border:1px solid #2d3a52;border-radius:10px;padding:5px">
+            <button onclick="whStep('${safeBc}',-1)" style="width:38px;height:38px;border-radius:8px;border:none;background:#1e293b;color:#f87171;font-size:22px;font-weight:900;cursor:pointer">−</button>
+            <input type="number" min="0" id="wh_${bc}" value="${actualVal}" placeholder="؟" style="flex:1;width:100%;background:transparent;border:none;color:#fff;text-align:center;font-size:22px;font-weight:900;font-family:'Cairo'" />
+            <button onclick="whStep('${safeBc}',1)" style="width:38px;height:38px;border-radius:8px;border:none;background:#1e293b;color:#4ade80;font-size:22px;font-weight:900;cursor:pointer">+</button>
           </div>
-          <span onclick="whToggleProd('${safeBc}')" style="color:#5b6b85;font-size:14px;padding:0 4px">${pOpen?'▲':'▼'}</span>
+          <button onclick="saveWhCount('${safeBc}','${safeName}',${calc})" style="background:${saved?'#334155':'#16a34a'};color:#fff;border:none;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer;white-space:nowrap">${saved?'✓ تعديل':'💾 حفظ'}</button>
         </div>
-        ${bodyHtml}
+        ${saved?`<button onclick="openForDistribution('${safeBc}')" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:900;font-family:'Cairo';cursor:pointer">🚚 وين أوديه؟ — شوف الفروع ووزّع ←</button>`:''}
       </div>`;
     }).join("") : "";
     return `<div style="background:#0d1424;border:1px solid #1f2940;border-radius:12px;margin-bottom:10px;overflow:hidden">
