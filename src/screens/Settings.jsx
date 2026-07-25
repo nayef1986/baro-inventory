@@ -357,6 +357,18 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         </a>
       </Card>
 
+      {/* أداة تحليل الفواتير القديمة */}
+      <Card>
+        <SectionHeader icon="📊" title="تحليل الفواتير القديمة" subtitle="جمّع المبيعات · رتّب الأفضل والأضعف · خصم التصريف" />
+        <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3">
+          ترفع ملفات فواتير قديمة (مبيعات + مشتريات)، تجمّع كل باركود، وتطلّع الأفضل والأضعف مبيعاً مع خصم تصريف مقترح للضعيف
+        </div>
+        <a href="https://baro-inventory-qmpp.vercel.app/analyzer.html" target="_blank" rel="noopener noreferrer"
+          className="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold text-sm">
+          📊 افتح أداة تحليل الفواتير
+        </a>
+      </Card>
+
       {/* صفحة مدير المستودع */}
       <Card>
         <SectionHeader icon="🏬" title="صفحة مدير المستودع" subtitle="توزيع النواقص · اعتماد · يفتحها المدير برقم سري" />
