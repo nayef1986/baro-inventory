@@ -153,12 +153,10 @@ export function calcProduct(product, periods) {
  * - تعديل رقم قديم: ثابت
  * - تعديل كائن فيه qty و atPeriodCount: الكمية ناقص مبيعات الفترات الجديدة
  */
-/** هل المصدر هو المستودع؟ (يطابق منطق شاشة المستودع) */
 export function isWarehouse(from) {
   return !from || from === "المستودع" || from === "المستودع الرئيسي";
 }
 
-/** وحدة المنتج (البوكس/الدزينة) — يطابق unitOf في المستودع */
 export function unitOfProduct(product, fallback = MIN_STOCK) {
   const u = num(product?.unitQty ?? 0);
   return u >= 1 ? u : fallback;
@@ -166,31 +164,26 @@ export function unitOfProduct(product, fallback = MIN_STOCK) {
 
 export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12, counts = null, transfers = null, product = null) {
   const sold = soldAllPeriods(barcode, periods, branch);
-  // ✅ وحدة المنتج نفسها المستخدمة في المستودع (unitQty لو موجودة)
   const unit = product ? unitOfProduct(product, minStock) : minStock;
 
-  // ✅ الترحيل — يطابق المستودع تماماً:
-  //    الوارد من المستودع: يُحسب فور اعتماده (printed) بدون انتظار تأكيد استلام
-  //    الوارد من فرع آخر: يُحسب عند الاستلام الفعلي (received)
-  //    الصادر من هذا الفرع: يُخصم عند التسليم الفعلي (delivered)
-  let txNet = 0, txFromWh = 0;
+  // الترحيل — يطابق المستودع: الوارد من المستودع فوري (printed)، من فرع آخر عند الاستلام (received)، الصادر عند التسليم (delivered)
+  let txNet = 0;
   if (transfers && transfers.length) {
     transfers.forEach(t => {
       if (t.barcode !== barcode) return;
       if (t.to === branch) {
-        if (isWarehouse(t.from)) { if (t.printed) { txNet += num(t.qty); txFromWh += num(t.qty); } }
+        if (isWarehouse(t.from)) { if (t.printed) txNet += num(t.qty); }
         else if (t.received) txNet += num(t.qty);
       }
       if (t.from === branch && t.delivered) txNet -= num(t.qty);
     });
   }
 
-  // 🎯 أولوية الجرد الفعلي — يطابق منطق المستودع بالكامل
+  // أولوية الجرد الفعلي — يطابق المستودع بالكامل
   if (counts) {
     const cnt = counts[barcode + "_" + branch];
     if (cnt) {
       const soldAtCount = num(cnt.soldAtCount);
-      // الوارد من المستودع بعد لحظة الجرد فقط (اللي قبله شمله الجرد أصلاً)
       let distAfter = 0;
       if (transfers && transfers.length) {
         transfers.forEach(t => {
@@ -200,10 +193,8 @@ export function getBranchRemaining(branch, barcode, periods, overrides = {}, min
         });
       }
       if (sold >= soldAtCount) {
-        // الوضع الطبيعي: المبيعات زادت من وقت الجرد
         return Math.max(0, num(cnt.count) - (sold - soldAtCount) + distAfter);
       }
-      // المبيعات حُذفت ورُفعت من جديد → المرجع القديم مات، نحسب نظيف
       return Math.max(0, num(cnt.count) - sold + distAfter);
     }
   }
