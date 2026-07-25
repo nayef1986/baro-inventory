@@ -153,38 +153,65 @@ export function calcProduct(product, periods) {
  * - تعديل رقم قديم: ثابت
  * - تعديل كائن فيه qty و atPeriodCount: الكمية ناقص مبيعات الفترات الجديدة
  */
-export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12, counts = null, transfers = null) {
-  const sold = soldAllPeriods(barcode, periods, branch);
+/** هل المصدر هو المستودع؟ (يطابق منطق شاشة المستودع) */
+export function isWarehouse(from) {
+  return !from || from === "المستودع" || from === "المستودع الرئيسي";
+}
 
-  // صافي الترحيل لهذا الفرع/المنتج: الوارد المستُلم − الصادر المسلّم
-  let txNet = 0;
+/** وحدة المنتج (البوكس/الدزينة) — يطابق unitOf في المستودع */
+export function unitOfProduct(product, fallback = MIN_STOCK) {
+  const u = num(product?.unitQty ?? 0);
+  return u >= 1 ? u : fallback;
+}
+
+export function getBranchRemaining(branch, barcode, periods, overrides = {}, minStock = 12, counts = null, transfers = null, product = null) {
+  const sold = soldAllPeriods(barcode, periods, branch);
+  // ✅ وحدة المنتج نفسها المستخدمة في المستودع (unitQty لو موجودة)
+  const unit = product ? unitOfProduct(product, minStock) : minStock;
+
+  // ✅ الترحيل — يطابق المستودع تماماً:
+  //    الوارد من المستودع: يُحسب فور اعتماده (printed) بدون انتظار تأكيد استلام
+  //    الوارد من فرع آخر: يُحسب عند الاستلام الفعلي (received)
+  //    الصادر من هذا الفرع: يُخصم عند التسليم الفعلي (delivered)
+  let txNet = 0, txFromWh = 0;
   if (transfers && transfers.length) {
     transfers.forEach(t => {
       if (t.barcode !== barcode) return;
-      // وارد مستُلم (وصل الفرع فعلاً) → يزيد
-      if (t.to === branch && t.received) txNet += num(t.qty);
-      // صادر مسلّم (طلع من الفرع فعلاً) → ينقص
+      if (t.to === branch) {
+        if (isWarehouse(t.from)) { if (t.printed) { txNet += num(t.qty); txFromWh += num(t.qty); } }
+        else if (t.received) txNet += num(t.qty);
+      }
       if (t.from === branch && t.delivered) txNet -= num(t.qty);
     });
   }
 
-  // 🎯 أولوية الجرد الفعلي (baro_branch_counts_v2) — لو مُمرّر وفيه جرد صالح لهذا الفرع
+  // 🎯 أولوية الجرد الفعلي — يطابق منطق المستودع بالكامل
   if (counts) {
     const cnt = counts[barcode + "_" + branch];
     if (cnt) {
-      const soldAfter = Math.max(0, sold - num(cnt.soldAtCount));
-      // لو باع بعد الجرد أكثر من المجرود → الجرد قديم، نكمّل للحساب العادي
-      if (soldAfter <= num(cnt.count)) {
-        // الجرد + أي ترحيل صار بعد الجرد
-        return Math.max(0, num(cnt.count) - soldAfter + txNet);
+      const soldAtCount = num(cnt.soldAtCount);
+      // الوارد من المستودع بعد لحظة الجرد فقط (اللي قبله شمله الجرد أصلاً)
+      let distAfter = 0;
+      if (transfers && transfers.length) {
+        transfers.forEach(t => {
+          if (t.barcode !== barcode || t.to !== branch) return;
+          if (!isWarehouse(t.from) || !t.printed) return;
+          if (num(t.date) > num(cnt.date)) distAfter += num(t.qty);
+        });
       }
+      if (sold >= soldAtCount) {
+        // الوضع الطبيعي: المبيعات زادت من وقت الجرد
+        return Math.max(0, num(cnt.count) - (sold - soldAtCount) + distAfter);
+      }
+      // المبيعات حُذفت ورُفعت من جديد → المرجع القديم مات، نحسب نظيف
+      return Math.max(0, num(cnt.count) - sold + distAfter);
     }
   }
 
   const key = branch + "|" + barcode;
   const ov = overrides[key];
   if (ov === undefined || ov === null) {
-    const given = Math.ceil(sold / minStock) * minStock;
+    const given = Math.ceil(sold / unit) * unit;
     return Math.max(0, given - sold + txNet);
   }
   if (typeof ov === "number") {
@@ -534,33 +561,6 @@ export function branchTrendAnalysis(products, periods) {
 
     return { branch, growth, totalRev, topProducts };
   }).sort((a, b) => b.totalRev - a.totalRev);
-}
-
-// باركودات لها مبيعات لكن ما لها فاتورة مشتريات (يتيمة)
-export function findOrphanBarcodes(products, periods) {
-  const known = new Set((products ?? []).map(p => p.barcode));
-  const orphans = {}; // barcode → { barcode, name, sold, revenue, branches:Set }
-  (periods ?? []).forEach(per => {
-    Object.entries(per.sales ?? {}).forEach(([branch, data]) => {
-      Object.entries(data ?? {}).forEach(([bc, v]) => {
-        if (known.has(bc)) return;              // له فاتورة → نتجاهله
-        const qty = num(v?.qty ?? 0);
-        if (qty <= 0) return;
-        if (!orphans[bc]) orphans[bc] = { barcode: bc, name: "", sold: 0, revenue: 0, branches: new Set(), salesNames: new Set() };
-        orphans[bc].sold += qty;
-        orphans[bc].revenue += num(v?.totalPrice ?? 0);
-        orphans[bc].branches.add(branch);
-        (v?.salesNames ?? []).forEach(n => n && orphans[bc].salesNames.add(n));
-      });
-    });
-  });
-  return Object.values(orphans).map(o => ({
-    barcode: o.barcode,
-    name: [...o.salesNames][0] || "",          // نأخذ أول اسم من المبيعات
-    sold: o.sold,
-    revenue: o.revenue,
-    branchCount: o.branches.size,
-  })).sort((a, b) => b.sold - a.sold);
 }
 
 export { MIN_STOCK };
