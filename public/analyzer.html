@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>تحليل الفواتير — ALBAROO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
+  body{background:#0b0f1a;color:#e8eef7;direction:rtl;min-height:100vh}
+  .wrap{max-width:520px;margin:0 auto;padding:16px 14px 90px}
+
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-top:6px}
+  .head h1{font-size:21px;font-weight:900;color:#fff}
+  .head .sub{font-size:11px;color:#5b7fb8;margin-top:1px}
+  .back{background:rgba(91,127,184,0.12);border:1px solid rgba(91,127,184,0.3);color:#7aa5e0;
+        border-radius:100px;padding:6px 13px;font-size:12px;font-weight:700;text-decoration:none;font-family:'Cairo'}
+
+  .drop{border:2px dashed #26344f;border-radius:16px;padding:22px 16px;text-align:center;
+        background:#111827;cursor:pointer;transition:all .2s;margin-bottom:12px}
+  .drop:active{background:#151f33;border-color:#3a5party}
+  .drop.has{border-color:#2b7a4b;background:#0f1c17}
+  .drop .ic{font-size:30px;margin-bottom:8px}
+  .drop .t{font-size:14px;font-weight:900;color:#fff}
+  .drop .d{font-size:11px;color:#5b6b85;margin-top:3px}
+
+  .files{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .file{display:flex;align-items:center;justify-content:space-between;background:#111827;
+        border:1px solid #1e293b;border-radius:10px;padding:9px 12px;font-size:12px}
+  .file .nm{color:#cbd5e1;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file .rm{color:#f87171;cursor:pointer;font-weight:900;padding:0 4px;font-size:15px}
+  .file .cnt{color:#5b7fb8;font-size:10px;white-space:nowrap;margin-inline-start:8px}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .btn{border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:900;cursor:pointer;font-family:'Cairo';color:#fff}
+  .btn.go{background:linear-gradient(135deg,#2563eb,#1d4ed8)}
+  .btn.sec{background:#1e293b;border:1px solid #2d3a52;color:#cbd5e1}
+  .btn.pr{background:linear-gradient(135deg,#059669,#047857)}
+  .btn:disabled{opacity:.4;cursor:default}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px}
+  .stat{background:#111827;border:1px solid #1e293b;border-radius:12px;padding:11px 8px;text-align:center}
+  .stat .v{font-size:19px;font-weight:900}
+  .stat .l{font-size:10px;color:#64748b;margin-top:2px}
+
+  .seg{display:flex;background:#111827;border:1px solid #1e293b;border-radius:12px;padding:4px;gap:4px;margin-bottom:12px}
+  .seg button{flex:1;padding:9px;border:none;border-radius:9px;background:transparent;color:#64748b;
+              font-size:12px;font-weight:900;cursor:pointer;font-family:'Cairo'}
+  .seg button.on{background:rgba(37,99,235,0.18);color:#7aa5e0}
+
+  .card{background:#111827;border:1px solid #1e293b;border-radius:13px;padding:11px;margin-bottom:8px}
+  .card .top{display:flex;align-items:center;gap:9px}
+  .rank{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        font-size:11px;font-weight:900;flex-shrink:0}
+  .card .bc{font-family:monospace;font-size:12px;color:#94a3b8}
+  .card .nm{font-size:12px;font-weight:700;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qty{font-size:19px;font-weight:900;text-align:left;flex-shrink:0}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+  .chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px}
+
+  .disc{background:linear-gradient(135deg,#7c2d12,#9a3412);border-radius:8px;padding:2px 9px}
+  .discbar{display:flex;align-items:center;justify-content:space-between;margin-top:8px;
+           background:#0d1420;border:1px solid #1e293b;border-radius:9px;padding:8px 10px}
+
+  .search{width:100%;background:#111827;border:1px solid #26344f;color:#e8eef7;border-radius:12px;
+          padding:11px 13px;font-size:14px;font-family:'Cairo';margin-bottom:12px;outline:none}
+  .search:focus{border-color:#2563eb}
+
+  .rules{background:#111827;border:1px solid #1e293b;border-radius:13px;padding:13px;margin-bottom:12px}
+  .rules h3{font-size:13px;font-weight:900;color:#fff;margin-bottom:10px}
+  .rule{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1a2436}
+  .rule:last-child{border:none}
+  .rule label{font-size:12px;color:#cbd5e1;font-weight:700}
+  .rule input{width:64px;background:#0d1420;border:1px solid #2d3a52;color:#fff;border-radius:8px;
+              padding:7px;text-align:center;font-size:14px;font-weight:900;font-family:'Cairo';outline:none}
+  .rule .u{font-size:11px;color:#64748b;margin-inline-start:4px}
+
+  .empty{text-align:center;padding:40px 20px;color:#475569}
+  .empty .ic{font-size:38px;margin-bottom:10px}
+  .side{background:#1a1206;border:1px solid #3a2a10;border-radius:13px;padding:12px;margin-top:14px}
+  .side h3{font-size:12px;font-weight:900;color:#d4a853;margin-bottom:8px}
+  .side .it{font-size:11px;color:#a8895a;padding:4px 0;border-bottom:1px solid #2a1f0c}
+  .spin{display:inline-block;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;
+         border:1px solid #334155;color:#fff;padding:11px 20px;border-radius:100px;font-size:13px;
+         font-weight:700;z-index:100;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.show{opacity:1}
+  ::-webkit-scrollbar{width:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>تحليل الفواتير</h1>
+      <div class="sub">جمّع · رتّب · صرّف الضعيف</div>
+    </div>
+    <a href="https://baro-inventory-qmpp.vercel.app" class="back">← النظام</a>
+  </div>
+
+  <div id="app"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ══ الحالة ══
+let SALES_FILES = [];   // [{name, map:{bc:qty}}]
+let PURCH_FILES = [];   // [{name, map:{bc:qty}, noBarcode:[...]}]
+let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
+let RESULT = null;      // نتيجة التجميع
+let TAB = "best";       // best | weak | all
+let SEARCH = "";
+let NO_BC = [];         // أصناف بدون باركود
+
+// ══ أدوات ══
+const num = v => Number(v)||0;
+const fmt = v => (Number(v)||0).toLocaleString("en-US",{maximumFractionDigits:0});
+const factoryCode = bc => String(bc||"").slice(0,5);
+const $ = id => document.getElementById(id);
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+
+// ══ استخراج المبيعات: الباركود بين [ ] ══
+function parseSales(rows){
+  const map = {};
+  rows.forEach(row => {
+    const txt = row[0];
+    if (!txt) return;
+    const m = String(txt).match(/\[([^\]]+)\]/);
+    if (!m) return;
+    const code = m[1].trim();
+    const qty = num(row[1]);
+    if (qty > 0) map[code] = (map[code]||0) + qty;
+  });
+  return map;
+}
+
+// ══ استخراج المشتريات: يكتشف الصيغة تلقائياً ══
+// صيغة 1: الباركود بين [ ] والكمية في عمود لاحق (زي المبيعات/تحليل المشتريات)
+// صيغة 2: فاتورة بمدى B001~012 والكمية في عمود PCS
+function parsePurchases(rows){
+  const map = {};
+  const noBarcode = [];
+
+  // نكتشف: هل أغلب الصفوف فيها باركود بين أقواس؟
+  let bracketRows = 0, sampleN = 0;
+  for (const row of rows){
+    if (sampleN >= 30) break;
+    const c = row.find(x => x && String(x).includes("["));
+    if (c) bracketRows++;
+    if (row.some(x => x != null)) sampleN++;
+  }
+  const isBracketFormat = bracketRows >= 3;
+
+  if (isBracketFormat){
+    // صيغة الأقواس: الباركود بين [ ]، الكمية = أول رقم موجب بعد نص الباركود
+    rows.forEach(row => {
+      const txtCell = row.find(x => x && String(x).includes("["));
+      if (!txtCell) return;
+      const m = String(txtCell).match(/\[([^\]]+)\]/);
+      if (!m) return;
+      const code = m[1].trim();
+      // الكمية: نبحث عن "الكمية المطلوبة" — عادة العمود بعد الإجمالي
+      // نأخذ الأرقام في الصف، ونختار الكمية (عدد صحيح موجب، مو السعر الكسري)
+      const nums = row.filter(x => typeof x === "number" && x > 0);
+      // نتجاهل صف الإجمالي
+      if (String(txtCell).includes("الإجمالي")) return;
+      // الكمية المطلوبة = أكبر عدد صحيح (الكميات أعداد صحيحة، التكلفة كسرية)
+      let qty = 0;
+      for (const nv of nums){ if (Number.isInteger(nv) && nv > qty) qty = nv; }
+      if (qty <= 0 && nums.length) qty = Math.round(nums[0]);
+      if (qty > 0) map[code] = (map[code]||0) + qty;
+    });
+    return { map, noBarcode };
+  }
+
+  // صيغة الفاتورة (مدى)
+  rows.forEach(row => {
+    const item = row[1];
+    const pcs = num(row[3]);
+    if (!item || pcs <= 0) return;
+    const code = String(item).trim();
+    if (!/[A-Za-z]*\d{4,}/.test(code) || /^stock/i.test(code)) {
+      noBarcode.push({ name: String(row[2]||code).trim(), qty: pcs, price: num(row[4]) });
+      return;
+    }
+    const rng = code.match(/^(.+?)(\d+)~(\d+)$/);
+    if (rng) {
+      const prefix = rng[1], start = +rng[2], end = +rng[3], width = rng[2].length;
+      const count = end - start + 1;
+      if (count >= 1 && count <= 200) {
+        const per = pcs / count;
+        for (let i=start; i<=end; i++){
+          const b = prefix + String(i).padStart(width,"0");
+          map[b] = (map[b]||0) + per;
+        }
+        return;
+      }
+    }
+    map[code] = (map[code]||0) + pcs;
+  });
+  return { map, noBarcode };
+}
+
+// ══ قراءة ملف إكسل ══
+function readFile(file){
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type:"array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+        res(rows);
+      } catch(err){ rej(err); }
+    };
+    reader.onerror = rej;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ══ رفع ملفات المبيعات ══
+async function onSalesFiles(files){
+  for (const f of files){
+    try {
+      const rows = await readFile(f);
+      const map = parseSales(rows);
+      SALES_FILES.push({ name: f.name, map });
+    } catch(e){ toast("تعذّر قراءة "+f.name); }
+  }
+  RESULT = null;
+  render();
+}
+async function onPurchFiles(files){
+  for (const f of files){
+    try {
+      const rows = await readFile(f);
+      const { map, noBarcode } = parsePurchases(rows);
+      PURCH_FILES.push({ name: f.name, map, noBarcode });
+    } catch(e){ toast("تعذّر قراءة "+f.name); }
+  }
+  RESULT = null;
+  render();
+}
+
+// ══ التجميع والتحليل ══
+function analyze(){
+  if (SALES_FILES.length === 0){ toast("ارفع ملف مبيعات أولاً"); return; }
+  // اجمع المبيعات
+  const sales = {};
+  SALES_FILES.forEach(f => Object.entries(f.map).forEach(([bc,q]) => sales[bc] = (sales[bc]||0) + q));
+  // اجمع المشتريات
+  const purch = {};
+  NO_BC = [];
+  PURCH_FILES.forEach(f => {
+    Object.entries(f.map).forEach(([bc,q]) => purch[bc] = (purch[bc]||0) + q);
+    NO_BC.push(...f.noBarcode);
+  });
+  const hasPurch = Object.keys(purch).length > 0;
+
+  // ادمج
+  const allBc = new Set([...Object.keys(sales), ...Object.keys(purch)]);
+  const items = [...allBc].map(bc => {
+    const sold = Math.round(sales[bc]||0);
+    const bought = Math.round(purch[bc]||0);
+    const remaining = hasPurch ? Math.max(0, bought - sold) : null;
+    const soldPct = (hasPurch && bought>0) ? (sold/bought)*100 : null;
+    return { bc, sold, bought, remaining, soldPct, factory: factoryCode(bc) };
+  });
+
+  // رتّب بالمبيعات
+  items.sort((a,b) => b.sold - a.sold);
+
+  // شرائح الخصم: نوزّع على الثلث الأضعف/الأوسط/الأقوى-ضمن-الضعيف
+  // الضعيف = النصف الأدنى مبيعا
+  const withSales = items.filter(i => i.sold > 0);
+  const n = withSales.length;
+  items.forEach(it => {
+    const rankFromWeak = withSales.findIndex(x => x.bc === it.bc); // 0 = الأضعف بعد الترتيب التنازلي؟
+  });
+  // نحسب رتبة كل منتج من الأضعف (تصاعدي)
+  const byWeak = [...withSales].sort((a,b) => a.sold - b.sold);
+  byWeak.forEach((it, i) => {
+    const pos = i / Math.max(1, byWeak.length - 1); // 0 = الأضعف, 1 = الأقوى
+    let disc;
+    if (pos < 0.34) disc = RULES.t1;        // الأضعف
+    else if (pos < 0.67) disc = RULES.t2;   // الأوسط
+    else disc = RULES.t3;                    // الأقوى ضمن الضعيف
+    it.discount = disc;
+  });
+  items.filter(i => i.sold === 0).forEach(it => it.discount = RULES.t1);
+
+  // منتجات لها مبيعات بس بدون فاتورة شراء (تطلع لحالها لو رُفعت مشتريات)
+  const noPurchase = hasPurch
+    ? items.filter(i => i.sold > 0 && i.bought === 0).sort((a,b) => b.sold - a.sold)
+    : [];
+
+  RESULT = { items, hasPurch, noPurchase, totalSold: items.reduce((s,i)=>s+i.sold,0),
+             totalBought: items.reduce((s,i)=>s+i.bought,0), count: items.length };
+  render();
+}
+
+// ══ العرض ══
+function fileList(arr, kind){
+  if (arr.length === 0) return "";
+  return `<div class="files">` + arr.map((f,i) =>
+    `<div class="file">
+       <span class="nm">📄 ${f.name}</span>
+       <span style="display:flex;align-items:center">
+         <span class="cnt">${Object.keys(f.map).length} باركود</span>
+         <span class="rm" onclick="removeFile('${kind}',${i})">✕</span>
+       </span>
+     </div>`).join("") + `</div>`;
+}
+
+function rankColor(i){
+  if (i===0) return ["#f59e0b","#0b0f1a"];
+  if (i===1) return ["#94a3b8","#0b0f1a"];
+  if (i===2) return ["#b45309","#fff"];
+  return ["#1e293b","#64748b"];
+}
+
+function itemCard(it, idx, mode){
+  const [rb, rc] = rankColor(idx);
+  const discColor = it.discount >= 80 ? "#ef4444" : it.discount >= 70 ? "#f59e0b" : "#22c55e";
+  return `<div class="card">
+    <div class="top">
+      <div class="rank" style="background:${rb};color:${rc}">${idx+1}</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">${it.bc}</div>
+        <div class="bc">🏭 ${it.factory}</div>
+      </div>
+      <div class="qty" style="color:${mode==='weak'?'#f87171':'#22c55e'}">${fmt(it.sold)}</div>
+    </div>
+    <div class="chips">
+      <span class="chip" style="background:rgba(34,197,94,0.15);color:#4ade80">باع ${fmt(it.sold)}</span>
+      ${it.bought>0?`<span class="chip" style="background:rgba(59,130,246,0.15);color:#7aa5e0">اشترى ${fmt(it.bought)}</span>`:''}
+      ${it.remaining!==null?`<span class="chip" style="background:rgba(148,163,184,0.15);color:#cbd5e1">متبقي ${fmt(it.remaining)}</span>`:''}
+      ${it.soldPct!==null?`<span class="chip" style="background:rgba(245,158,11,0.15);color:#fbbf24">${Math.round(it.soldPct)}% بيع</span>`:''}
+    </div>
+    ${mode==='weak'?`<div class="discbar">
+      <span style="font-size:12px;color:#cbd5e1;font-weight:700">💸 خصم التصريف المقترح</span>
+      <span style="font-size:17px;font-weight:900;color:${discColor}">${it.discount}%</span>
+    </div>`:''}
+  </div>`;
+}
+
+function render(){
+  const app = $("app");
+
+  // شاشة الرفع (ما فيه نتيجة)
+  if (!RESULT){
+    app.innerHTML = `
+      <div class="drop has" style="${SALES_FILES.length?'':'border-style:dashed'}">
+        <input type="file" id="salesInput" accept=".xlsx,.xls" multiple style="display:none">
+        <label for="salesInput" style="cursor:pointer;display:block">
+          <div class="ic">📈</div>
+          <div class="t">ملفات المبيعات</div>
+          <div class="d">${SALES_FILES.length? SALES_FILES.length+' ملف مرفوع · أضف المزيد' : 'اضغط لرفع ملف أو أكثر'}</div>
+        </label>
+      </div>
+      ${fileList(SALES_FILES,'sales')}
+
+      <div class="drop ${PURCH_FILES.length?'has':''}">
+        <input type="file" id="purchInput" accept=".xlsx,.xls" multiple style="display:none">
+        <label for="purchInput" style="cursor:pointer;display:block">
+          <div class="ic">🧾</div>
+          <div class="t">فاتورة المشتريات <span style="font-size:11px;color:#64748b;font-weight:400">(اختياري)</span></div>
+          <div class="d">${PURCH_FILES.length? PURCH_FILES.length+' ملف · لحساب المتبقي' : 'لحساب المتبقي ونسبة البيع'}</div>
+        </label>
+      </div>
+      ${fileList(PURCH_FILES,'purch')}
+
+      <button class="btn go" onclick="analyze()" style="width:100%;margin-top:6px" ${SALES_FILES.length?'':'disabled'}>
+        🔍 حلّل واعرض النتائج
+      </button>
+
+      ${SALES_FILES.length===0?`<div class="empty"><div class="ic">📊</div><div style="font-size:13px">ارفع ملفات فواتيرك القديمة<br>والنظام يجمّع ويرتّب ويقترح التخفيض</div></div>`:''}
+    `;
+    $("salesInput").onchange = e => onSalesFiles([...e.target.files]);
+    $("purchInput").onchange = e => onPurchFiles([...e.target.files]);
+    return;
+  }
+
+  // شاشة النتائج
+  let list = RESULT.items;
+  if (TAB === "best") list = [...RESULT.items].sort((a,b)=>b.sold-a.sold);
+  else if (TAB === "weak") list = [...RESULT.items].filter(i=>i.sold>0).sort((a,b)=>a.sold-b.sold);
+  else list = [...RESULT.items].sort((a,b)=>b.sold-a.sold);
+
+  if (SEARCH){
+    const s = SEARCH.toLowerCase();
+    list = list.filter(i => i.bc.toLowerCase().includes(s) || i.factory.includes(s));
+  }
+  const shown = list.slice(0, 100);
+
+  app.innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="v" style="color:#7aa5e0">${fmt(RESULT.count)}</div><div class="l">منتج</div></div>
+      <div class="stat"><div class="v" style="color:#4ade80">${fmt(RESULT.totalSold)}</div><div class="l">إجمالي المبيعات</div></div>
+      <div class="stat"><div class="v" style="color:${RESULT.hasPurch?'#fbbf24':'#475569'}">${RESULT.hasPurch?fmt(RESULT.totalBought):'—'}</div><div class="l">المشتريات</div></div>
+    </div>
+
+    <div class="rules">
+      <h3>💸 شرائح خصم التصريف</h3>
+      <div class="rule"><label>الأضعف مبيعاً</label><div><input type="number" id="t1" value="${RULES.t1}" min="0" max="95" onchange="setRule('t1',this.value)"><span class="u">%</span></div></div>
+      <div class="rule"><label>المتوسط</label><div><input type="number" id="t2" value="${RULES.t2}" min="0" max="95" onchange="setRule('t2',this.value)"><span class="u">%</span></div></div>
+      <div class="rule"><label>الأقل ضعفاً</label><div><input type="number" id="t3" value="${RULES.t3}" min="0" max="95" onchange="setRule('t3',this.value)"><span class="u">%</span></div></div>
+    </div>
+
+    <div class="seg">
+      <button class="${TAB==='best'?'on':''}" onclick="setTab('best')">🔥 الأفضل</button>
+      <button class="${TAB==='weak'?'on':''}" onclick="setTab('weak')">📉 الأضعف + الخصم</button>
+      <button class="${TAB==='all'?'on':''}" onclick="setTab('all')">📋 الكل</button>
+    </div>
+
+    <input class="search" placeholder="🔍 بحث بالباركود أو المصنع…" value="${SEARCH}" oninput="setSearch(this.value)">
+
+    <div class="row2">
+      <button class="btn pr" onclick="doPrint()">🖨️ طباعة</button>
+      <button class="btn sec" onclick="resetAll()">↺ ملفات جديدة</button>
+    </div>
+
+    <div style="font-size:11px;color:#475569;margin-bottom:10px">${list.length} منتج${shown.length<list.length?` · يُعرض أول ${shown.length}`:''}</div>
+
+    ${shown.map((it,i)=>itemCard(it,i,TAB)).join("")}
+
+    ${RESULT.noPurchase && RESULT.noPurchase.length>0?`<div class="side" style="background:#0d1a2a;border-color:#1e3a52">
+      <h3 style="color:#7aa5e0">📦 مباع بدون فاتورة شراء (${RESULT.noPurchase.length})</h3>
+      <div style="font-size:10px;color:#5b7fb8;margin-bottom:8px">مبيعات بدون مشتريات مسجّلة — قد تكون بضاعة قديمة</div>
+      ${RESULT.noPurchase.slice(0,20).map(x=>`<div class="it" style="color:#8bb0d8;border-color:#12283f;display:flex;justify-content:space-between"><span style="font-family:monospace">${x.bc}</span><span style="font-weight:900">باع ${fmt(x.sold)}</span></div>`).join("")}
+      ${RESULT.noPurchase.length>20?`<div class="it" style="color:#5b7fb8;border:none">+ ${RESULT.noPurchase.length-20} منتج آخر</div>`:''}
+    </div>`:''}
+
+    ${NO_BC.length>0?`<div class="side">
+      <h3>⚠️ أصناف بدون باركود (${NO_BC.length})</h3>
+      ${NO_BC.slice(0,20).map(x=>`<div class="it">${x.name} · كمية ${fmt(x.qty)}</div>`).join("")}
+      ${NO_BC.length>20?`<div class="it" style="color:#64748b">+ ${NO_BC.length-20} صنف آخر</div>`:''}
+    </div>`:''}
+  `;
+}
+
+// ══ أحداث ══
+function removeFile(kind, i){
+  if (kind==='sales') SALES_FILES.splice(i,1);
+  else PURCH_FILES.splice(i,1);
+  RESULT = null; render();
+}
+function setRule(k,v){ RULES[k]=Math.max(0,Math.min(95,num(v))); if(RESULT) analyze(); }
+function setTab(t){ TAB=t; render(); }
+function setSearch(v){ SEARCH=v; render(); }
+function resetAll(){ SALES_FILES=[]; PURCH_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; render(); }
+
+// ══ الطباعة ══
+function doPrint(){
+  if (!RESULT) return;
+  let list = RESULT.items;
+  if (TAB==='weak') list = [...list].filter(i=>i.sold>0).sort((a,b)=>a.sold-b.sold);
+  else list = [...list].sort((a,b)=>b.sold-a.sold);
+
+  const d = new Date();
+  const dt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const ttl = TAB==='weak' ? 'الأضعف مبيعاً + خصم التصريف' : TAB==='best' ? 'الأفضل مبيعاً' : 'كل المنتجات';
+
+  const rows = list.map((it,i) => `<tr class="${TAB==='weak'?'w':''}">
+    <td class="n">${i+1}</td>
+    <td class="bc">${it.bc}</td>
+    <td class="f">${it.factory}</td>
+    <td class="big">${fmt(it.sold)}</td>
+    ${RESULT.hasPurch?`<td>${fmt(it.bought)}</td><td>${it.remaining!==null?fmt(it.remaining):'—'}</td><td>${it.soldPct!==null?Math.round(it.soldPct)+'%':'—'}</td>`:''}
+    ${TAB==='weak'?`<td class="d">${it.discount}%</td>`:''}
+  </tr>`).join("");
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${ttl}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+    body{background:#fff;color:#1a1a1a}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+    .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+    .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+    .w{max-width:800px;margin:0 auto;padding:70px 16px 40px}
+    h1{text-align:center;color:#0f172a;font-size:22px;margin-bottom:4px}
+    .date{text-align:center;color:#888;font-size:13px;margin-bottom:18px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#0f172a;color:#fff;padding:9px 6px;font-size:12px}
+    td{border:1px solid #e2e8f0;padding:7px 6px;text-align:center}
+    td.n{background:#f1f5f9;font-weight:900;color:#888}
+    td.bc{font-family:monospace;font-size:12px;color:#334155;font-weight:700}
+    td.f{font-family:monospace;color:#64748b;font-size:11px}
+    td.big{font-size:16px;font-weight:900;color:#059669}
+    td.d{font-size:16px;font-weight:900;color:#dc2626}
+    tr.w td.big{color:#dc2626}
+    tr:nth-child(even) td{background:#fafbfc}
+    @media print{.tb{display:none}.w{padding:16px}}
+  </style></head><body>
+  <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوv</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+  <div class="w">
+    <h1>${ttl}</h1>
+    <div class="date">📅 ${dt} · ALBAROO · ${list.length} منتج · إجمالي ${fmt(list.reduce((s,i)=>s+i.sold,0))}</div>
+    <table><thead><tr>
+      <th>#</th><th>الباركود</th><th>المصنv</th><th>باع</th>
+      ${RESULT.hasPurch?'<th>اشترى</th><th>متبقي</th><th>نسبة</th>':''}
+      ${TAB==='weak'?'<th>الخصم</th>':''}
+    </tr></thead><tbody>${rows}</tbody></table>
+  </div></body></html>`;
+  const w = window.open("","_blank");
+  if (w){ w.document.write(html); w.document.close(); }
+  else toast("اسمح بالنوافذ المنبثقة للطباعة");
+}
+
+render();
+</script>
+</body>
+</html>
