@@ -99,6 +99,11 @@
   .side{background:#1a1206;border:1px solid #3a2a10;border-radius:13px;padding:12px;margin-top:14px}
   .side h3{font-size:12px;font-weight:900;color:#d4a853;margin-bottom:8px}
   .side .it{font-size:11px;color:#a8895a;padding:4px 0;border-bottom:1px solid #2a1f0c}
+  .nobccard{background:#0d1420;border:1px solid #2a1f0c;border-radius:11px;padding:11px;margin-bottom:9px}
+  .nobcgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px}
+  .nobccell{background:#161d2e;border-radius:8px;padding:7px;text-align:center}
+  .nobccell .ncv{display:block;font-size:16px;font-weight:900;color:#d4a853}
+  .nobccell .ncl{display:block;font-size:10px;color:#64748b;margin-top:2px}
   .spin{display:inline-block;animation:sp 1s linear infinite}
   @keyframes sp{to{transform:rotate(360deg)}}
   .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;
@@ -131,6 +136,51 @@ let SALES_FILES = [];   // [{name, map:{bc:qty}}]
 let PURCH_FILES = [];   // [{name, map:{bc:qty}, noBarcode:[...]}]
 let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
 let RESULT = null;      // نتيجة التجميع
+
+// ══ حفظ في Supabase (يظهر للكل) ══
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+const STORE_KEY = "baro_analyzer_v1";
+
+async function saveToCloud(){
+  try {
+    const payload = { salesFiles: SALES_FILES, purchFiles: PURCH_FILES, rules: RULES };
+    await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+      method:"POST",
+      headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+      body: JSON.stringify({ key: STORE_KEY, value: JSON.stringify(payload), updated_at: new Date().toISOString() })
+    });
+    toast("💾 حُفظ في النظام");
+  } catch(e){ toast("تعذّر الحفظ — تحقق من النت"); }
+}
+
+async function loadFromCloud(){
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 20000);
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${STORE_KEY}&select=value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }, signal: ctrl.signal });
+    clearTimeout(timer);
+    const j = await r.json();
+    let raw = j?.[0]?.value;
+    if (raw == null) return;
+    if (typeof raw === "string") raw = JSON.parse(raw);
+    SALES_FILES = raw.salesFiles || [];
+    PURCH_FILES = raw.purchFiles || [];
+    RULES = raw.rules || RULES;
+    if (SALES_FILES.length || PURCH_FILES.length){ analyze(); }
+  } catch(e){ /* أول مرة أو نت ضعيف */ }
+}
+
+async function clearCloud(){
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${STORE_KEY}`, {
+      method:"DELETE",
+      headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
+    });
+  } catch(e){}
+}
 let TAB = "best";       // best | weak | all
 let SEARCH = "";
 let SORT = "sold_desc"; // sold_desc | sold_asc | pct_asc | pct_desc | factory
@@ -241,7 +291,7 @@ function parsePurchases(rows){
     const code = String(item).trim();
     if (code === "ITEM NO" || code.includes("ITEM")) return; // صف العناوين
     if (!/[A-Za-z]*\d{4,}/.test(code) || /^stock/i.test(code)) {
-      noBarcode.push({ name: String(row[2]||code).trim(), qty: pcs, price: num(row[4]) });
+      noBarcode.push({ name: String(row[2]||code).trim(), qty: pcs, price: num(row[4]), cont: invCont || "" });
       return;
     }
     const sellPrice = num(row[0]);   // العمود الأول = سعر البيv
@@ -382,6 +432,7 @@ function analyze(){
   RESULT = { items, hasPurch, noPurchase, totalSold: items.reduce((s,i)=>s+i.sold,0),
              totalBought: items.reduce((s,i)=>s+i.bought,0), count: items.length };
   render();
+  saveToCloud();
 }
 
 // ══ العرض ══
@@ -408,7 +459,9 @@ function itemCard(it, idx, mode){
   const [rb, rc] = rankColor(idx);
   const discColor = it.discount >= 80 ? "#ef4444" : it.discount >= 70 ? "#f59e0b" : "#22c55e";
   const pctColor = it.soldPct===null ? "#64748b" : it.soldPct < 30 ? "#ef4444" : it.soldPct < 60 ? "#f59e0b" : "#22c55e";
-  const nm = it.purchName || it.salesName || "";
+  const nmP = it.purchName || "";
+  const nmS = it.salesName || "";
+  // نعرض الاثنين لو مختلفين، وإلا واحد
   // سعر البيع بعد الخصم
   const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell * (1 - it.discount/100) * 100)/100 : null;
   return `<div class="card">
@@ -416,7 +469,8 @@ function itemCard(it, idx, mode){
       <div class="rank" style="background:${rb};color:${rc}">${idx+1}</div>
       <div style="flex:1;min-width:0">
         <div class="bcbig">${it.bc}</div>
-        ${nm?`<div class="nm">${nm}</div>`:''}
+        ${nmS?`<div class="nm">${nmS}</div>`:''}
+        ${nmP && nmP!==nmS?`<div class="nm" style="color:#7aa5e0;font-size:11px">🧾 ${nmP}</div>`:''}
         <div class="fc">🏭 ${it.factory}${it.cont && it.cont!=='بدون كونتينر' ? ` · 📦 ${it.cont}` : ''}</div>
       </div>
     </div>
@@ -541,19 +595,30 @@ function render(){
 
     <div style="font-size:11px;color:#475569;margin-bottom:10px">${list.length} منتج${shown.length<list.length?` · يُعرض أول ${shown.length}`:''}</div>
 
-    ${GROUP!=='none' ? renderGrouped(shown, GROUP) : shown.map((it,i)=>itemCard(it,i,TAB)).join("")}
+    ${GROUP!=='none' ? renderGrouped(list, GROUP) : shown.map((it,i)=>itemCard(it,i,TAB)).join("")}
 
     ${RESULT.noPurchase && RESULT.noPurchase.length>0?`<div class="side" style="background:#0d1a2a;border-color:#1e3a52">
       <h3 style="color:#7aa5e0">📦 مباع بدون فاتورة شراء (${RESULT.noPurchase.length})</h3>
-      <div style="font-size:10px;color:#5b7fb8;margin-bottom:8px">مبيعات بدون مشتريات مسجّلة — قد تكون بضاعة قديمة</div>
-      ${RESULT.noPurchase.slice(0,20).map(x=>`<div class="it" style="color:#8bb0d8;border-color:#12283f;display:flex;justify-content:space-between"><span style="font-family:monospace">${x.bc}</span><span style="font-weight:900">باع ${fmt(x.sold)}</span></div>`).join("")}
-      ${RESULT.noPurchase.length>20?`<div class="it" style="color:#5b7fb8;border:none">+ ${RESULT.noPurchase.length-20} منتج آخر</div>`:''}
+      <div style="font-size:11px;color:#5b7fb8;margin-bottom:10px">مبيعات بدون مشتريات مسجّلة — قد تكون بضاعة قديمة</div>
+      ${RESULT.noPurchase.slice(0,50).map((it,i)=>itemCard(it,i,TAB)).join("")}
+      ${RESULT.noPurchase.length>50?`<div class="it" style="color:#5b7fb8;border:none;padding-top:8px">+ ${RESULT.noPurchase.length-50} منتج آخر</div>`:''}
     </div>`:''}
 
     ${NO_BC.length>0?`<div class="side">
       <h3>⚠️ أصناف بدون باركود (${NO_BC.length})</h3>
-      ${NO_BC.slice(0,20).map(x=>`<div class="it">${x.name} · كمية ${fmt(x.qty)}</div>`).join("")}
-      ${NO_BC.length>20?`<div class="it" style="color:#64748b">+ ${NO_BC.length-20} صنف آخر</div>`:''}
+      <div style="font-size:11px;color:#a8895a;margin-bottom:10px">لها معلومات كاملة عدا الباركود — أضِفه يدوياً</div>
+      ${NO_BC.slice(0,50).map((x,i)=>`<div class="nobccard">
+        <div style="font-size:13px;font-weight:900;color:#f0e6d0;margin-bottom:6px">${x.name||'—'}</div>
+        <div class="nobcgrid">
+          <div class="nobccell"><span class="ncv">${fmt(x.qty)}</span><span class="ncl">الكمية</span></div>
+          ${x.price>0?`<div class="nobccell"><span class="ncv">${fmt(x.price)}</span><span class="ncl">السعر</span></div>`:''}
+          ${x.cont?`<div class="nobccell"><span class="ncv" style="font-size:12px">${x.cont}</span><span class="ncl">الكونتينر</span></div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+          <input class="bcinput" id="nobc_${i}" placeholder="اكتب الباركود هنا…" style="flex:1;background:#0d1420;border:1px solid #3a2a10;color:#fff;border-radius:8px;padding:8px 10px;font-family:monospace;font-size:14px;outline:none">
+        </div>
+      </div>`).join("")}
+      ${NO_BC.length>50?`<div class="it" style="color:#64748b;border:none;padding-top:8px">+ ${NO_BC.length-50} صنف آخر</div>`:''}
     </div>`:''}
   `;
 }
@@ -563,6 +628,7 @@ function removeFile(kind, i){
   if (kind==='sales') SALES_FILES.splice(i,1);
   else PURCH_FILES.splice(i,1);
   RESULT = null; render();
+  if (SALES_FILES.length || PURCH_FILES.length) saveToCloud(); else clearCloud();
 }
 function setRule(k,v){ RULES[k]=Math.max(0,Math.min(95,num(v))); if(RESULT) analyze(); }
 function setTab(t){ TAB=t; render(); }
@@ -589,9 +655,10 @@ function renderGrouped(items, mode){
     const safeKey = g.key.replace(/'/g,"");
     return `
     <div class="facgroup">
-      <div class="fachead" onclick="toggleGroupOpen('${safeKey}')" style="cursor:pointer">
-        <span>${open?'▲':'▼'} ${icon} ${label}${g.key}</span>
+      <div class="fachead">
+        <span onclick="toggleGroupOpen('${safeKey}')" style="cursor:pointer;flex:1">${open?'▲':'▼'} ${icon} ${label}${g.key}</span>
         <span class="faccount">${g.arr.length} منتج · باع ${fmt(g.total)}</span>
+        <button onclick="printGroup('${safeKey}','${mode}')" style="background:rgba(37,99,235,0.25);border:none;border-radius:8px;color:#7aa5e0;font-size:16px;padding:4px 9px;cursor:pointer;margin-inline-start:8px">🖨️</button>
       </div>
       ${open ? g.arr.map((it,i)=>itemCard(it,i,TAB)).join("") : ""}
     </div>`;
@@ -599,41 +666,63 @@ function renderGrouped(items, mode){
 }
 let OPEN_GROUPS = {};
 function toggleGroupOpen(key){ OPEN_GROUPS[key] = !OPEN_GROUPS[key]; render(); }
-function resetAll(){ SALES_FILES=[]; PURCH_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; render(); }
+
+// طباعة كونتينر/مصنع واحد
+function printGroup(key, mode){
+  if (!RESULT) return;
+  const items = RESULT.items.filter(it => (mode==='container' ? (it.cont||"بدون كونتينر") : it.factory) === key)
+    .sort((a,b)=>b.sold-a.sold);
+  const icon = mode==='container' ? "📦 كونتينر" : "🏭 مصنع";
+  printList(items, `${icon} ${key}`);
+}
+function resetAll(){
+  if (!confirm("مسح كل الملفات والبيانات من النظام؟ (يظهر للكل)")) return;
+  SALES_FILES=[]; PURCH_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; OPEN_GROUPS={};
+  clearCloud();
+  toast("🗑️ مُسح الكل");
+  render();
+}
 
 // ══ الطباعة ══
 function doPrint(){
   if (!RESULT) return;
   let list = [...RESULT.items];
   if (TAB==='weak') list = list.filter(i=>i.sold>0);
-  if (SEARCH){ const s=SEARCH.toLowerCase(); list=list.filter(i=>i.bc.toLowerCase().includes(s)||i.factory.includes(s)||(i.name||'').toLowerCase().includes(s)); }
+  if (SEARCH){ const s=SEARCH.toLowerCase(); list=list.filter(i=>i.bc.toLowerCase().includes(s)||i.factory.includes(s)||(i.purchName||i.salesName||'').toLowerCase().includes(s)); }
   const sortFns={sold_desc:(a,b)=>b.sold-a.sold,sold_asc:(a,b)=>a.sold-b.sold,pct_desc:(a,b)=>(b.soldPct??-1)-(a.soldPct??-1),pct_asc:(a,b)=>(a.soldPct??999)-(b.soldPct??999),factory:(a,b)=>a.factory.localeCompare(b.factory)||b.sold-a.sold};
   let eff=SORT; if(TAB==='weak'&&SORT==='sold_desc')eff='sold_asc';
   list.sort(sortFns[eff]||sortFns.sold_desc);
+  const ttl = TAB==='weak' ? 'الأضعف مبيعاً + خصم التصريف' : TAB==='best' ? 'الأفضل مبيعاً' : 'كل المنتجات';
+  printList(list, ttl);
+}
 
+// طباعة قائمة منتجات (يستخدمها doPrint و printGroup)
+function printList(list, ttl){
+  if (!list || list.length===0){ toast("لا منتجات للطباعة"); return; }
+  const weak = TAB==='weak';
   const d = new Date();
   const greg = d.toLocaleDateString("ar-SA-u-ca-gregory",{year:"numeric",month:"long",day:"numeric"});
   const hijri = d.toLocaleDateString("ar-SA-u-ca-islamic",{year:"numeric",month:"long",day:"numeric"});
-  const ttl = TAB==='weak' ? 'الأضعف مبيعاً + خصم التصريف' : TAB==='best' ? 'الأفضل مبيعاً' : 'كل المنتجات';
 
   const totalSold = list.reduce((s,i)=>s+i.sold,0);
   const totalBought = list.reduce((s,i)=>s+i.bought,0);
-  const stats = [
-    ["المنتجات", fmt(list.length)],
-    ["إجمالي المبيعات", fmt(totalSold)],
-  ];
+  const stats = [["المنتجات", fmt(list.length)], ["إجمالي المبيعات", fmt(totalSold)]];
   if (RESULT.hasPurch) stats.push(["إجمالي المشتريات", fmt(totalBought)]);
-  if (TAB==='weak') stats.push(["نوع التقرير", "تصريف الراكد"]);
 
-  const rows = list.map((it,i) => `<tr class="${TAB==='weak'?'w':''}">
+  const rows = list.map((it,i) => {
+    const nm = it.purchName || it.salesName || "—";
+    const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell*(1-it.discount/100)*100)/100 : null;
+    return `<tr class="${weak?'w':''}">
     <td class="n">${i+1}</td>
     <td class="bc">${it.bc}</td>
-    <td class="nm">${it.name||'—'}</td>
+    <td class="nm">${nm}</td>
     <td class="f">${it.factory}</td>
     <td class="big">${fmt(it.sold)}</td>
     ${RESULT.hasPurch?`<td class="mid">${fmt(it.bought)}</td><td class="mid">${it.remaining!==null?fmt(it.remaining):'—'}</td><td class="pct">${it.soldPct!==null?Math.round(it.soldPct)+'%':'—'}</td>`:''}
-    ${TAB==='weak'?`<td class="d">${it.discount}%</td>`:''}
-  </tr>`).join("");
+    ${it.cost>0?`<td class="mid">${fmt(it.cost)}</td>`:'<td>—</td>'}
+    ${it.sell>0?`<td class="mid">${fmt(it.sell)}</td>`:'<td>—</td>'}
+    ${weak?`<td class="d">${it.discount}%</td><td class="big">${discPrice!==null?fmt(discPrice):'—'}</td>`:''}
+  </tr>`;}).join("");
 
   const statsHtml = stats.map(([l,v])=>`<div class="sc"><div class="sv">${v}</div><div class="sl">${l}</div></div>`).join("");
 
@@ -645,24 +734,24 @@ function doPrint(){
     .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
     .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
     .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
-    .w{max-width:900px;margin:0 auto;padding:70px 16px 40px}
+    .w{max-width:960px;margin:0 auto;padding:70px 16px 40px}
     h1{text-align:center;color:#0f172a;font-size:24px;margin-bottom:4px;font-weight:900}
     .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
     .stats{display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
-    .sc{background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px 20px;text-align:center;min-width:120px}
+    .sc{background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px 20px;text-align:center;min-width:110px}
     .sv{font-size:24px;font-weight:900;color:#0f172a}
     .sl{font-size:12px;color:#64748b;margin-top:2px}
-    table{width:100%;border-collapse:collapse;font-size:14px}
-    th{background:#0f172a;color:#fff;padding:11px 7px;font-size:13px;font-weight:700}
-    td{border:1px solid #e2e8f0;padding:9px 7px;text-align:center}
-    td.n{background:#f1f5f9;font-weight:900;color:#888;font-size:13px}
-    td.bc{font-family:monospace;font-size:15px;color:#0f172a;font-weight:900;letter-spacing:0.5px}
-    td.nm{text-align:right;font-weight:700;font-size:13px;color:#334155}
-    td.f{font-family:monospace;color:#64748b;font-size:13px;font-weight:700}
-    td.big{font-size:20px;font-weight:900;color:#059669}
-    td.mid{font-size:16px;font-weight:700;color:#334155}
-    td.pct{font-size:15px;font-weight:900;color:#d97706}
-    td.d{font-size:20px;font-weight:900;color:#dc2626}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#0f172a;color:#fff;padding:10px 6px;font-size:12px;font-weight:700}
+    td{border:1px solid #e2e8f0;padding:8px 6px;text-align:center}
+    td.n{background:#f1f5f9;font-weight:900;color:#888;font-size:12px}
+    td.bc{font-family:monospace;font-size:14px;color:#0f172a;font-weight:900;letter-spacing:0.5px}
+    td.nm{text-align:right;font-weight:700;font-size:12px;color:#334155}
+    td.f{font-family:monospace;color:#64748b;font-size:12px;font-weight:700}
+    td.big{font-size:18px;font-weight:900;color:#059669}
+    td.mid{font-size:14px;font-weight:700;color:#334155}
+    td.pct{font-size:14px;font-weight:900;color:#d97706}
+    td.d{font-size:18px;font-weight:900;color:#dc2626}
     tr.w td.big{color:#dc2626}
     tr:nth-child(even) td{background:#fafbfc}
     @media print{.tb{display:none}.w{padding:16px}}
@@ -674,8 +763,9 @@ function doPrint(){
     <div class="stats">${statsHtml}</div>
     <table><thead><tr>
       <th>#</th><th>الباركود</th><th>الاسم</th><th>المصنع</th><th>باع</th>
-      ${RESULT.hasPurch?'<th>اشترى</th><th>متبقي</th><th>نسبة</th>':''}
-      ${TAB==='weak'?'<th>الخصم</th>':''}
+      ${RESULT.hasPurch?'<th>كمية الشراء</th><th>متبقي</th><th>نسبة</th>':''}
+      <th>سعر الشراء</th><th>سعر البيع</th>
+      ${weak?'<th>الخصم</th><th>بعد الخصم</th>':''}
     </tr></thead><tbody>${rows}</tbody></table>
   </div></body></html>`;
   const w = window.open("","_blank");
@@ -683,6 +773,7 @@ function doPrint(){
   else toast("اسمح بالنوافذ المنبثقة للطباعة");
 }
 render();
+loadFromCloud();
 </script>
 </body>
 </html>
