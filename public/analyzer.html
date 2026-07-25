@@ -45,6 +45,17 @@
   .stat .l{font-size:10px;color:#64748b;margin-top:2px}
 
   .seg{display:flex;background:#111827;border:1px solid #1e293b;border-radius:12px;padding:4px;gap:4px;margin-bottom:12px}
+  .filterbar{display:flex;gap:8px;margin-bottom:12px}
+  .fsel{flex:1;background:#111827;border:1px solid #26344f;color:#e8eef7;border-radius:12px;padding:11px;
+        font-size:13px;font-weight:700;font-family:'Cairo';outline:none}
+  .gbtn{background:#111827;border:1px solid #26344f;color:#64748b;border-radius:12px;padding:11px 14px;
+        font-size:12px;font-weight:900;cursor:pointer;font-family:'Cairo';white-space:nowrap}
+  .gbtn.on{background:rgba(37,99,235,0.18);color:#7aa5e0;border-color:#2563eb}
+  .facgroup{margin-bottom:16px}
+  .fachead{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#1e293b,#0f1c2f);
+          border:1px solid #2d3a52;border-radius:11px;padding:11px 13px;margin-bottom:8px;
+          font-size:14px;font-weight:900;color:#7aa5e0}
+  .fachead .faccount{font-size:11px;color:#94a3b8;font-weight:700}
   .seg button{flex:1;padding:9px;border:none;border-radius:9px;background:transparent;color:#64748b;
               font-size:12px;font-weight:900;cursor:pointer;font-family:'Cairo'}
   .seg button.on{background:rgba(37,99,235,0.18);color:#7aa5e0}
@@ -53,6 +64,13 @@
   .card .top{display:flex;align-items:center;gap:9px}
   .rank{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
         font-size:11px;font-weight:900;flex-shrink:0}
+  .card .bcbig{font-family:monospace;font-size:20px;font-weight:900;color:#fff;letter-spacing:1.5px;line-height:1.2}
+  .card .nm{font-size:13px;font-weight:700;color:#cbd5e1;margin-top:3px}
+  .card .fc{font-size:12px;color:#7aa5e0;margin-top:3px;font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:7px;margin-top:11px}
+  .cell{background:#0d1420;border:1px solid #1e293b;border-radius:10px;padding:9px 6px;text-align:center}
+  .cell .cv{font-size:21px;font-weight:900;line-height:1}
+  .cell .cl{font-size:11px;color:#64748b;margin-top:4px;font-weight:700}
   .card .bc{font-family:monospace;font-size:12px;color:#94a3b8}
   .card .nm{font-size:12px;font-weight:700;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .qty{font-size:19px;font-weight:900;text-align:left;flex-shrink:0}
@@ -115,12 +133,21 @@ let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
 let RESULT = null;      // نتيجة التجميع
 let TAB = "best";       // best | weak | all
 let SEARCH = "";
+let SORT = "sold_desc"; // sold_desc | sold_asc | pct_asc | pct_desc | factory
+let GROUP = "none";     // none | factory | container
 let NO_BC = [];         // أصناف بدون باركود
 
 // ══ أدوات ══
 const num = v => Number(v)||0;
 const fmt = v => (Number(v)||0).toLocaleString("en-US",{maximumFractionDigits:0});
 const factoryCode = bc => String(bc||"").slice(0,5);
+// كود الكونتينر (BAR03YW24) من اسم الفئة — لو تكرر بأسماء مختلفة يندمج
+function containerCode(name){
+  if (!name) return "";
+  const m = String(name).match(/BAR\s*0*\d+\s*YW\s*\d+/i);
+  if (m) return m[0].replace(/\s+/g,"").toUpperCase();
+  return String(name).trim();
+}
 const $ = id => document.getElementById(id);
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
 
@@ -143,10 +170,11 @@ function parseSales(rows){
 // صيغة 1: الباركود بين [ ] والكمية في عمود لاحق (زي المبيعات/تحليل المشتريات)
 // صيغة 2: فاتورة بمدى B001~012 والكمية في عمود PCS
 function parsePurchases(rows){
-  const map = {};
+  const map = {};        // bc -> qty
+  const contOf = {};     // bc -> اسم الكونتينر
   const noBarcode = [];
 
-  // نكتشف: هل أغلب الصفوف فيها باركود بين أقواس؟
+  // نكتشف الصيغة: أقواس (تحليل) أو مدى (فاتورة)
   let bracketRows = 0, sampleN = 0;
   for (const row of rows){
     if (sampleN >= 30) break;
@@ -157,28 +185,39 @@ function parsePurchases(rows){
   const isBracketFormat = bracketRows >= 3;
 
   if (isBracketFormat){
-    // صيغة الأقواس: الباركود بين [ ]، الكمية = أول رقم موجب بعد نص الباركود
+    // صيغة هرمية: فئة/كونتينر (بلا باركود) ثم منتجات تحتها (بباركود)
+    let currentCont = "";
     rows.forEach(row => {
-      const txtCell = row.find(x => x && String(x).includes("["));
+      // الخلية النصية = أول خلية فيها نص (العمود الأول)
+      const txtCell = row.find(x => x != null && String(x).trim() !== "" && isNaN(Number(x)));
       if (!txtCell) return;
-      const m = String(txtCell).match(/\[([^\]]+)\]/);
-      if (!m) return;
-      const code = m[1].trim();
-      // الكمية: نبحث عن "الكمية المطلوبة" — عادة العمود بعد الإجمالي
-      // نأخذ الأرقام في الصف، ونختار الكمية (عدد صحيح موجب، مو السعر الكسري)
-      const nums = row.filter(x => typeof x === "number" && x > 0);
-      // نتجاهل صف الإجمالي
-      if (String(txtCell).includes("الإجمالي")) return;
-      // الكمية المطلوبة = أكبر عدد صحيح (الكميات أعداد صحيحة، التكلفة كسرية)
-      let qty = 0;
-      for (const nv of nums){ if (Number.isInteger(nv) && nv > qty) qty = nv; }
-      if (qty <= 0 && nums.length) qty = Math.round(nums[0]);
-      if (qty > 0) map[code] = (map[code]||0) + qty;
+      const raw = String(txtCell);
+      const body = raw.trim();
+      if (body.includes("الإجمالي")) return;
+      const m = body.match(/\[([^\]]+)\]/);
+      if (m){
+        // منتج: له باركود
+        const code = m[1].trim();
+        const nums = row.filter(x => typeof x === "number" && x > 0);
+        let qty = 0;
+        for (const nv of nums){ if (Number.isInteger(nv) && nv > qty) qty = nv; }
+        if (qty <= 0 && nums.length) qty = Math.round(nums[0]);
+        if (qty > 0){
+          map[code] = (map[code]||0) + qty;
+          if (!contOf[code]) contOf[code] = currentCont ? containerCode(currentCont) : "بدون كونتينر";
+        }
+      } else {
+        // فئة/كونتينر: بلا باركود → نحفظه للمنتجات اللي تحته
+        currentCont = body;
+      }
     });
-    return { map, noBarcode };
+    return { map, contOf, noBarcode };
   }
 
-  // صيغة الفاتورة (مدى)
+  // صيغة الفاتورة (مدى B001~012)، مع كونتينر من الصف الأول لو موجود
+  let invCont = "";
+  const firstText = rows[0]?.find(x => x && String(x).trim() !== "");
+  if (firstText) invCont = String(firstText).trim();
   rows.forEach(row => {
     const item = row[1];
     const pcs = num(row[3]);
@@ -197,13 +236,15 @@ function parsePurchases(rows){
         for (let i=start; i<=end; i++){
           const b = prefix + String(i).padStart(width,"0");
           map[b] = (map[b]||0) + per;
+          if (!contOf[b]) contOf[b] = invCont || "بدون كونتينر";
         }
         return;
       }
     }
     map[code] = (map[code]||0) + pcs;
+    if (!contOf[code]) contOf[code] = invCont || "بدون كونتينر";
   });
-  return { map, noBarcode };
+  return { map, contOf, noBarcode };
 }
 
 // ══ قراءة ملف إكسل ══
@@ -239,8 +280,8 @@ async function onPurchFiles(files){
   for (const f of files){
     try {
       const rows = await readFile(f);
-      const { map, noBarcode } = parsePurchases(rows);
-      PURCH_FILES.push({ name: f.name, map, noBarcode });
+      const { map, contOf, noBarcode } = parsePurchases(rows);
+      PURCH_FILES.push({ name: f.name, map, contOf, noBarcode });
     } catch(e){ toast("تعذّر قراءة "+f.name); }
   }
   RESULT = null;
@@ -253,11 +294,13 @@ function analyze(){
   // اجمع المبيعات
   const sales = {};
   SALES_FILES.forEach(f => Object.entries(f.map).forEach(([bc,q]) => sales[bc] = (sales[bc]||0) + q));
-  // اجمع المشتريات
+  // اجمع المشتريات + الكونتينر
   const purch = {};
+  const contMap = {};   // bc -> كود الكونتينر
   NO_BC = [];
   PURCH_FILES.forEach(f => {
     Object.entries(f.map).forEach(([bc,q]) => purch[bc] = (purch[bc]||0) + q);
+    Object.entries(f.contOf||{}).forEach(([bc,c]) => { if (!contMap[bc]) contMap[bc] = c; });
     NO_BC.push(...f.noBarcode);
   });
   const hasPurch = Object.keys(purch).length > 0;
@@ -269,7 +312,7 @@ function analyze(){
     const bought = Math.round(purch[bc]||0);
     const remaining = hasPurch ? Math.max(0, bought - sold) : null;
     const soldPct = (hasPurch && bought>0) ? (sold/bought)*100 : null;
-    return { bc, sold, bought, remaining, soldPct, factory: factoryCode(bc) };
+    return { bc, sold, bought, remaining, soldPct, factory: factoryCode(bc), cont: contMap[bc] || "بدون كونتينر" };
   });
 
   // رتّب بالمبيعات
@@ -327,24 +370,25 @@ function rankColor(i){
 function itemCard(it, idx, mode){
   const [rb, rc] = rankColor(idx);
   const discColor = it.discount >= 80 ? "#ef4444" : it.discount >= 70 ? "#f59e0b" : "#22c55e";
+  const pctColor = it.soldPct===null ? "#64748b" : it.soldPct < 30 ? "#ef4444" : it.soldPct < 60 ? "#f59e0b" : "#22c55e";
   return `<div class="card">
     <div class="top">
       <div class="rank" style="background:${rb};color:${rc}">${idx+1}</div>
       <div style="flex:1;min-width:0">
-        <div class="nm">${it.bc}</div>
-        <div class="bc">🏭 ${it.factory}</div>
+        <div class="bcbig">${it.bc}</div>
+        ${it.name?`<div class="nm">${it.name}</div>`:''}
+        <div class="fc">🏭 المصنع: ${it.factory}${it.cont && it.cont!=='بدون كونتينر' ? ` · 📦 ${it.cont}` : ''}</div>
       </div>
-      <div class="qty" style="color:${mode==='weak'?'#f87171':'#22c55e'}">${fmt(it.sold)}</div>
     </div>
-    <div class="chips">
-      <span class="chip" style="background:rgba(34,197,94,0.15);color:#4ade80">باع ${fmt(it.sold)}</span>
-      ${it.bought>0?`<span class="chip" style="background:rgba(59,130,246,0.15);color:#7aa5e0">اشترى ${fmt(it.bought)}</span>`:''}
-      ${it.remaining!==null?`<span class="chip" style="background:rgba(148,163,184,0.15);color:#cbd5e1">متبقي ${fmt(it.remaining)}</span>`:''}
-      ${it.soldPct!==null?`<span class="chip" style="background:rgba(245,158,11,0.15);color:#fbbf24">${Math.round(it.soldPct)}% بيع</span>`:''}
+    <div class="grid">
+      <div class="cell"><div class="cv" style="color:#4ade80">${fmt(it.sold)}</div><div class="cl">باع</div></div>
+      ${it.bought>0?`<div class="cell"><div class="cv" style="color:#7aa5e0">${fmt(it.bought)}</div><div class="cl">اشترى</div></div>`:''}
+      ${it.remaining!==null?`<div class="cell"><div class="cv" style="color:#cbd5e1">${fmt(it.remaining)}</div><div class="cl">متبقي</div></div>`:''}
+      ${it.soldPct!==null?`<div class="cell"><div class="cv" style="color:${pctColor}">${Math.round(it.soldPct)}%</div><div class="cl">نسبة البيع</div></div>`:''}
     </div>
     ${mode==='weak'?`<div class="discbar">
-      <span style="font-size:12px;color:#cbd5e1;font-weight:700">💸 خصم التصريف المقترح</span>
-      <span style="font-size:17px;font-weight:900;color:${discColor}">${it.discount}%</span>
+      <span style="font-size:13px;color:#cbd5e1;font-weight:900">💸 خصم التصريف المقترح</span>
+      <span style="font-size:26px;font-weight:900;color:${discColor}">${it.discount}%</span>
     </div>`:''}
   </div>`;
 }
@@ -387,16 +431,28 @@ function render(){
   }
 
   // شاشة النتائج
-  let list = RESULT.items;
-  if (TAB === "best") list = [...RESULT.items].sort((a,b)=>b.sold-a.sold);
-  else if (TAB === "weak") list = [...RESULT.items].filter(i=>i.sold>0).sort((a,b)=>a.sold-b.sold);
-  else list = [...RESULT.items].sort((a,b)=>b.sold-a.sold);
-
+  let list = [...RESULT.items];
+  // تبويب أساسي
+  if (TAB === "weak") list = list.filter(i=>i.sold>0);
+  // بحث
   if (SEARCH){
     const s = SEARCH.toLowerCase();
-    list = list.filter(i => i.bc.toLowerCase().includes(s) || i.factory.includes(s));
+    list = list.filter(i => i.bc.toLowerCase().includes(s) || i.factory.includes(s) || (i.name||"").toLowerCase().includes(s));
   }
-  const shown = list.slice(0, 100);
+  // ترتيب
+  const sortFns = {
+    sold_desc: (a,b)=>b.sold-a.sold,
+    sold_asc:  (a,b)=>a.sold-b.sold,
+    pct_desc:  (a,b)=>(b.soldPct??-1)-(a.soldPct??-1),
+    pct_asc:   (a,b)=>(a.soldPct??999)-(b.soldPct??999),
+    factory:   (a,b)=>a.factory.localeCompare(b.factory) || b.sold-a.sold,
+  };
+  // في تبويب الأضعف، الترتيب الافتراضي تصاعدي
+  let effSort = SORT;
+  if (TAB==="weak" && SORT==="sold_desc") effSort = "sold_asc";
+  list.sort(sortFns[effSort] || sortFns.sold_desc);
+
+  const shown = list.slice(0, 150);
 
   app.innerHTML = `
     <div class="stats">
@@ -418,7 +474,19 @@ function render(){
       <button class="${TAB==='all'?'on':''}" onclick="setTab('all')">📋 الكل</button>
     </div>
 
-    <input class="search" placeholder="🔍 بحث بالباركود أو المصنع…" value="${SEARCH}" oninput="setSearch(this.value)">
+    <div class="filterbar">
+      <select class="fsel" onchange="setSort(this.value)">
+        <option value="sold_desc" ${effSort==='sold_desc'?'selected':''}>⬇️ الأكثر مبيعاً</option>
+        <option value="sold_asc" ${effSort==='sold_asc'?'selected':''}>⬆️ الأقل مبيعاً</option>
+        <option value="pct_desc" ${effSort==='pct_desc'?'selected':''}>📈 الأعلى نسبة بيع</option>
+        <option value="pct_asc" ${effSort==='pct_asc'?'selected':''}>📉 الأقل نسبة (راكد)</option>
+        <option value="factory" ${effSort==='factory'?'selected':''}>🏭 حسب المصنع</option>
+      </select>
+      <button class="gbtn ${GROUP==='factory'?'on':''}" onclick="setGroup('factory')">🏭 مصنع</button>
+      <button class="gbtn ${GROUP==='container'?'on':''}" onclick="setGroup('container')">📦 كونتينر</button>
+    </div>
+
+    <input class="search" placeholder="🔍 بحث بالباركود أو المصنع أو الاسم…" value="${SEARCH}" oninput="setSearch(this.value)">
 
     <div class="row2">
       <button class="btn pr" onclick="doPrint()">🖨️ طباعة</button>
@@ -427,7 +495,7 @@ function render(){
 
     <div style="font-size:11px;color:#475569;margin-bottom:10px">${list.length} منتج${shown.length<list.length?` · يُعرض أول ${shown.length}`:''}</div>
 
-    ${shown.map((it,i)=>itemCard(it,i,TAB)).join("")}
+    ${GROUP!=='none' ? renderGrouped(shown, GROUP) : shown.map((it,i)=>itemCard(it,i,TAB)).join("")}
 
     ${RESULT.noPurchase && RESULT.noPurchase.length>0?`<div class="side" style="background:#0d1a2a;border-color:#1e3a52">
       <h3 style="color:#7aa5e0">📦 مباع بدون فاتورة شراء (${RESULT.noPurchase.length})</h3>
@@ -453,27 +521,69 @@ function removeFile(kind, i){
 function setRule(k,v){ RULES[k]=Math.max(0,Math.min(95,num(v))); if(RESULT) analyze(); }
 function setTab(t){ TAB=t; render(); }
 function setSearch(v){ SEARCH=v; render(); }
+function setSort(v){ SORT=v; render(); }
+function setGroup(g){ GROUP = (GROUP===g) ? "none" : g; render(); }
+function toggleGroup(){ GROUP = GROUP==='none' ? 'factory' : 'none'; render(); }
+
+// تجميع حسب المصنع أو الكونتينر
+function renderGrouped(items, mode){
+  const groups = {};
+  items.forEach(it => {
+    const key = mode==='container' ? (it.cont || "بدون كونتينر") : it.factory;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(it);
+  });
+  const sorted = Object.entries(groups).map(([key, arr]) => ({
+    key, arr, total: arr.reduce((s,i)=>s+i.sold,0)
+  })).sort((a,b) => b.total - a.total);
+  const icon = mode==='container' ? "📦" : "🏭";
+  const label = mode==='container' ? "الكونتينر" : "المصنع";
+  return sorted.map(g => `
+    <div class="facgroup">
+      <div class="fachead">
+        <span>${icon} ${label==='المصنع'?'مصنع ':''}${g.key}</span>
+        <span class="faccount">${g.arr.length} منتج · باع ${fmt(g.total)}</span>
+      </div>
+      ${g.arr.map((it,i)=>itemCard(it,i,TAB)).join("")}
+    </div>`).join("");
+}
 function resetAll(){ SALES_FILES=[]; PURCH_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; render(); }
 
 // ══ الطباعة ══
 function doPrint(){
   if (!RESULT) return;
-  let list = RESULT.items;
-  if (TAB==='weak') list = [...list].filter(i=>i.sold>0).sort((a,b)=>a.sold-b.sold);
-  else list = [...list].sort((a,b)=>b.sold-a.sold);
+  let list = [...RESULT.items];
+  if (TAB==='weak') list = list.filter(i=>i.sold>0);
+  if (SEARCH){ const s=SEARCH.toLowerCase(); list=list.filter(i=>i.bc.toLowerCase().includes(s)||i.factory.includes(s)||(i.name||'').toLowerCase().includes(s)); }
+  const sortFns={sold_desc:(a,b)=>b.sold-a.sold,sold_asc:(a,b)=>a.sold-b.sold,pct_desc:(a,b)=>(b.soldPct??-1)-(a.soldPct??-1),pct_asc:(a,b)=>(a.soldPct??999)-(b.soldPct??999),factory:(a,b)=>a.factory.localeCompare(b.factory)||b.sold-a.sold};
+  let eff=SORT; if(TAB==='weak'&&SORT==='sold_desc')eff='sold_asc';
+  list.sort(sortFns[eff]||sortFns.sold_desc);
 
   const d = new Date();
-  const dt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const greg = d.toLocaleDateString("ar-SA-u-ca-gregory",{year:"numeric",month:"long",day:"numeric"});
+  const hijri = d.toLocaleDateString("ar-SA-u-ca-islamic",{year:"numeric",month:"long",day:"numeric"});
   const ttl = TAB==='weak' ? 'الأضعف مبيعاً + خصم التصريف' : TAB==='best' ? 'الأفضل مبيعاً' : 'كل المنتجات';
+
+  const totalSold = list.reduce((s,i)=>s+i.sold,0);
+  const totalBought = list.reduce((s,i)=>s+i.bought,0);
+  const stats = [
+    ["المنتجات", fmt(list.length)],
+    ["إجمالي المبيعات", fmt(totalSold)],
+  ];
+  if (RESULT.hasPurch) stats.push(["إجمالي المشتريات", fmt(totalBought)]);
+  if (TAB==='weak') stats.push(["نوع التقرير", "تصريف الراكد"]);
 
   const rows = list.map((it,i) => `<tr class="${TAB==='weak'?'w':''}">
     <td class="n">${i+1}</td>
     <td class="bc">${it.bc}</td>
+    <td class="nm">${it.name||'—'}</td>
     <td class="f">${it.factory}</td>
     <td class="big">${fmt(it.sold)}</td>
-    ${RESULT.hasPurch?`<td>${fmt(it.bought)}</td><td>${it.remaining!==null?fmt(it.remaining):'—'}</td><td>${it.soldPct!==null?Math.round(it.soldPct)+'%':'—'}</td>`:''}
+    ${RESULT.hasPurch?`<td class="mid">${fmt(it.bought)}</td><td class="mid">${it.remaining!==null?fmt(it.remaining):'—'}</td><td class="pct">${it.soldPct!==null?Math.round(it.soldPct)+'%':'—'}</td>`:''}
     ${TAB==='weak'?`<td class="d">${it.discount}%</td>`:''}
   </tr>`).join("");
+
+  const statsHtml = stats.map(([l,v])=>`<div class="sc"><div class="sv">${v}</div><div class="sl">${l}</div></div>`).join("");
 
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${ttl}</title>
   <style>
@@ -483,27 +593,35 @@ function doPrint(){
     .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
     .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
     .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
-    .w{max-width:800px;margin:0 auto;padding:70px 16px 40px}
-    h1{text-align:center;color:#0f172a;font-size:22px;margin-bottom:4px}
-    .date{text-align:center;color:#888;font-size:13px;margin-bottom:18px}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th{background:#0f172a;color:#fff;padding:9px 6px;font-size:12px}
-    td{border:1px solid #e2e8f0;padding:7px 6px;text-align:center}
-    td.n{background:#f1f5f9;font-weight:900;color:#888}
-    td.bc{font-family:monospace;font-size:12px;color:#334155;font-weight:700}
-    td.f{font-family:monospace;color:#64748b;font-size:11px}
-    td.big{font-size:16px;font-weight:900;color:#059669}
-    td.d{font-size:16px;font-weight:900;color:#dc2626}
+    .w{max-width:900px;margin:0 auto;padding:70px 16px 40px}
+    h1{text-align:center;color:#0f172a;font-size:24px;margin-bottom:4px;font-weight:900}
+    .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
+    .stats{display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+    .sc{background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px 20px;text-align:center;min-width:120px}
+    .sv{font-size:24px;font-weight:900;color:#0f172a}
+    .sl{font-size:12px;color:#64748b;margin-top:2px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th{background:#0f172a;color:#fff;padding:11px 7px;font-size:13px;font-weight:700}
+    td{border:1px solid #e2e8f0;padding:9px 7px;text-align:center}
+    td.n{background:#f1f5f9;font-weight:900;color:#888;font-size:13px}
+    td.bc{font-family:monospace;font-size:15px;color:#0f172a;font-weight:900;letter-spacing:0.5px}
+    td.nm{text-align:right;font-weight:700;font-size:13px;color:#334155}
+    td.f{font-family:monospace;color:#64748b;font-size:13px;font-weight:700}
+    td.big{font-size:20px;font-weight:900;color:#059669}
+    td.mid{font-size:16px;font-weight:700;color:#334155}
+    td.pct{font-size:15px;font-weight:900;color:#d97706}
+    td.d{font-size:20px;font-weight:900;color:#dc2626}
     tr.w td.big{color:#dc2626}
     tr:nth-child(even) td{background:#fafbfc}
     @media print{.tb{display:none}.w{padding:16px}}
   </style></head><body>
-  <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوv</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+  <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
   <div class="w">
     <h1>${ttl}</h1>
-    <div class="date">📅 ${dt} · ALBAROO · ${list.length} منتج · إجمالي ${fmt(list.reduce((s,i)=>s+i.sold,0))}</div>
+    <div class="date">📅 ${greg} · ${hijri}هـ · ALBAROO</div>
+    <div class="stats">${statsHtml}</div>
     <table><thead><tr>
-      <th>#</th><th>الباركود</th><th>المصنv</th><th>باع</th>
+      <th>#</th><th>الباركود</th><th>الاسم</th><th>المصنع</th><th>باع</th>
       ${RESULT.hasPurch?'<th>اشترى</th><th>متبقي</th><th>نسبة</th>':''}
       ${TAB==='weak'?'<th>الخصم</th>':''}
     </tr></thead><tbody>${rows}</tbody></table>
@@ -512,7 +630,6 @@ function doPrint(){
   if (w){ w.document.write(html); w.document.close(); }
   else toast("اسمح بالنوافذ المنبثقة للطباعة");
 }
-
 render();
 </script>
 </body>
