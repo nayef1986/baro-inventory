@@ -583,16 +583,22 @@ function renderGrouped(items, mode){
     key, arr, total: arr.reduce((s,i)=>s+i.sold,0)
   })).sort((a,b) => b.total - a.total);
   const icon = mode==='container' ? "📦" : "🏭";
-  const label = mode==='container' ? "الكونتينر" : "المصنع";
-  return sorted.map(g => `
+  const label = mode==='container' ? "" : "مصنع ";
+  return sorted.map(g => {
+    const open = OPEN_GROUPS[g.key] === true;
+    const safeKey = g.key.replace(/'/g,"");
+    return `
     <div class="facgroup">
-      <div class="fachead">
-        <span>${icon} ${label==='المصنع'?'مصنع ':''}${g.key}</span>
+      <div class="fachead" onclick="toggleGroupOpen('${safeKey}')" style="cursor:pointer">
+        <span>${open?'▲':'▼'} ${icon} ${label}${g.key}</span>
         <span class="faccount">${g.arr.length} منتج · باع ${fmt(g.total)}</span>
       </div>
-      ${g.arr.map((it,i)=>itemCard(it,i,TAB)).join("")}
-    </div>`).join("");
+      ${open ? g.arr.map((it,i)=>itemCard(it,i,TAB)).join("") : ""}
+    </div>`;
+  }).join("");
 }
+let OPEN_GROUPS = {};
+function toggleGroupOpen(key){ OPEN_GROUPS[key] = !OPEN_GROUPS[key]; render(); }
 function resetAll(){ SALES_FILES=[]; PURCH_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; render(); }
 
 // ══ الطباعة ══
