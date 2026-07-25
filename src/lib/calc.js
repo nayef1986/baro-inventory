@@ -554,4 +554,27 @@ export function branchTrendAnalysis(products, periods) {
   }).sort((a, b) => b.totalRev - a.totalRev);
 }
 
+
+/**
+ * الباركودات اليتيمة: لها مبيعات لكن مو ضمن المنتجات (بلا فاتورة شراء)
+ * ترجع [{barcode, name, sold}] مرتّبة بالأكثر مبيعاً
+ */
+export function findOrphanBarcodes(products, periods) {
+  const known = new Set((products ?? []).map((p) => p.barcode));
+  const names = getSalesNames(periods ?? []);
+  const soldMap = {};
+  (periods ?? []).forEach((period) => {
+    Object.values(period.sales ?? {}).forEach((branchData) => {
+      Object.entries(branchData).forEach(([barcode, d]) => {
+        if (known.has(barcode)) return;
+        soldMap[barcode] = (soldMap[barcode] ?? 0) + num(d?.qty ?? 0);
+      });
+    });
+  });
+  return Object.entries(soldMap)
+    .map(([barcode, sold]) => ({ barcode, name: names[barcode] ?? "", sold }))
+    .filter((o) => o.sold > 0)
+    .sort((a, b) => b.sold - a.sold);
+}
+
 export { MIN_STOCK };
