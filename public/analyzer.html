@@ -154,6 +154,7 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("sho
 // ══ استخراج المبيعات: الباركود بين [ ] ══
 function parseSales(rows){
   const map = {};
+  const names = {};
   rows.forEach(row => {
     const txt = row[0];
     if (!txt) return;
@@ -161,9 +162,15 @@ function parseSales(rows){
     if (!m) return;
     const code = m[1].trim();
     const qty = num(row[1]);
-    if (qty > 0) map[code] = (map[code]||0) + qty;
+    if (qty > 0){
+      map[code] = (map[code]||0) + qty;
+      if (!names[code]){
+        const nm = String(txt).replace(/\[[^\]]+\]/,"").replace(/\d+\s*$/,"").trim();
+        if (nm) names[code] = nm;
+      }
+    }
   });
-  return map;
+  return { map, names };
 }
 
 // ══ استخراج المشتريات: يكتشف الصيغة تلقائياً ══
@@ -172,6 +179,7 @@ function parseSales(rows){
 function parsePurchases(rows){
   const map = {};        // bc -> qty
   const contOf = {};     // bc -> اسم الكونتينر
+  const info = {};       // bc -> {name, cost, sell}
   const noBarcode = [];
 
   // نكتشف الصيغة: أقواس (تحليل) أو مدى (فاتورة)
@@ -205,28 +213,40 @@ function parsePurchases(rows){
         if (qty > 0){
           map[code] = (map[code]||0) + qty;
           if (!contOf[code]) contOf[code] = currentCont ? containerCode(currentCont) : "بدون كونتينر";
+          // الاسم: النص بعد قوس الباركود
+          if (!info[code]){
+            const nm = body.replace(/\[[^\]]+\]/,"").trim();
+            info[code] = { name:nm, cost:0, sell:0 };
+          }
         }
       } else {
         // فئة/كونتينر: بلا باركود → نحفظه للمنتجات اللي تحته
         currentCont = body;
       }
     });
-    return { map, contOf, noBarcode };
+    return { map, contOf, info, noBarcode };
   }
 
-  // صيغة الفاتورة (مدى B001~012)، مع كونتينر من الصف الأول لو موجود
+  // صيغة الفاتورة: [سعر البيع, ITEM NO, NAME, QTY, PRICE(شراء), T.PRICE]
+  // الكونتينر من الصف الأول (العمود الثالث عادة) لو موجود
   let invCont = "";
-  const firstText = rows[0]?.find(x => x && String(x).trim() !== "");
-  if (firstText) invCont = String(firstText).trim();
+  if (rows[0]){
+    const ft = rows[0].find(x => x && String(x).trim() !== "");
+    if (ft) invCont = containerCode(String(ft).trim());
+  }
   rows.forEach(row => {
     const item = row[1];
     const pcs = num(row[3]);
     if (!item || pcs <= 0) return;
     const code = String(item).trim();
+    if (code === "ITEM NO" || code.includes("ITEM")) return; // صف العناوين
     if (!/[A-Za-z]*\d{4,}/.test(code) || /^stock/i.test(code)) {
       noBarcode.push({ name: String(row[2]||code).trim(), qty: pcs, price: num(row[4]) });
       return;
     }
+    const sellPrice = num(row[0]);   // العمود الأول = سعر البيv
+    const name = String(row[2]||"").trim();
+    const costPrice = num(row[4]);   // PRICE = سعر الشراء
     const rng = code.match(/^(.+?)(\d+)~(\d+)$/);
     if (rng) {
       const prefix = rng[1], start = +rng[2], end = +rng[3], width = rng[2].length;
@@ -237,14 +257,16 @@ function parsePurchases(rows){
           const b = prefix + String(i).padStart(width,"0");
           map[b] = (map[b]||0) + per;
           if (!contOf[b]) contOf[b] = invCont || "بدون كونتينر";
+          if (!info[b]) info[b] = { name, cost:costPrice, sell:sellPrice };
         }
         return;
       }
     }
     map[code] = (map[code]||0) + pcs;
     if (!contOf[code]) contOf[code] = invCont || "بدون كونتينر";
+    if (!info[code]) info[code] = { name, cost:costPrice, sell:sellPrice };
   });
-  return { map, contOf, noBarcode };
+  return { map, contOf, info, noBarcode };
 }
 
 // ══ قراءة ملف إكسل ══
@@ -269,8 +291,8 @@ async function onSalesFiles(files){
   for (const f of files){
     try {
       const rows = await readFile(f);
-      const map = parseSales(rows);
-      SALES_FILES.push({ name: f.name, map });
+      const { map, names } = parseSales(rows);
+      SALES_FILES.push({ name: f.name, map, names });
     } catch(e){ toast("تعذّر قراءة "+f.name); }
   }
   RESULT = null;
@@ -280,8 +302,8 @@ async function onPurchFiles(files){
   for (const f of files){
     try {
       const rows = await readFile(f);
-      const { map, contOf, noBarcode } = parsePurchases(rows);
-      PURCH_FILES.push({ name: f.name, map, contOf, noBarcode });
+      const { map, contOf, info, noBarcode } = parsePurchases(rows);
+      PURCH_FILES.push({ name: f.name, map, contOf, info, noBarcode });
     } catch(e){ toast("تعذّر قراءة "+f.name); }
   }
   RESULT = null;
@@ -297,13 +319,19 @@ function analyze(){
   // اجمع المشتريات + الكونتينر
   const purch = {};
   const contMap = {};   // bc -> كود الكونتينر
+  const infoMap = {};   // bc -> {name, cost, sell}
   NO_BC = [];
   PURCH_FILES.forEach(f => {
     Object.entries(f.map).forEach(([bc,q]) => purch[bc] = (purch[bc]||0) + q);
     Object.entries(f.contOf||{}).forEach(([bc,c]) => { if (!contMap[bc]) contMap[bc] = c; });
+    Object.entries(f.info||{}).forEach(([bc,d]) => { if (!infoMap[bc]) infoMap[bc] = d; });
     NO_BC.push(...f.noBarcode);
   });
   const hasPurch = Object.keys(purch).length > 0;
+
+  // أسماء المبيعات
+  const salesNames = {};
+  SALES_FILES.forEach(f => Object.entries(f.names||{}).forEach(([bc,nm]) => { if(!salesNames[bc]) salesNames[bc]=nm; }));
 
   // ادمج
   const allBc = new Set([...Object.keys(sales), ...Object.keys(purch)]);
@@ -312,7 +340,16 @@ function analyze(){
     const bought = Math.round(purch[bc]||0);
     const remaining = hasPurch ? Math.max(0, bought - sold) : null;
     const soldPct = (hasPurch && bought>0) ? (sold/bought)*100 : null;
-    return { bc, sold, bought, remaining, soldPct, factory: factoryCode(bc), cont: contMap[bc] || "بدون كونتينر" };
+    const inf = infoMap[bc] || {};
+    const sellPrice = num(inf.sell);
+    const discPrice = sellPrice > 0 ? Math.round(sellPrice * (1 - 0) * 100)/100 : 0; // يُحسب لاحقاً بالخصم
+    return {
+      bc, sold, bought, remaining, soldPct,
+      factory: factoryCode(bc), cont: contMap[bc] || "بدون كونتينر",
+      purchName: inf.name || "", salesName: salesNames[bc] || "",
+      cost: num(inf.cost), sell: sellPrice,
+      totalCost: num(inf.cost) * bought,
+    };
   });
 
   // رتّب بالمبيعات
@@ -371,23 +408,32 @@ function itemCard(it, idx, mode){
   const [rb, rc] = rankColor(idx);
   const discColor = it.discount >= 80 ? "#ef4444" : it.discount >= 70 ? "#f59e0b" : "#22c55e";
   const pctColor = it.soldPct===null ? "#64748b" : it.soldPct < 30 ? "#ef4444" : it.soldPct < 60 ? "#f59e0b" : "#22c55e";
+  const nm = it.purchName || it.salesName || "";
+  // سعر البيع بعد الخصم
+  const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell * (1 - it.discount/100) * 100)/100 : null;
   return `<div class="card">
     <div class="top">
       <div class="rank" style="background:${rb};color:${rc}">${idx+1}</div>
       <div style="flex:1;min-width:0">
         <div class="bcbig">${it.bc}</div>
-        ${it.name?`<div class="nm">${it.name}</div>`:''}
-        <div class="fc">🏭 المصنع: ${it.factory}${it.cont && it.cont!=='بدون كونتينر' ? ` · 📦 ${it.cont}` : ''}</div>
+        ${nm?`<div class="nm">${nm}</div>`:''}
+        <div class="fc">🏭 ${it.factory}${it.cont && it.cont!=='بدون كونتينر' ? ` · 📦 ${it.cont}` : ''}</div>
       </div>
     </div>
     <div class="grid">
       <div class="cell"><div class="cv" style="color:#4ade80">${fmt(it.sold)}</div><div class="cl">باع</div></div>
-      ${it.bought>0?`<div class="cell"><div class="cv" style="color:#7aa5e0">${fmt(it.bought)}</div><div class="cl">اشترى</div></div>`:''}
+      ${it.bought>0?`<div class="cell"><div class="cv" style="color:#7aa5e0">${fmt(it.bought)}</div><div class="cl">كمية الشراء</div></div>`:''}
       ${it.remaining!==null?`<div class="cell"><div class="cv" style="color:#cbd5e1">${fmt(it.remaining)}</div><div class="cl">متبقي</div></div>`:''}
       ${it.soldPct!==null?`<div class="cell"><div class="cv" style="color:${pctColor}">${Math.round(it.soldPct)}%</div><div class="cl">نسبة البيع</div></div>`:''}
+      ${it.cost>0?`<div class="cell"><div class="cv" style="color:#f59e0b">${fmt(it.cost)}</div><div class="cl">سعر الشراء</div></div>`:''}
+      ${it.sell>0?`<div class="cell"><div class="cv" style="color:#22c55e">${fmt(it.sell)}</div><div class="cl">سعر البيع</div></div>`:''}
+      ${it.totalCost>0?`<div class="cell"><div class="cv" style="color:#a78bfa">${fmt(it.totalCost)}</div><div class="cl">إجمالي الشراء</div></div>`:''}
     </div>
     ${mode==='weak'?`<div class="discbar">
-      <span style="font-size:13px;color:#cbd5e1;font-weight:900">💸 خصم التصريف المقترح</span>
+      <div>
+        <div style="font-size:12px;color:#94a3b8;font-weight:700">💸 خصم التصريف</div>
+        ${discPrice!==null?`<div style="font-size:12px;color:#cbd5e1;margin-top:2px">${fmt(it.sell)} ← <b style="color:#4ade80">${fmt(discPrice)}</b> ﷼</div>`:''}
+      </div>
       <span style="font-size:26px;font-weight:900;color:${discColor}">${it.discount}%</span>
     </div>`:''}
   </div>`;
