@@ -134,6 +134,7 @@
 // ══ الحالة ══
 let SALES_FILES = [];   // [{name, map:{bc:qty}}]
 let PURCH_FILES = [];   // [{name, map:{bc:qty}, noBarcode:[...]}]
+let PRICE_FILES = [];   // [{name, prices:{bc:{sell,cost,name}}}]
 let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
 let DISC_MODE = "trend";  // trend = الحركة الشهرية | pct = نسبة البيع
 let RESULT = null;      // نتيجة التجميع
@@ -146,7 +147,7 @@ const STORE_KEY = "baro_analyzer_v1";
 
 async function saveToCloud(){
   try {
-    const payload = { salesFiles: SALES_FILES, purchFiles: PURCH_FILES, rules: RULES };
+    const payload = { salesFiles: SALES_FILES, purchFiles: PURCH_FILES, priceFiles: PRICE_FILES, rules: RULES };
     await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
       method:"POST",
       headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
@@ -169,8 +170,9 @@ async function loadFromCloud(){
     if (typeof raw === "string") raw = JSON.parse(raw);
     SALES_FILES = raw.salesFiles || [];
     PURCH_FILES = raw.purchFiles || [];
+    PRICE_FILES = raw.priceFiles || [];
     RULES = raw.rules || RULES;
-    if (SALES_FILES.length || PURCH_FILES.length){ analyze(); }
+    if (SALES_FILES.length || PURCH_FILES.length || PRICE_FILES.length){ analyze(); }
   } catch(e){ /* أول مرة أو نت ضعيف */ }
 }
 
@@ -394,6 +396,50 @@ function readFile(file){
 }
 
 // ══ رفع ملفات المبيعات ══
+// ══ قراءة ملف الأسعار: الاسم، باركود، سعر بيع، تكلفة ══
+function parsePrices(rows){
+  const prices = {};
+  // نكتشف أعمدة: نبحث في صف العناوين عن باركود/بيع/تكلفة
+  let bcCol=-1, sellCol=-1, costCol=-1, nameCol=-1;
+  const header = rows[0] || [];
+  header.forEach((h,i) => {
+    const s = String(h||"").trim();
+    if (/باركود|barcode|item/i.test(s)) bcCol=i;
+    else if (/بيع|sell|sale/i.test(s)) sellCol=i;
+    else if (/تكلفة|شراء|cost|price/i.test(s)) costCol=i;
+    else if (/اسم|name/i.test(s)) nameCol=i;
+  });
+  // احتياطي: لو ما لقينا، نفترض [اسم, باركود, بيع, تكلفة]
+  if (bcCol<0) bcCol=1;
+  if (sellCol<0) sellCol=2;
+  if (costCol<0) costCol=3;
+  if (nameCol<0) nameCol=0;
+  for (let i=1; i<rows.length; i++){
+    const row = rows[i];
+    if (!row) continue;
+    const bc = String(row[bcCol]||"").trim();
+    if (!bc || !/\d{3,}/.test(bc)) continue;
+    const sell = num(row[sellCol]);
+    const cost = num(row[costCol]);
+    const name = String(row[nameCol]||"").trim();
+    if (!prices[bc]) prices[bc] = { sell, cost, name };
+  }
+  return prices;
+}
+
+async function onPriceFiles(files){
+  for (const f of files){
+    try {
+      const rows = await readFile(f);
+      const prices = parsePrices(rows);
+      PRICE_FILES.push({ name: f.name, prices });
+    } catch(e){ toast("تعذّر قراءة "+f.name); }
+  }
+  RESULT = null;
+  render();
+  if (PRICE_FILES.length) saveToCloud();
+}
+
 async function onSalesFiles(files){
   for (const f of files){
     try {
@@ -442,6 +488,10 @@ function analyze(){
   });
   const hasPurch = Object.keys(purch).length > 0;
 
+  // ملفات الأسعار المنفصلة (تكمّل أو تستبدل السعر)
+  const priceMap = {};
+  PRICE_FILES.forEach(f => Object.entries(f.prices||{}).forEach(([bc,p]) => { if(!priceMap[bc]) priceMap[bc]=p; }));
+
   // أسماء المبيعات
   const salesNames = {};
   SALES_FILES.forEach(f => Object.entries(f.names||{}).forEach(([bc,nm]) => { if(!salesNames[bc]) salesNames[bc]=nm; }));
@@ -467,17 +517,20 @@ function analyze(){
     const remaining = hasPurch ? Math.max(0, bought - sold) : null;
     const soldPct = (hasPurch && bought>0) ? (sold/bought)*100 : null;
     const inf = infoMap[bc] || {};
-    const sellPrice = num(inf.sell);
-    const discPrice = sellPrice > 0 ? Math.round(sellPrice * (1 - 0) * 100)/100 : 0; // يُحسب لاحقاً بالخصم
+    const pr = priceMap[bc] || {};
+    // السعر: ملف الأسعار المنفصل له الأولوية، وإلا من الفاتورة
+    const sellPrice = num(pr.sell) || num(inf.sell);
+    const costPrice = num(pr.cost) || num(inf.cost);
+    const prodName = pr.name || inf.name || "";
     return {
       bc, sold, bought, remaining, soldPct,
       factory: factoryCode(bc), cont: contMap[bc] || "بدون كونتينر",
-      purchName: inf.name || "", salesName: salesNames[bc] || "",
+      purchName: prodName, salesName: salesNames[bc] || "",
       monthly: monthlyMap[bc] || null,
       trend: monthlyMap[bc] ? classifyMonthly(monthlyMap[bc]) : null,
-      cost: num(inf.cost), sell: sellPrice,
-      totalCost: num(inf.cost) * bought,
-      dupPurch: (purchCount[bc]||0) > 1,   // تكرر في أكثر من فاتورة شراء
+      cost: costPrice, sell: sellPrice,
+      totalCost: costPrice * bought,
+      dupPurch: (purchCount[bc]||0) > 1,
     };
   });
 
@@ -524,14 +577,15 @@ function analyze(){
 // ══ العرض ══
 function fileList(arr, kind){
   if (arr.length === 0) return "";
-  return `<div class="files">` + arr.map((f,i) =>
-    `<div class="file">
+  return `<div class="files">` + arr.map((f,i) => {
+    const cnt = kind==='price' ? Object.keys(f.prices||{}).length : Object.keys(f.map||{}).length;
+    return `<div class="file">
        <span class="nm">📄 ${f.name}</span>
        <span style="display:flex;align-items:center">
-         <span class="cnt">${Object.keys(f.map).length} باركود</span>
+         <span class="cnt">${cnt} باركود</span>
          <span class="rm" onclick="removeFile('${kind}',${i})">✕</span>
        </span>
-     </div>`).join("") + `</div>`;
+     </div>`; }).join("") + `</div>`;
 }
 
 function rankColor(i){
@@ -597,18 +651,28 @@ function render(){
         <input type="file" id="salesInput" accept=".xlsx,.xls" multiple style="display:none">
         <label for="salesInput" style="cursor:pointer;display:block">
           <div class="ic">📈</div>
-          <div class="t">ملفات المبيعات</div>
-          <div class="d">${SALES_FILES.length? SALES_FILES.length+' ملف مرفوع · أضف المزيد' : 'اضغط لرفع ملف أو أكثر'}</div>
+          <div class="t">المبيعات</div>
+          <div class="d">${SALES_FILES.length? SALES_FILES.length+' ملف · أضف المزيد' : 'باركود وكمية — عادي أو شهري'}</div>
         </label>
       </div>
       ${fileList(SALES_FILES,'sales')}
+
+      <div class="drop ${PRICE_FILES.length?'has':''}">
+        <input type="file" id="priceInput" accept=".xlsx,.xls" multiple style="display:none">
+        <label for="priceInput" style="cursor:pointer;display:block">
+          <div class="ic">💰</div>
+          <div class="t">الباركود والأسعار <span style="font-size:11px;color:#64748b;font-weight:400">(اختياري)</span></div>
+          <div class="d">${PRICE_FILES.length? PRICE_FILES.length+' ملف · باركود + بيع + تكلفة' : 'ملف فيه: باركود + سعر بيع + تكلفة'}</div>
+        </label>
+      </div>
+      ${fileList(PRICE_FILES,'price')}
 
       <div class="drop ${PURCH_FILES.length?'has':''}">
         <input type="file" id="purchInput" accept=".xlsx,.xls" multiple style="display:none">
         <label for="purchInput" style="cursor:pointer;display:block">
           <div class="ic">🧾</div>
-          <div class="t">فاتورة المشتريات <span style="font-size:11px;color:#64748b;font-weight:400">(اختياري)</span></div>
-          <div class="d">${PURCH_FILES.length? PURCH_FILES.length+' ملف · لحساب المتبقي' : 'لحساب المتبقي ونسبة البيع'}</div>
+          <div class="t">المشتريات <span style="font-size:11px;color:#64748b;font-weight:400">(اختياري)</span></div>
+          <div class="d">${PURCH_FILES.length? PURCH_FILES.length+' ملف · باركود + كميات' : 'باركود وكميات الشراء'}</div>
         </label>
       </div>
       ${fileList(PURCH_FILES,'purch')}
@@ -620,6 +684,7 @@ function render(){
       ${SALES_FILES.length===0?`<div class="empty"><div class="ic">📊</div><div style="font-size:13px">ارفع ملفات فواتيرك القديمة<br>والنظام يجمّع ويرتّب ويقترح التخفيض</div></div>`:''}
     `;
     $("salesInput").onchange = e => onSalesFiles([...e.target.files]);
+    $("priceInput").onchange = e => onPriceFiles([...e.target.files]);
     $("purchInput").onchange = e => onPurchFiles([...e.target.files]);
     return;
   }
@@ -724,9 +789,10 @@ function render(){
 // ══ أحداث ══
 function removeFile(kind, i){
   if (kind==='sales') SALES_FILES.splice(i,1);
+  else if (kind==='price') PRICE_FILES.splice(i,1);
   else PURCH_FILES.splice(i,1);
   RESULT = null; render();
-  if (SALES_FILES.length || PURCH_FILES.length) saveToCloud(); else clearCloud();
+  if (SALES_FILES.length || PURCH_FILES.length || PRICE_FILES.length) saveToCloud(); else clearCloud();
 }
 function setRule(k,v){ RULES[k]=Math.max(0,Math.min(95,num(v))); if(RESULT) analyze(); }
 function setDiscMode(m){ DISC_MODE=m; if(RESULT) analyze(); }
@@ -776,7 +842,7 @@ function printGroup(key, mode){
 }
 function resetAll(){
   if (!confirm("مسح كل الملفات والبيانات من النظام؟ (يظهر للكل)")) return;
-  SALES_FILES=[]; PURCH_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; OPEN_GROUPS={};
+  SALES_FILES=[]; PURCH_FILES=[]; PRICE_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; OPEN_GROUPS={};
   clearCloud();
   toast("🗑️ مُسح الكل");
   render();
