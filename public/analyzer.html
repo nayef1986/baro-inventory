@@ -710,12 +710,14 @@ function printList(list, ttl){
   if (RESULT.hasPurch) stats.push(["إجمالي المشتريات", fmt(totalBought)]);
 
   const rows = list.map((it,i) => {
-    const nm = it.purchName || it.salesName || "—";
+    const nmS = it.salesName || "—";
+    const nmP = it.purchName || "—";
     const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell*(1-it.discount/100)*100)/100 : null;
     return `<tr class="${weak?'w':''}">
     <td class="n">${i+1}</td>
     <td class="bc">${it.bc}</td>
-    <td class="nm">${nm}</td>
+    <td class="nm">${nmS}</td>
+    <td class="nm2">${nmP}</td>
     <td class="f">${it.factory}</td>
     <td class="big">${fmt(it.sold)}</td>
     ${RESULT.hasPurch?`<td class="mid">${fmt(it.bought)}</td><td class="mid">${it.remaining!==null?fmt(it.remaining):'—'}</td><td class="pct">${it.soldPct!==null?Math.round(it.soldPct)+'%':'—'}</td>`:''}
@@ -747,6 +749,7 @@ function printList(list, ttl){
     td.n{background:#f1f5f9;font-weight:900;color:#888;font-size:12px}
     td.bc{font-family:monospace;font-size:14px;color:#0f172a;font-weight:900;letter-spacing:0.5px}
     td.nm{text-align:right;font-weight:700;font-size:12px;color:#334155}
+    td.nm2{text-align:right;font-weight:700;font-size:11px;color:#2563eb}
     td.f{font-family:monospace;color:#64748b;font-size:12px;font-weight:700}
     td.big{font-size:18px;font-weight:900;color:#059669}
     td.mid{font-size:14px;font-weight:700;color:#334155}
@@ -762,7 +765,7 @@ function printList(list, ttl){
     <div class="date">📅 ${greg} · ${hijri}هـ · ALBAROO</div>
     <div class="stats">${statsHtml}</div>
     <table><thead><tr>
-      <th>#</th><th>الباركود</th><th>الاسم</th><th>المصنع</th><th>باع</th>
+      <th>#</th><th>الباركود</th><th>اسم المبيعات</th><th>اسم المشتريات</th><th>المصنع</th><th>باع</th>
       ${RESULT.hasPurch?'<th>كمية الشراء</th><th>متبقي</th><th>نسبة</th>':''}
       <th>سعر الشراء</th><th>سعر البيع</th>
       ${weak?'<th>الخصم</th><th>بعد الخصم</th>':''}
