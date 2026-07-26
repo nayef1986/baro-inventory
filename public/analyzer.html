@@ -135,6 +135,7 @@
 let SALES_FILES = [];   // [{name, map:{bc:qty}}]
 let PURCH_FILES = [];   // [{name, map:{bc:qty}, noBarcode:[...]}]
 let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
+let DISC_MODE = "trend";  // trend = الحركة الشهرية | pct = نسبة البيع
 let RESULT = null;      // نتيجة التجميع
 
 // ══ حفظ في Supabase (يظهر للكل) ══
@@ -202,6 +203,62 @@ const $ = id => document.getElementById(id);
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
 
 // ══ استخراج المبيعات: الباركود بين [ ] ══
+// ══ كشف وقراءة الملف الشهري (صف ثاني فيه أسماء شهور) ══
+const MONTH_RE = /20\d{2}|يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر/;
+function isMonthlyFile(rows){
+  const r2 = rows[1] || [];
+  const cnt = r2.filter(v => typeof v==="string" && MONTH_RE.test(v) && v.trim()!=="الإجمالي").length;
+  return cnt >= 2;
+}
+function parseMonthly(rows){
+  const monthRow = rows[1] || [];
+  const months = [];
+  monthRow.forEach((v,i) => {
+    if (typeof v==="string" && v.trim() && v.trim()!=="الإجمالي" && MONTH_RE.test(v)) months.push({ col:i, name:v.trim() });
+  });
+  const map = {};      // bc -> إجمالي
+  const names = {};    // bc -> اسم
+  const monthly = {};  // bc -> [كمية كل شهر]
+  for (let i=4; i<rows.length; i++){
+    const row = rows[i];
+    const key = String(row?.[0] ?? "").trim();
+    if (!key || key==="الإجمالي") continue;
+    const m = key.match(/\[([^\]]+)\]/);
+    if (!m) continue;
+    const bc = m[1].trim();
+    const nm = key.replace(/\[[^\]]+\]/,"").replace(/\d+\s*$/,"").trim();
+    const arr = months.map(mo => num(row[mo.col]));
+    const tot = arr.reduce((s,x)=>s+x,0);
+    if (tot <= 0) continue;
+    map[bc] = (map[bc]||0) + tot;
+    if (!names[bc] && nm) names[bc] = nm;
+    if (!monthly[bc]) monthly[bc] = arr.slice();
+    else monthly[bc] = monthly[bc].map((x,j)=>x+(arr[j]||0));
+  }
+  return { map, names, monthly, monthNames: months.map(m=>m.name) };
+}
+
+// تصنيف المنتج حسب حركته الشهرية → {code, label, disc}
+function classifyMonthly(m){
+  if (!m || !m.length) return { code:"none", label:"", disc:0 };
+  const n = m.length;
+  const nz = m.filter(x=>x>0).length;
+  const total = m.reduce((s,x)=>s+x,0);
+  if (nz===0) return { code:"nomove", label:"ما تحرّك — تصفية عاجلة", disc:85 };
+  const peak = Math.max(...m); const peakIdx = m.indexOf(peak);
+  const half = Math.floor(n/2);
+  const recent3 = m.slice(-3); const sumRecent3 = recent3.reduce((s,x)=>s+x,0);
+  const avgRecent = sumRecent3/3;
+  const firstHalf = m.slice(0,half).reduce((s,x)=>s+x,0)/Math.max(1,half);
+  const lastHalf = m.slice(half).reduce((s,x)=>s+x,0)/Math.max(1,n-half);
+  if (sumRecent3===0) return { code:"stopped", label:"توقّف — راكد يحتاج تصفية", disc:85 };
+  if (peakIdx < half && avgRecent < peak*0.3 && peak>=10) return { code:"wasStrong", label:"كان قوي وخفّت بضاعته — اطلب جديد، لا تخصّم", disc:0 };
+  if (peak<=3) return { code:"weakAlways", label:"ضعيف من البداية — خصم وتصفية", disc:75 };
+  if (lastHalf < firstHalf*0.5 && firstHalf>3) return { code:"declining", label:"يضعف شهرياً — راقبه أو خصم خفيف", disc:50 };
+  if (lastHalf >= firstHalf) return { code:"stable", label:"مستقر/صاعد — سليم", disc:0 };
+  return { code:"normal", label:"عادي", disc:0 };
+}
+
 function parseSales(rows){
   const map = {};
   const names = {};
@@ -341,8 +398,13 @@ async function onSalesFiles(files){
   for (const f of files){
     try {
       const rows = await readFile(f);
-      const { map, names } = parseSales(rows);
-      SALES_FILES.push({ name: f.name, map, names });
+      if (isMonthlyFile(rows)){
+        const { map, names, monthly, monthNames } = parseMonthly(rows);
+        SALES_FILES.push({ name: f.name, map, names, monthly, monthNames, isMonthly:true });
+      } else {
+        const { map, names } = parseSales(rows);
+        SALES_FILES.push({ name: f.name, map, names });
+      }
     } catch(e){ toast("تعذّر قراءة "+f.name); }
   }
   RESULT = null;
@@ -383,6 +445,19 @@ function analyze(){
   // أسماء المبيعات
   const salesNames = {};
   SALES_FILES.forEach(f => Object.entries(f.names||{}).forEach(([bc,nm]) => { if(!salesNames[bc]) salesNames[bc]=nm; }));
+  // الحركة الشهرية (من الملف الشهري)
+  const monthlyMap = {};
+  let monthNames = [];
+  SALES_FILES.forEach(f => {
+    if (f.isMonthly && f.monthly){
+      if (!monthNames.length) monthNames = f.monthNames || [];
+      Object.entries(f.monthly).forEach(([bc,arr]) => {
+        if (!monthlyMap[bc]) monthlyMap[bc] = arr.slice();
+        else monthlyMap[bc] = monthlyMap[bc].map((x,j)=>x+(arr[j]||0));
+      });
+    }
+  });
+  const hasMonthly = monthNames.length > 0;
 
   // ادمج
   const allBc = new Set([...Object.keys(sales), ...Object.keys(purch)]);
@@ -398,6 +473,8 @@ function analyze(){
       bc, sold, bought, remaining, soldPct,
       factory: factoryCode(bc), cont: contMap[bc] || "بدون كونتينر",
       purchName: inf.name || "", salesName: salesNames[bc] || "",
+      monthly: monthlyMap[bc] || null,
+      trend: monthlyMap[bc] ? classifyMonthly(monthlyMap[bc]) : null,
       cost: num(inf.cost), sell: sellPrice,
       totalCost: num(inf.cost) * bought,
       dupPurch: (purchCount[bc]||0) > 1,   // تكرر في أكثر من فاتورة شراء
@@ -411,18 +488,26 @@ function analyze(){
   // الضعيف = النصف الأدنى مبيعا
   const withSales = items.filter(i => i.sold > 0);
   const n = withSales.length;
-  // 💸 الخصم للضعيف فقط (نسبة البيع تحت الحد). كل ما قلّت النسبة زاد الخصم.
-  // الأقوياء (نسبة عالية أو ما لهم مشتريات) = بدون خصم.
-  const WEAK_THRESHOLD = 50; // تحت 50% = ضعيف يستحق تصريف
+  // 💸 الخصم: خيار المستخدم — الحركة الشهرية أو نسبة البيع
+  const WEAK_THRESHOLD = 50;
+  const useTrend = DISC_MODE === "trend";
   items.forEach(it => {
-    // ما له نسبة (بدون مشتريات) → ما نقدر نحكم → بدون خصم
+    // نستخدم الحركة لو مختارة ومتوفرة
+    if (useTrend && it.trend){
+      const code = it.trend.code;
+      if (code === "nomove" || code === "stopped") it.discount = RULES.t1;
+      else if (code === "weakAlways") it.discount = RULES.t2;
+      else if (code === "declining") it.discount = RULES.t3;
+      else it.discount = 0;
+      return;
+    }
+    // نسبة البيع
     if (it.soldPct === null){ it.discount = 0; return; }
     const pct = it.soldPct;
-    if (pct >= WEAK_THRESHOLD){ it.discount = 0; return; } // قوي → بدون خصم
-    // ضعيف: نوزّع الشرائح داخل نطاق [0 .. الحد]
-    if (pct < WEAK_THRESHOLD/3) it.discount = RULES.t1;        // راكد جداً (أقل من ~17%)
-    else if (pct < (WEAK_THRESHOLD*2)/3) it.discount = RULES.t2; // ضعيف (~17-33%)
-    else it.discount = RULES.t3;                                 // ضعيف خفيف (~33-50%)
+    if (pct >= WEAK_THRESHOLD){ it.discount = 0; return; }
+    if (pct < WEAK_THRESHOLD/3) it.discount = RULES.t1;
+    else if (pct < (WEAK_THRESHOLD*2)/3) it.discount = RULES.t2;
+    else it.discount = RULES.t3;
   });
 
   // منتجات لها مبيعات بس بدون فاتورة شراء (تطلع لحالها لو رُفعت مشتريات)
@@ -430,7 +515,7 @@ function analyze(){
     ? items.filter(i => i.sold > 0 && i.bought === 0).sort((a,b) => b.sold - a.sold)
     : [];
 
-  RESULT = { items, hasPurch, noPurchase, totalSold: items.reduce((s,i)=>s+i.sold,0),
+  RESULT = { items, hasPurch, noPurchase, hasMonthly, monthNames, totalSold: items.reduce((s,i)=>s+i.sold,0),
              totalBought: items.reduce((s,i)=>s+i.bought,0), count: items.length };
   render();
   saveToCloud();
@@ -486,6 +571,12 @@ function itemCard(it, idx, mode){
       ${it.sell>0?`<div class="cell"><div class="cv" style="color:#22c55e">${fmt(it.sell)}</div><div class="cl">سعر البيع</div></div>`:''}
       ${it.totalCost>0?`<div class="cell"><div class="cv" style="color:#a78bfa">${fmt(it.totalCost)}</div><div class="cl">إجمالي الشراء</div></div>`:''}
     </div>
+    ${it.monthly && it.trend ? `<div style="margin-top:9px;background:#0d1420;border-radius:9px;padding:9px">
+      <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px">
+        ${it.monthly.map(v => { const mx=Math.max(...it.monthly,1); const h=Math.max(2,Math.round(v/mx*32)); return `<div style="flex:1;background:${v>0?'#3b82f6':'#1e293b'};height:${h}px;border-radius:2px" title="${v}"></div>`; }).join("")}
+      </div>
+      <div style="font-size:11px;font-weight:900;color:${it.trend.disc>0?'#f59e0b':'#4ade80'}">${it.trend.label}</div>
+    </div>` : ''}
     ${mode==='weak'?`<div class="discbar">
       <div>
         <div style="font-size:12px;color:#94a3b8;font-weight:700">💸 خصم التصريف</div>
@@ -566,6 +657,10 @@ function render(){
 
     <div class="rules">
       <h3>💸 شرائح خصم التصريف</h3>
+      ${RESULT.hasMonthly?`<div style="display:flex;gap:6px;margin-bottom:12px">
+        <button onclick="setDiscMode('trend')" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:900;background:${DISC_MODE==='trend'?'rgba(37,99,235,0.2)':'#0d1420'};color:${DISC_MODE==='trend'?'#7aa5e0':'#64748b'};border:1px solid ${DISC_MODE==='trend'?'#2563eb':'#1e293b'}">📊 حسب الحركة الشهرية</button>
+        <button onclick="setDiscMode('pct')" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:900;background:${DISC_MODE==='pct'?'rgba(37,99,235,0.2)':'#0d1420'};color:${DISC_MODE==='pct'?'#7aa5e0':'#64748b'};border:1px solid ${DISC_MODE==='pct'?'#2563eb':'#1e293b'}">📈 حسب نسبة البيع</button>
+      </div>`:''}
       <div class="rule"><label>الأضعف مبيعاً</label><div><input type="number" id="t1" value="${RULES.t1}" min="0" max="95" onchange="setRule('t1',this.value)"><span class="u">%</span></div></div>
       <div class="rule"><label>المتوسط</label><div><input type="number" id="t2" value="${RULES.t2}" min="0" max="95" onchange="setRule('t2',this.value)"><span class="u">%</span></div></div>
       <div class="rule"><label>الأقل ضعفاً</label><div><input type="number" id="t3" value="${RULES.t3}" min="0" max="95" onchange="setRule('t3',this.value)"><span class="u">%</span></div></div>
@@ -634,6 +729,7 @@ function removeFile(kind, i){
   if (SALES_FILES.length || PURCH_FILES.length) saveToCloud(); else clearCloud();
 }
 function setRule(k,v){ RULES[k]=Math.max(0,Math.min(95,num(v))); if(RESULT) analyze(); }
+function setDiscMode(m){ DISC_MODE=m; if(RESULT) analyze(); }
 function setTab(t){ TAB=t; render(); }
 function setSearch(v){ SEARCH=v; render(); }
 function setSort(v){ SORT=v; render(); }
@@ -727,6 +823,7 @@ function printList(list, ttl){
     ${it.cost>0?`<td class="mid">${fmt(it.cost)}</td>`:'<td>—</td>'}
     ${it.sell>0?`<td class="mid">${fmt(it.sell)}</td>`:'<td>—</td>'}
     ${weak?`<td class="d">${it.discount}%</td><td class="big">${discPrice!==null?fmt(discPrice):'—'}</td>`:''}
+    ${RESULT.hasMonthly?`<td class="sug">${it.trend?it.trend.label:'—'}</td>`:''}
   </tr>`;}).join("");
 
   const statsHtml = stats.map(([l,v])=>`<div class="sc"><div class="sv">${v}</div><div class="sl">${l}</div></div>`).join("");
@@ -758,6 +855,7 @@ function printList(list, ttl){
     td.mid{font-size:14px;font-weight:700;color:#334155}
     td.pct{font-size:14px;font-weight:900;color:#d97706}
     td.d{font-size:18px;font-weight:900;color:#dc2626}
+    td.sug{text-align:right;font-size:11px;font-weight:700;color:#334155;max-width:180px}
     tr.w td.big{color:#dc2626}
     tr:nth-child(even) td{background:#fafbfc}
     @media print{.tb{display:none}.w{padding:16px}}
@@ -772,6 +870,7 @@ function printList(list, ttl){
       ${RESULT.hasPurch?'<th>كمية الشراء</th><th>متبقي</th><th>نسبة</th>':''}
       <th>سعر الشراء</th><th>سعر البيع</th>
       ${weak?'<th>الخصم</th><th>بعد الخصم</th>':''}
+      ${RESULT.hasMonthly?'<th>الاقتراح</th>':''}
     </tr></thead><tbody>${rows}</tbody></table>
   </div></body></html>`;
   const w = window.open("","_blank");
