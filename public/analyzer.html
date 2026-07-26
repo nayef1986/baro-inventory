@@ -370,9 +370,10 @@ function analyze(){
   const purch = {};
   const contMap = {};   // bc -> كود الكونتينر
   const infoMap = {};   // bc -> {name, cost, sell}
+  const purchCount = {}; // bc -> كم فاتورة شراء جاء فيها (للتكرار)
   NO_BC = [];
   PURCH_FILES.forEach(f => {
-    Object.entries(f.map).forEach(([bc,q]) => purch[bc] = (purch[bc]||0) + q);
+    Object.entries(f.map).forEach(([bc,q]) => { purch[bc] = (purch[bc]||0) + q; purchCount[bc] = (purchCount[bc]||0) + 1; });
     Object.entries(f.contOf||{}).forEach(([bc,c]) => { if (!contMap[bc]) contMap[bc] = c; });
     Object.entries(f.info||{}).forEach(([bc,d]) => { if (!infoMap[bc]) infoMap[bc] = d; });
     NO_BC.push(...f.noBarcode);
@@ -399,6 +400,7 @@ function analyze(){
       purchName: inf.name || "", salesName: salesNames[bc] || "",
       cost: num(inf.cost), sell: sellPrice,
       totalCost: num(inf.cost) * bought,
+      dupPurch: (purchCount[bc]||0) > 1,   // تكرر في أكثر من فاتورة شراء
     };
   });
 
@@ -464,7 +466,9 @@ function itemCard(it, idx, mode){
   // نعرض الاثنين لو مختلفين، وإلا واحد
   // سعر البيع بعد الخصم
   const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell * (1 - it.discount/100) * 100)/100 : null;
-  return `<div class="card">
+  const dupStyle = it.dupPurch ? "border:2px solid #a855f7;box-shadow:0 0 0 1px rgba(168,85,247,0.2)" : "";
+  return `<div class="card" style="${dupStyle}">
+    ${it.dupPurch?`<div style="display:inline-block;background:#a855f7;color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:100px;margin-bottom:8px">🔁 مكرر في المشتريات</div>`:''}
     <div class="top">
       <div class="rank" style="background:${rb};color:${rc}">${idx+1}</div>
       <div style="flex:1;min-width:0">
