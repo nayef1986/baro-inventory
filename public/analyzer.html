@@ -411,20 +411,19 @@ function analyze(){
   // الضعيف = النصف الأدنى مبيعا
   const withSales = items.filter(i => i.sold > 0);
   const n = withSales.length;
+  // 💸 الخصم للضعيف فقط (نسبة البيع تحت الحد). كل ما قلّت النسبة زاد الخصم.
+  // الأقوياء (نسبة عالية أو ما لهم مشتريات) = بدون خصم.
+  const WEAK_THRESHOLD = 50; // تحت 50% = ضعيف يستحق تصريف
   items.forEach(it => {
-    const rankFromWeak = withSales.findIndex(x => x.bc === it.bc); // 0 = الأضعف بعد الترتيب التنازلي؟
+    // ما له نسبة (بدون مشتريات) → ما نقدر نحكم → بدون خصم
+    if (it.soldPct === null){ it.discount = 0; return; }
+    const pct = it.soldPct;
+    if (pct >= WEAK_THRESHOLD){ it.discount = 0; return; } // قوي → بدون خصم
+    // ضعيف: نوزّع الشرائح داخل نطاق [0 .. الحد]
+    if (pct < WEAK_THRESHOLD/3) it.discount = RULES.t1;        // راكد جداً (أقل من ~17%)
+    else if (pct < (WEAK_THRESHOLD*2)/3) it.discount = RULES.t2; // ضعيف (~17-33%)
+    else it.discount = RULES.t3;                                 // ضعيف خفيف (~33-50%)
   });
-  // نحسب رتبة كل منتج من الأضعف (تصاعدي)
-  const byWeak = [...withSales].sort((a,b) => a.sold - b.sold);
-  byWeak.forEach((it, i) => {
-    const pos = i / Math.max(1, byWeak.length - 1); // 0 = الأضعف, 1 = الأقوى
-    let disc;
-    if (pos < 0.34) disc = RULES.t1;        // الأضعف
-    else if (pos < 0.67) disc = RULES.t2;   // الأوسط
-    else disc = RULES.t3;                    // الأقوى ضمن الضعيف
-    it.discount = disc;
-  });
-  items.filter(i => i.sold === 0).forEach(it => it.discount = RULES.t1);
 
   // منتجات لها مبيعات بس بدون فاتورة شراء (تطلع لحالها لو رُفعت مشتريات)
   const noPurchase = hasPurch
@@ -537,7 +536,7 @@ function render(){
   // شاشة النتائج
   let list = [...RESULT.items];
   // تبويب أساسي
-  if (TAB === "weak") list = list.filter(i=>i.sold>0);
+  if (TAB === "weak") list = list.filter(i=>i.sold>0 && i.discount>0);
   // بحث
   if (SEARCH){
     const s = SEARCH.toLowerCase();
@@ -691,7 +690,7 @@ function resetAll(){
 function doPrint(){
   if (!RESULT) return;
   let list = [...RESULT.items];
-  if (TAB==='weak') list = list.filter(i=>i.sold>0);
+  if (TAB==='weak') list = list.filter(i=>i.sold>0 && i.discount>0);
   if (SEARCH){ const s=SEARCH.toLowerCase(); list=list.filter(i=>i.bc.toLowerCase().includes(s)||i.factory.includes(s)||(i.purchName||i.salesName||'').toLowerCase().includes(s)); }
   const sortFns={sold_desc:(a,b)=>b.sold-a.sold,sold_asc:(a,b)=>a.sold-b.sold,pct_desc:(a,b)=>(b.soldPct??-1)-(a.soldPct??-1),pct_asc:(a,b)=>(a.soldPct??999)-(b.soldPct??999),factory:(a,b)=>a.factory.localeCompare(b.factory)||b.sold-a.sold};
   let eff=SORT; if(TAB==='weak'&&SORT==='sold_desc')eff='sold_asc';
