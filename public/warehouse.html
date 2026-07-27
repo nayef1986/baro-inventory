@@ -816,7 +816,7 @@ function drawNeeds(c){
     return;
   }
   // شبكة الكونتينرات
-  c.innerHTML = contNames.map(cont=>{
+  c.innerHTML = `<button onclick="quickPhotoReport()" style="width:100%;padding:13px;border:none;border-radius:12px;font-family:'Cairo';font-weight:900;font-size:14px;color:#fff;background:linear-gradient(135deg,#0891b2,#0e7490);cursor:pointer;margin-bottom:12px">📸 تقرير سريع بالصور (للموظف)</button>` + contNames.map(cont=>{
     const list = groups[cont];
     const redistCount = list.filter(n=>n.distributedBefore).length;
     return `<div class="cont"><div class="conth" onclick="enterCont('${cont.replace(/'/g,'')}')">
@@ -1485,6 +1485,87 @@ function slipCSS(){
     tbody td.rem{color:#dc2626;width:46px}
     tbody td.send{color:#16a34a;width:46px}
     @media print{.tb{display:none}body{background:#fff}.wrap{padding:0}.slip{border:none;border-radius:0;margin:0 auto;max-width:100%;padding:6px}}`;
+}
+
+// ─── تقرير سريع بالصور (للموظف) ───────────────────────────────
+// المنتجات اللي: عندها فروع محتاجة + مخزون كثير في المستودع → صورة كبيرة
+function quickPhotoReport(){
+  if (!currentNeeds || currentNeeds.length === 0){ showToast("لا نواقص للتقرير"); return; }
+  // نرتّب بالأكثر مخزوناً (closing) — الموظف يبدأ باللي عنده منه كثير
+  const list = currentNeeds
+    .filter(n => n.closing > 0 && n.branches && n.branches.length > 0)
+    .sort((a,b)=> b.closing - a.closing);
+  if (list.length === 0){ showToast("لا منتجات مطابقة"); return; }
+
+  const d = new Date();
+  const ds = (d.getDate()+"").padStart(2,"0")+"/"+(d.getMonth()+1+"").padStart(2,"0")+"/"+d.getFullYear();
+
+  const cards = list.map((n,idx)=>{
+    const bc = n.p.barcode;
+    const img = IMAGES?.[bc];
+    const name = n.p.name || "";
+    const cont = n.p.container || "";
+    // الفروع المحتاجة (مرتّبة بالأقل متبقّي = الأكثر حاجة)
+    const branches = [...n.branches].sort((a,b)=>a.remaining-b.remaining);
+    const branchChips = branches.map(b=>
+      `<span class="qbr">${b.branch} <b>(${fmtN(b.remaining)})</b></span>`
+    ).join("");
+    const imgHtml = img
+      ? `<img src="${img}" class="qimg" alt="">`
+      : `<div class="qnoimg">📦</div>`;
+    return `<div class="qcard">
+      <div class="qnum">${idx+1}</div>
+      ${imgHtml}
+      <div class="qinfo">
+        <div class="qbc">${bc}</div>
+        ${name?`<div class="qname">${name}</div>`:''}
+        ${cont?`<div class="qcont">📦 ${cont}</div>`:''}
+        <div class="qstock">مخزون المستودع: <b>${fmtN(n.closing)}</b></div>
+        <div class="qbrs">الفروع المحتاجة (${branches.length}):<div class="qbrlist">${branchChips}</div></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  const ov = document.createElement("div");
+  ov.id = "printOverlay";
+  ov.style.cssText = "position:fixed;inset:0;background:#f0f0f0;z-index:500;overflow:auto;-webkit-overflow-scrolling:touch";
+  ov.innerHTML = `
+    <style>
+      @media print { .qtb{display:none!important} @page{margin:8mm} }
+      .qtb{position:sticky;top:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:10}
+      .qtb button{font-family:'Cairo';font-size:14px;font-weight:900;border:none;border-radius:10px;padding:11px 22px;cursor:pointer}
+      .qtb .bk{background:#334155;color:#fff}.qtb .pr{background:#0891b2;color:#fff}
+      .qwrap{max-width:900px;margin:0 auto;padding:16px}
+      .qhead{text-align:center;margin-bottom:16px}
+      .qhead h1{font-family:'Cairo';font-size:22px;font-weight:900;color:#0f172a}
+      .qhead .sub{font-family:'Cairo';font-size:13px;color:#666;margin-top:3px}
+      .qcard{display:flex;gap:14px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:14px;padding:14px;margin-bottom:12px;page-break-inside:avoid;position:relative}
+      .qnum{position:absolute;top:8px;left:8px;width:26px;height:26px;background:#0f172a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cairo';font-weight:900;font-size:13px}
+      .qimg{width:130px;height:130px;object-fit:cover;border-radius:12px;border:1px solid #ccc;background:#fff;flex-shrink:0}
+      .qnoimg{width:130px;height:130px;border-radius:12px;background:#eef1f5;display:flex;align-items:center;justify-content:center;font-size:46px;flex-shrink:0}
+      .qinfo{flex:1;min-width:0;font-family:'Cairo'}
+      .qbc{font-family:monospace;font-size:20px;font-weight:900;color:#0f172a;letter-spacing:1px}
+      .qname{font-size:15px;font-weight:700;color:#333;margin-top:3px}
+      .qcont{font-size:12px;color:#0891b2;font-weight:700;margin-top:3px}
+      .qstock{font-size:14px;color:#333;margin-top:6px}.qstock b{color:#059669;font-size:18px}
+      .qbrs{font-size:12px;color:#666;margin-top:7px;font-weight:700}
+      .qbrlist{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+      .qbr{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:700}
+      .qbr b{color:#7f1d1d}
+    </style>
+    <div class="qtb">
+      <button class="bk" onclick="closePrintOverlay()">✕ إغلاق</button>
+      <button class="pr" onclick="doPrintOverlay('تقرير_الصور_${ds.replace(/\//g,'-')}')">🖨️ طباعة (${list.length})</button>
+    </div>
+    <div class="qwrap">
+      <div class="qhead">
+        <h1>📸 تقرير التوزيع السريع</h1>
+        <div class="sub">📅 ${ds} · ${list.length} منتج · مرتّب بالأكثر مخزوناً</div>
+      </div>
+      ${cards}
+    </div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = "hidden";
 }
 
 // طباعة كل المعتمد غير المطبوع — نفس تصميم النواقص بالضبط
