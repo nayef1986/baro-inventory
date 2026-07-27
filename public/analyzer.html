@@ -192,6 +192,16 @@ let NO_BC = [];         // أصناف بدون باركود
 
 // ══ أدوات ══
 const num = v => Number(v)||0;
+// السعر النهائي بعد الخصم — لا ينزل تحت نص التكلفة
+function finalPrice(sell, cost, discount){
+  if (!(sell > 0) || !discount) return null;
+  // لو سعر البيع أقل من سعر الشراء (خسران أصلاً) → ما نخصم، نخلّي السعر زي ما هو
+  if (cost > 0 && sell < cost) return sell;
+  let p = Math.round(sell * (1 - discount/100) * 100) / 100;
+  const floor = cost > 0 ? cost / 2 : 0;  // الحد الأدنى = نص التكلفة
+  if (floor > 0 && p < floor) p = Math.round(floor * 100) / 100;
+  return p;
+}
 const fmt = v => (Number(v)||0).toLocaleString("en-US",{maximumFractionDigits:0});
 const factoryCode = bc => String(bc||"").slice(0,5);
 // كود الكونتينر (BAR03YW24) من اسم الفئة — لو تكرر بأسماء مختلفة يندمج
@@ -603,7 +613,9 @@ function itemCard(it, idx, mode){
   const nmS = it.salesName || "";
   // نعرض الاثنين لو مختلفين، وإلا واحد
   // سعر البيع بعد الخصم
-  const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell * (1 - it.discount/100) * 100)/100 : null;
+  const discPrice = finalPrice(it.sell, it.cost, it.discount);
+  const belowCost = discPrice!==null && it.cost>0 && discPrice <= it.cost/2 + 0.001 && (it.sell*(1-it.discount/100)) < it.cost/2;
+  const lossItem = it.sell>0 && it.cost>0 && it.sell < it.cost; // بيع أقل من شراء
   const dupStyle = it.dupPurch ? "border:2px solid #a855f7;box-shadow:0 0 0 1px rgba(168,85,247,0.2)" : "";
   return `<div class="card" style="${dupStyle}">
     ${it.dupPurch?`<div style="display:inline-block;background:#a855f7;color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:100px;margin-bottom:8px">🔁 مكرر في المشتريات</div>`:''}
@@ -631,13 +643,16 @@ function itemCard(it, idx, mode){
       </div>
       <div style="font-size:11px;font-weight:900;color:${it.trend.disc>0?'#f59e0b':'#4ade80'}">${it.trend.label}</div>
     </div>` : ''}
-    ${mode==='weak'?`<div class="discbar">
+    ${mode==='weak'?(lossItem?`<div class="discbar" style="background:#1a1206;border-color:#3a2a10">
+      <div style="font-size:12px;color:#d4a853;font-weight:700">⚠️ البيع (${fmt(it.sell)}) أقل من الشراء (${fmt(it.cost)}) — بدون خصم</div>
+    </div>`:`<div class="discbar">
       <div>
         <div style="font-size:12px;color:#94a3b8;font-weight:700">💸 خصم التصريف</div>
         ${discPrice!==null?`<div style="font-size:12px;color:#cbd5e1;margin-top:2px">${fmt(it.sell)} ← <b style="color:#4ade80">${fmt(discPrice)}</b> ﷼</div>`:''}
+        ${belowCost?`<div style="font-size:10px;color:#f59e0b;margin-top:2px">⚠️ وقف عند نص التكلفة (حماية الربح)</div>`:''}
       </div>
       <span style="font-size:26px;font-weight:900;color:${discColor}">${it.discount}%</span>
-    </div>`:''}
+    </div>`):''}
   </div>`;
 }
 
@@ -877,7 +892,7 @@ function printList(list, ttl){
   const rows = list.map((it,i) => {
     const nmS = it.salesName || "—";
     const nmP = it.purchName || "—";
-    const discPrice = (it.sell>0 && it.discount) ? Math.round(it.sell*(1-it.discount/100)*100)/100 : null;
+    const discPrice = finalPrice(it.sell, it.cost, it.discount);
     return `<tr class="${weak?'w':''}">
     <td class="n">${i+1}</td>
     <td class="bc">${it.bc}</td>
