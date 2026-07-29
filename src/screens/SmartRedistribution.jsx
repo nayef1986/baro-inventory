@@ -202,6 +202,7 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
     loadImages().then(m => { if (m && Object.keys(m).length) setImgMap(m); }).catch(()=>{});
   }, []);
   const [myTransfers, setMyTransfers] = useState([]);  // النقلات المعتمدة (للإلغاء)
+  const [showPend, setShowPend] = useState(false);     // طي/فتح قائمة التحويلات المعتمدة
   const [txReload, setTxReload] = useState(0);
   useEffect(() => { loadTransfers().then(t=>setMyTransfers(t||[])).catch(()=>setMyTransfers([])); }, [txReload]);
 
@@ -613,11 +614,13 @@ export default function SmartRedistribution({ products=[], periods=[], settings=
                       if (pend.length===0) return null;
                       return (
                         <div style={{background:"rgba(234,88,12,0.08)",border:"1px solid rgba(234,88,12,0.25)",borderRadius:"12px",padding:"10px",marginTop:"2px"}}>
-                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"7px"}}>
-                            <div style={{fontSize:"12px",fontWeight:"900",color:"#fb923c"}}>📋 تحويلات معتمدة لـ {fillTarget}</div>
-                            <button onClick={cancelAllTransfers} style={{background:"rgba(239,68,68,0.25)",color:"#fca5a5",border:"none",borderRadius:"7px",padding:"5px 12px",fontSize:"11px",fontWeight:"900",fontFamily:"Cairo",cursor:"pointer"}}>✕ إلغاء الكل</button>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom: showPend?"7px":"0"}}>
+                            <div onClick={()=>setShowPend(v=>!v)} style={{fontSize:"12px",fontWeight:"900",color:"#fb923c",cursor:"pointer",flex:1}}>
+                              {showPend?"▲":"▼"} 📋 تحويلات معتمدة لـ {fillTarget} ({pend.length})
+                            </div>
+                            {showPend && <button onClick={cancelAllTransfers} style={{background:"rgba(239,68,68,0.25)",color:"#fca5a5",border:"none",borderRadius:"7px",padding:"5px 12px",fontSize:"11px",fontWeight:"900",fontFamily:"Cairo",cursor:"pointer"}}>✕ إلغاء الكل</button>}
                           </div>
-                          {pend.map((t,i)=>(
+                          {showPend && pend.map((t,i)=>(
                             <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",background:"rgba(0,0,0,0.2)",borderRadius:"8px",padding:"7px 9px",marginBottom:"5px"}}>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:"12px",fontWeight:"700",color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name||t.barcode}</div>
