@@ -1,3 +1,8 @@
+<!-- ═══════════════════════════════════════════════════════════
+     اسم الملف: warehouse-branch.html
+     صفحة جرد الفرع — ALBAROO
+     (لو تبي تعدّلها مستقبلاً، انسخ هذا الاسم للمساعد)
+     ═══════════════════════════════════════════════════════════ -->
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -259,8 +264,8 @@ function render(){
     <div class="empId">👤 الموظف: <b>${EMP}</b> · 🖼️ ${Object.keys(IMAGES||{}).length} صورة<button onclick="changeEmp()">تغيير</button></div>
     <div class="tabs" style="display:flex;gap:6px;margin-bottom:14px">
       <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📋 جرد</button>
-      <button class="${activeTab==='receive'?'on':''}" onclick="setTab('receive')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام${pendingReceive>0?` (${pendingReceive})`:''}</button>
-      <button class="${activeTab==='deliver'?'on':''}" onclick="setTab('deliver')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='deliver'?'#ea580c':'#2d3a52'};background:${activeTab==='deliver'?'#ea580c':'#141b2d'};color:${activeTab==='deliver'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📤 تسليم${pendingDeliver>0?` (${pendingDeliver})`:''}</button>
+      <button class="${activeTab==='receive'?'on':''}" onclick="setTab('receive')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام من المستودع${pendingReceive>0?` (${pendingReceive})`:''}</button>
+      <button class="${activeTab==='deliver'?'on':''}" onclick="setTab('deliver')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='deliver'?'#ea580c':'#2d3a52'};background:${activeTab==='deliver'?'#ea580c':'#141b2d'};color:${activeTab==='deliver'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📤 جهّز للفروع${pendingDeliver>0?` (${pendingDeliver})`:''}</button>
     </div>
     <div id="tabBody"></div>`;
   renderTabBody();
@@ -284,7 +289,10 @@ function renderCountTab(app){
 
   app.innerHTML = `
     <div class="hint">اضغط <b>+</b> أو <b>−</b> أو اكتب الرقم مباشرة. عدّ اللي عندك في الرف فعلياً، ثم احفظ. الإدارة تشوف الفرق تلقائياً.</div>
-    <input class="search" id="search" placeholder="🔍 ابحث بالباركود أو الاسم…" value="${searchTerm}" oninput="onSearch(this.value)" />
+    <div style="display:flex;gap:7px;margin-bottom:12px">
+      <input class="search" id="search" placeholder="🔍 ابحث بالباركود أو الاسم…" value="${searchTerm}" oninput="onSearch(this.value)" style="flex:1;min-width:0;margin-bottom:0" />
+      <button onclick="openScanner()" style="background:#7c3aed;border:none;border-radius:12px;padding:0 16px;font-size:22px;cursor:pointer;flex-shrink:0" title="مسح بالكاميرا">📷</button>
+    </div>
     <button onclick="fillAll()" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer;margin-bottom:10px">⚡ عبّي الكل بالمحسوب (${totalProds} منتج)</button>
     <div style="font-size:12px;color:#5b6b85;margin-bottom:10px">📦 ${totalProds} منتج · ✅ جردت ${done}</div>
     <div id="list">${
@@ -305,7 +313,36 @@ function renderCountTab(app){
 }
 
 function toggleCont(cont){ openConts[cont] = openConts[cont] === false ? true : false; render(); }
-function onSearch(v){ searchTerm = v; render(); }
+let _searchTimer = null;
+function onSearch(v){
+  searchTerm = v;                       // النص يتحدّث فوراً (الكتابة ما تتعلّق)
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(()=>{       // نفلتر بعد ما يوقف عن الكتابة
+    updateCountList();                  // نحدّث القائمة فقط — المربع ما ينحذف
+  }, 250);
+}
+
+// يحدّث قائمة المنتجات فقط (بدون لمس مربع البحث — عشان الكيبورد ما يتقفل)
+function updateCountList(){
+  const listEl = document.getElementById("list");
+  if (!listEl) return;
+  const groups = branchProductsGrouped();
+  const contNames = Object.keys(groups).sort();
+  const q = searchTerm.trim();
+  listEl.innerHTML = contNames.length === 0
+    ? `<div class="empty">${q?`لا نتائج لـ "${q}"`:"لا منتجات"}</div>`
+    : contNames.map(cont=>{
+        const arr = groups[cont];
+        const isOpen = openConts[cont] !== false;
+        return `<div class="cont">
+          <div class="conth" onclick="toggleCont('${cont.replace(/'/g,'')}')">
+            <div class="nm">📦 ${cont}</div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="badge">${arr.length}</span><span style="color:#5b6b85">${isOpen?'▲':'▼'}</span></div>
+          </div>
+          ${isOpen?`<div class="contbody">${arr.map(p=>renderCard(p)).join("")}</div>`:""}
+        </div>`;
+      }).join("");
+}
 
 function renderCard(p){
   const bc = p.barcode;
@@ -488,7 +525,7 @@ function renderDeliver(app){
   const dnum = (()=>{ const d=new Date(); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`; })();
 
   app.innerHTML = `
-    <div class="hint">📤 هذي فاتورة نقل اعتمدتها الإدارة. عدّل الكمية اللي ترسلها فعلياً (جرد) قبل ما تعطي الفرع، ثم اضغط "سلّمت".</div>
+    <div class="hint">📤 هذي فاتورة نقل اعتمدتها الإدارة. عدّل الكمية اللي ترسلها فعلياً (جرد) قبل ما تعطي الفرv، ثم اضغط "سلّمت".</div>
     ${dests.length===0
       ? `<div class="empty">${delivered.length>0?"✅ سلّمت كل الطلبات":"لا طلبات تسليم"}</div>`
       : dests.map(dest=>{
@@ -613,6 +650,73 @@ function openImg(src, name){
     <div style="color:#fff;font-weight:700;margin-top:12px;text-align:center">${name||''}</div>
     <button onclick="this.parentElement.remove()" style="margin-top:16px;padding:12px 30px;border-radius:100px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;font-weight:700;font-family:'Cairo';cursor:pointer">إغلاق</button>`;
   document.body.appendChild(ov);
+}
+
+// ═══ ماسح الباركود بالكاميرا (html5-qrcode — الأوثق لكل الجوالات) ═══
+let _html5Qr = null;
+function loadQrLib(){
+  return new Promise((resolve, reject) => {
+    if (window.Html5Qrcode) return resolve();
+    const urls = [
+      "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
+      "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"
+    ];
+    let i = 0;
+    const tryLoad = () => {
+      if (i >= urls.length) return reject(new Error("تعذّر تحميل الماسح"));
+      const s = document.createElement("script");
+      s.src = urls[i++];
+      s.onload = () => resolve();
+      s.onerror = tryLoad;
+      document.head.appendChild(s);
+    };
+    tryLoad();
+  });
+}
+
+async function openScanner(){
+  const ov = document.createElement("div");
+  ov.id = "scanOverlay";
+  ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:400;display:flex;flex-direction:column";
+  ov.innerHTML = `
+    <div style="padding:14px;text-align:center;color:#fff;background:#0a0e1a">
+      <div style="font-size:16px;font-weight:900">📷 وجّه الكاميرا على الباركود</div>
+      <div style="font-size:12px;color:#7cb3e8;margin-top:3px">يمسح تلقائياً</div>
+    </div>
+    <div id="qrReader" style="flex:1;overflow:hidden"></div>
+    <button onclick="closeScanner()" style="padding:15px;background:#7f1d1d;color:#fff;border:none;font-size:16px;font-weight:900;font-family:'Cairo';cursor:pointer">✕ إغلاق</button>`;
+  document.body.appendChild(ov);
+  try {
+    await loadQrLib();
+    _html5Qr = new Html5Qrcode("qrReader");
+    await _html5Qr.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 160 } },
+      (decoded) => { onScanned(decoded); },
+      () => {}
+    );
+  } catch(e){
+    showToast("تعذّر فتح الكاميرا — تأكد من الإذن");
+    closeScanner();
+  }
+}
+
+function onScanned(code){
+  // اهتزاز + صوت خفيف
+  try { navigator.vibrate && navigator.vibrate(120); } catch(e){}
+  closeScanner();
+  searchTerm = code.trim();
+  render();
+  showToast("✓ " + searchTerm);
+}
+
+async function closeScanner(){
+  if (_html5Qr){
+    try { await _html5Qr.stop(); _html5Qr.clear(); } catch(e){}
+    _html5Qr = null;
+  }
+  const ov = document.getElementById("scanOverlay");
+  if (ov) ov.remove();
 }
 
 init();
