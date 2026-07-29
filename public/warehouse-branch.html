@@ -257,15 +257,18 @@ function render(){
   const app = document.getElementById("app");
   // عدد شحنات الاستلام المعلّقة (مرسلة للفرع، مطبوعة، ما استُلمت)
   const pendingReceive = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received).length;
+  const pendingRecvWh = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && (t.from==="المستودع"||t.from==="المستودع الرئيسي")).length;
+  const pendingRecvBr = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && t.from!=="المستودع" && t.from!=="المستودع الرئيسي").length;
   const pendingDeliver = TRANSFERS.filter(t=>t.from===BRANCH && t.printed && !t.delivered && t.to!=="المستودع").length;
   app.innerHTML = `
     <h1>🏪 ${BRANCH}</h1>
     <div class="sub">ALBAROO · ${EMP}</div>
     <div class="empId">👤 الموظف: <b>${EMP}</b> · 🖼️ ${Object.keys(IMAGES||{}).length} صورة<button onclick="changeEmp()">تغيير</button></div>
-    <div class="tabs" style="display:flex;gap:6px;margin-bottom:14px">
-      <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📋 جرد</button>
-      <button class="${activeTab==='receive'?'on':''}" onclick="setTab('receive')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام من المستودع${pendingReceive>0?` (${pendingReceive})`:''}</button>
-      <button class="${activeTab==='deliver'?'on':''}" onclick="setTab('deliver')" style="flex:1;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='deliver'?'#ea580c':'#2d3a52'};background:${activeTab==='deliver'?'#ea580c':'#141b2d'};color:${activeTab==='deliver'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📤 جهّز للفروع${pendingDeliver>0?` (${pendingDeliver})`:''}</button>
+    <div class="tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      <button onclick="setTab('count')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📋 جرد</button>
+      <button onclick="setTab('deliver')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='deliver'?'#ea580c':'#2d3a52'};background:${activeTab==='deliver'?'#ea580c':'#141b2d'};color:${activeTab==='deliver'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📤 جهّز للفروع${pendingDeliver>0?` (${pendingDeliver})`:''}</button>
+      <button onclick="setTab('receive')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام من المستودع${pendingRecvWh>0?` (${pendingRecvWh})`:''}</button>
+      <button onclick="setTab('recvbranch')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='recvbranch'?'#0891b2':'#2d3a52'};background:${activeTab==='recvbranch'?'#0891b2':'#141b2d'};color:${activeTab==='recvbranch'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام من الفروع${pendingRecvBr>0?` (${pendingRecvBr})`:''}</button>
     </div>
     <div id="tabBody"></div>`;
   renderTabBody();
@@ -276,6 +279,7 @@ function setTab(t){ activeTab = t; render(); }
 function renderTabBody(){
   const body = document.getElementById("tabBody");
   if (activeTab === "receive"){ renderReceive(body); return; }
+  if (activeTab === "recvbranch"){ renderReceiveBranch(body); return; }
   if (activeTab === "deliver"){ renderDeliver(body); return; }
   renderCountTab(body);
 }
@@ -478,6 +482,92 @@ function renderReceive(app){
         }).join("")}`;
 }
 
+// ─── تبويب استلام من الفروع (نقل فرع→فرع — يحتاج تأكيد) ──────────
+function renderReceiveBranch(app){
+  // الوارد من فروع ثانية (مو المستودع)، مطبوع، ما استُلم بعد
+  const pending = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && t.from!=="المستودع" && t.from!=="المستودع الرئيسي");
+  const received = TRANSFERS.filter(t=>t.to===BRANCH && t.received && t.from!=="المستودع" && t.from!=="المستودع الرئيسي");
+  // نجمّع حسب الفرع المُرسِل ثم الباركود
+  const bySrc = {};
+  pending.forEach(t=>{ if(!bySrc[t.from]) bySrc[t.from]={}; if(!bySrc[t.from][t.barcode]) bySrc[t.from][t.barcode]={name:t.name,barcode:t.barcode,items:[]}; bySrc[t.from][t.barcode].items.push(t); });
+  const srcs = Object.keys(bySrc).sort();
+
+  app.innerHTML = `
+    <div class="hint">📥 بضاعة يرسلها لك فرع ثاني (نقل بين الفروع). راجعها واستلمها — <b>عدّل الكمية الفعلية لو ناقصة</b>.</div>
+    ${srcs.length===0
+      ? `<div class="empty">${received.length>0?"✅ استلمت كل الوارد من الفروع":"لا شحنات من الفروع"}</div>`
+      : srcs.map(src=>{
+          const prods = Object.values(bySrc[src]);
+          return `<div style="background:#0f1626;border:1px solid rgba(8,145,178,0.3);border-radius:14px;padding:0;margin-bottom:18px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,#062f36,#0f1626);padding:13px 15px;border-bottom:1px solid rgba(8,145,178,0.25)">
+              <div style="font-size:15px;font-weight:900;color:#fff">🔄 وارد من فرع: <span style="color:#22d3ee">${src}</span></div>
+              <div style="font-size:11px;color:#5b6b85;margin-top:4px">${prods.length} منتج — راجع واستلم</div>
+            </div>
+            <div style="padding:10px">
+            ${prods.map(pr=>{
+              const img = IMAGES?.[pr.barcode];
+              const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
+              return `<div style="background:rgba(255,255,255,0.03);border-radius:11px;padding:10px;margin-bottom:9px">
+                <div style="display:flex;gap:10px;align-items:flex-start">
+                  ${img?`<img src="${img}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'noimg',textContent:'📦'}))" onclick="openImgBc('${pr.barcode.replace(/'/g,'')}','${(pr.name||'').replace(/'/g,'')}')" style="width:60px;height:60px;border-radius:9px;object-fit:cover;background:#fff;flex-shrink:0;cursor:pointer"/>`:`<div class="noimg" style="width:60px;height:60px">📦</div>`}
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:700;color:#e2e8f0">${pr.name||"—"}</div>
+                    <div style="font-family:monospace;font-size:14px;font-weight:900;color:#fff;letter-spacing:1px;margin-top:2px">${pr.barcode}</div>
+                  </div>
+                  <div style="text-align:center;background:rgba(8,145,178,0.15);border-radius:9px;padding:6px 10px;flex-shrink:0">
+                    <div style="font-size:17px;font-weight:900;color:#22d3ee">${fmtN(totalQty)}</div>
+                    <div style="font-size:9px;color:#5b6b85">مرسل</div>
+                  </div>
+                </div>
+                <div class="row2" style="margin-top:10px">
+                  <div class="counter">
+                    <button class="minus" onclick="stepRecvBr('${pr.barcode.replace(/'/g,'')}','${src.replace(/'/g,'')}',-1,${totalQty})">−</button>
+                    <div class="mid"><input type="number" min="0" max="${totalQty}" id="rb_${pr.barcode}_${src}" value="${totalQty}" /><div class="cl">كم استلمت فعلياً</div></div>
+                    <button class="plus" onclick="stepRecvBr('${pr.barcode.replace(/'/g,'')}','${src.replace(/'/g,'')}',1,${totalQty})">+</button>
+                  </div>
+                </div>
+                <button class="savebtn" style="background:#0891b2;margin-top:9px" onclick="confirmReceiveBranch('${pr.barcode.replace(/'/g,'')}','${src.replace(/'/g,'')}',${totalQty})">✓ استلمت هذا المنتج</button>
+              </div>`;
+            }).join("")}
+            </div>
+          </div>`;
+        }).join("")}
+    ${received.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ استلمت سابقاً: ${received.length} شحنة من الفروع</div>`:''}`;
+}
+
+function stepRecvBr(bc, src, delta, max){
+  const inp = document.getElementById("rb_"+bc+"_"+src);
+  if (!inp) return;
+  const cur = inp.value === "" ? 0 : num(inp.value);
+  inp.value = Math.max(0, Math.min(max, cur + delta));
+}
+
+async function confirmReceiveBranch(bc, src, sentTotal){
+  const items = TRANSFERS.filter(t=>t.barcode===bc && t.to===BRANCH && t.from===src && t.printed && !t.received);
+  if (items.length===0) return;
+  const inp = document.getElementById("rb_"+bc+"_"+src);
+  const receivedQty = inp ? Math.max(0, num(inp.value)) : sentTotal;
+  const name = items[0].name || bc;
+  const partial = receivedQty < sentTotal;
+  const msg = partial
+    ? `استلمت ${fmtN(receivedQty)} من ${fmtN(sentTotal)} من فرع ${src} (ناقص ${fmtN(sentTotal-receivedQty)})؟`
+    : `تأكيد استلام ${fmtN(receivedQty)} قطعة من ${name} (من فرع ${src})؟`;
+  if (!confirm(msg)) return;
+  const now = Date.now();
+  let first = true;
+  TRANSFERS.forEach(t=>{
+    if (t.barcode===bc && t.to===BRANCH && t.from===src && t.printed && !t.received){
+      t.received = true; t.receivedDate = now; t.receivedBy = EMP;
+      t.receivedQty = first ? receivedQty : 0;
+      t.sentQty = num(t.qty);
+      first = false;
+    }
+  });
+  await save("baro_transfers_v2", TRANSFERS);
+  showToast(partial ? `✓ استلمت ${fmtN(receivedQty)} (جزئي) من ${src}` : `✓ استلمت ${fmtN(receivedQty)} من ${src}`);
+  render();
+}
+
 
 // زر +/− لكمية الاستلام
 function stepRecv(bc, delta, max){
@@ -652,71 +742,192 @@ function openImg(src, name){
   document.body.appendChild(ov);
 }
 
-// ═══ ماسح الباركود بالكاميرا (html5-qrcode — الأوثق لكل الجوالات) ═══
+// ═══ ماسح الباركود المتقدم (تكبير + فلاش — نفس النواقص) ═══════
 let _html5Qr = null;
-function loadQrLib(){
-  return new Promise((resolve, reject) => {
-    if (window.Html5Qrcode) return resolve();
-    const urls = [
-      "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
-      "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"
-    ];
-    let i = 0;
-    const tryLoad = () => {
-      if (i >= urls.length) return reject(new Error("تعذّر تحميل الماسح"));
-      const s = document.createElement("script");
-      s.src = urls[i++];
-      s.onload = () => resolve();
-      s.onerror = tryLoad;
-      document.head.appendChild(s);
-    };
-    tryLoad();
-  });
+async function loadQrLib(){
+  if (window.Html5Qrcode) return true;
+  const urls = [
+    "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
+    "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js",
+  ];
+  for (const url of urls){
+    try {
+      await new Promise((res,rej)=>{
+        const s=document.createElement("script");
+        s.src=url; s.onload=res; s.onerror=rej;
+        setTimeout(rej,8000);
+        document.head.appendChild(s);
+      });
+      if (window.Html5Qrcode) return true;
+    } catch {}
+  }
+  return false;
 }
 
 async function openScanner(){
   const ov = document.createElement("div");
   ov.id = "scanOverlay";
-  ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:400;display:flex;flex-direction:column";
+  ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:600;display:flex;flex-direction:column";
   ov.innerHTML = `
-    <div style="padding:14px;text-align:center;color:#fff;background:#0a0e1a">
-      <div style="font-size:16px;font-weight:900">📷 وجّه الكاميرا على الباركود</div>
-      <div style="font-size:12px;color:#7cb3e8;margin-top:3px">يمسح تلقائياً</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;background:#0a0e1a">
+      <button onclick="closeScanner()" style="background:#334155;color:#fff;border:none;border-radius:100px;padding:10px 18px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">✕ إغلاق</button>
+      <div style="color:#4ade80;font-family:'Cairo';font-weight:900;font-size:15px">📷 مسح الباركود</div>
+      <button id="torchBtn" onclick="qrTorch()" style="background:#1a2236;color:#fbbf24;border:none;border-radius:100px;padding:10px 16px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer;display:none">🔦</button>
     </div>
-    <div id="qrReader" style="flex:1;overflow:hidden"></div>
-    <button onclick="closeScanner()" style="padding:15px;background:#7f1d1d;color:#fff;border:none;font-size:16px;font-weight:900;font-family:'Cairo';cursor:pointer">✕ إغلاق</button>`;
+    <div id="qrReader" style="flex:1;width:100%;overflow:hidden"></div>
+    <div id="zoomBar" style="background:#0a0e1a;padding:12px 16px 18px;display:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="color:#94a3b8;font-family:'Cairo';font-size:13px;font-weight:900">🔍</span>
+        <input id="zoomRange" type="range" min="1" max="5" step="0.1" value="1" oninput="qrZoom(this.value)" style="flex:1;accent-color:#4ade80;height:26px" />
+        <span id="zoomVal" style="color:#4ade80;font-family:'Cairo';font-size:13px;font-weight:900;min-width:32px;text-align:center">1x</span>
+      </div>
+    </div>
+    <div id="scanMsg" style="text-align:center;color:#7cb3e8;font-family:'Cairo';font-size:13px;padding:0 0 14px;background:#0a0e1a">وجّه الكاميرا على الباركود</div>`;
   document.body.appendChild(ov);
+
+  const ok = await loadQrLib();
+  if (!ok || !window.Html5Qrcode){
+    showCameraFallback();   // ما تحمّلت المكتبة → تصوير مباشر
+    return;
+  }
   try {
-    await loadQrLib();
-    _html5Qr = new Html5Qrcode("qrReader");
+    _html5Qr = new Html5Qrcode("qrReader", {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.QR_CODE,
+      ],
+      verbose: false
+    });
+    const config = {
+      fps: 12,
+      qrbox: (w,h)=>{ const m=Math.min(w,h); return { width: Math.floor(m*0.82), height: Math.floor(m*0.5) }; },
+      aspectRatio: 1.4,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    };
     await _html5Qr.start(
       { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 160 } },
-      (decoded) => { onScanned(decoded); },
-      () => {}
+      config,
+      (decodedText)=>{ onScanned(decodedText); },
+      ()=>{}
     );
+    setTimeout(setupZoomTorch, 800);
+    addFallbackButton();   // زر "صوّر الباركود" — احتياطي لو الماسح ما لقط
   } catch(e){
-    showToast("تعذّر فتح الكاميرا — تأكد من الإذن");
-    closeScanner();
+    showCameraFallback();  // الماسح ما اشتغل نهائياً → تصوير مباشر
   }
+}
+
+// زر احتياطي داخل شاشة الماسح
+function addFallbackButton(){
+  const msg = document.getElementById("scanMsg");
+  if (!msg) return;
+  msg.innerHTML = `وجّه الكاميرا على الباركود<br><button onclick="fallbackCapture()" style="margin-top:10px;background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:'Cairo';font-weight:900;font-size:14px;cursor:pointer">📸 ما لقط؟ صوّر الباركود</button>`;
+}
+
+// لو الماسح ما اشتغل أصلاً — تصوير مباشر
+function showCameraFallback(){
+  const reader = document.getElementById("qrReader");
+  const msg = document.getElementById("scanMsg");
+  if (reader) reader.innerHTML = `<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center">
+    <div style="font-size:50px;margin-bottom:16px">📸</div>
+    <div style="color:#fff;font-family:'Cairo';font-size:15px;margin-bottom:20px">الماسح ما اشتغل على جهازك<br>صوّر الباركود بالكاميرا</div>
+    <button onclick="fallbackCapture()" style="background:#7c3aed;color:#fff;border:none;border-radius:12px;padding:14px 28px;font-family:'Cairo';font-weight:900;font-size:16px;cursor:pointer">📸 صوّر الباركود</button>
+  </div>`;
+  if (msg) msg.textContent = "يعمل على أي جوال";
+}
+
+// يفتح كاميرا الجهاز مباشرة ويقرأ الباركود من الصورة
+function fallbackCapture(){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*"; inp.capture = "environment";
+  inp.onchange = async () => {
+    const file = inp.files?.[0]; if (!file) return;
+    const reader = document.getElementById("qrReader");
+    if (reader) reader.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#7cb3e8;font-family:'Cairo'"><span class="spin">⏳</span>&nbsp; جاري قراءة الباركود…</div>`;
+    try {
+      const b64 = await fileToBase64(file);
+      const code = await ocrBarcode(b64);
+      if (code){ onScanned(code); }
+      else if (reader){
+        reader.innerHTML = `<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;color:#f87171;font-family:'Cairo'"><div>ما قدرت أقرأ الباركود</div><button onclick="fallbackCapture()" style="margin-top:14px;background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:'Cairo';font-weight:900;cursor:pointer">📸 صوّر مرة ثانية</button></div>`;
+      }
+    } catch(e){
+      if (reader) reader.innerHTML = `<div style="padding:20px;text-align:center;color:#f87171;font-family:'Cairo'">تعذّر — ${e.message}<br><button onclick="fallbackCapture()" style="margin-top:12px;background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:'Cairo';font-weight:900;cursor:pointer">📸 حاول ثانية</button></div>`;
+    }
+  };
+  inp.click();
+}
+
+function fileToBase64(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(",")[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// قراءة الباركود من الصورة عبر السيرفر
+async function ocrBarcode(base64){
+  try {
+    const r = await fetch("/api/scan-barcode", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ imageBase64: base64 })
+    });
+    const j = await r.json();
+    return (j.barcode || "").trim() || null;
+  } catch { return null; }
+}
+
+function setupZoomTorch(){
+  try {
+    const caps = _html5Qr.getRunningTrackCapabilities();
+    if (caps && caps.zoom){
+      const zb=document.getElementById("zoomBar"), zr=document.getElementById("zoomRange");
+      if (zb && zr){
+        zb.style.display="block";
+        zr.min=caps.zoom.min; zr.max=caps.zoom.max; zr.step=caps.zoom.step||0.1;
+        const z=Math.min(2,caps.zoom.max); zr.value=z; qrZoom(z);
+      }
+    }
+    if (caps && caps.torch){ const tb=document.getElementById("torchBtn"); if(tb) tb.style.display="block"; }
+  } catch {}
+}
+function qrZoom(v){
+  const val=parseFloat(v);
+  const el=document.getElementById("zoomVal"); if(el) el.textContent=val.toFixed(1).replace(/\.0$/,"")+"x";
+  try { _html5Qr.applyVideoConstraints({ advanced:[{zoom:val}] }); } catch {}
+}
+let _torchOn=false;
+async function qrTorch(){
+  _torchOn=!_torchOn;
+  try { await _html5Qr.applyVideoConstraints({ advanced:[{torch:_torchOn}] });
+    const tb=document.getElementById("torchBtn"); if(tb) tb.style.background=_torchOn?"rgba(251,191,36,0.3)":"#1a2236";
+  } catch {}
 }
 
 function onScanned(code){
-  // اهتزاز + صوت خفيف
-  try { navigator.vibrate && navigator.vibrate(120); } catch(e){}
-  closeScanner();
-  searchTerm = code.trim();
+  if (!code) return;
+  try { navigator.vibrate && navigator.vibrate(90); } catch(e){}
+  const c = code.trim();
+  const qr = _html5Qr; _html5Qr = null; _torchOn = false;
+  const ov = document.getElementById("scanOverlay");
+  const cleanup = ()=>{ if(ov) ov.remove(); };
+  if (qr){ try { qr.stop().then(cleanup).catch(cleanup); } catch { cleanup(); } }
+  else cleanup();
+  searchTerm = c;
   render();
-  showToast("✓ " + searchTerm);
+  showToast("🔍 " + c);
 }
 
 async function closeScanner(){
-  if (_html5Qr){
-    try { await _html5Qr.stop(); _html5Qr.clear(); } catch(e){}
-    _html5Qr = null;
-  }
-  const ov = document.getElementById("scanOverlay");
-  if (ov) ov.remove();
+  const qr = _html5Qr; _html5Qr = null; _torchOn = false;
+  const done = ()=>{ const ov=document.getElementById("scanOverlay"); if(ov) ov.remove(); };
+  if (qr){ try { qr.stop().then(done).catch(done); } catch { done(); } }
+  else done();
 }
 
 init();
