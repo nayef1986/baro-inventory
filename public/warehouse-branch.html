@@ -297,7 +297,6 @@ function renderCountTab(app){
       <input class="search" id="search" placeholder="🔍 ابحث بالباركود أو الاسم…" value="${searchTerm}" oninput="onSearch(this.value)" style="flex:1;min-width:0;margin-bottom:0" />
       <button onclick="openScanner()" style="background:#7c3aed;border:none;border-radius:12px;padding:0 16px;font-size:22px;cursor:pointer;flex-shrink:0" title="مسح بالكاميرا">📷</button>
     </div>
-    <button onclick="fillAll()" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer;margin-bottom:10px">⚡ عبّي الكل بالمحسوب (${totalProds} منتج)</button>
     <div style="font-size:12px;color:#5b6b85;margin-bottom:10px">📦 ${totalProds} منتج · ✅ جردت ${done}</div>
     <div id="list">${
       contNames.length === 0
@@ -424,21 +423,6 @@ async function saveCount(bc, name, remaining){
   }
 }
 
-// ⚡ عبّي كل الحقول المعروضة بالمتبقي المحسوب (الموظف يعدّل المختلف ثم يحفظ)
-function fillAll(){
-  const groups = branchProductsGrouped();
-  let filled = 0;
-  Object.values(groups).forEach(arr => arr.forEach(p=>{
-    const bc = p.barcode;
-    const inp = document.getElementById("in_"+bc+"_"+BRANCH);
-    if (inp && inp.value === ""){ // نعبّي الفاضي فقط (ما نلغي اللي كتبه)
-      inp.value = calcRemaining(bc);
-      onType(bc+"_"+BRANCH, calcRemaining(bc));
-      filled++;
-    }
-  }));
-  showToast(filled>0 ? `⚡ عُبّئ ${filled} منتج بالمحسوب — عدّل واحفظ` : "الكل معبّى مسبقاً");
-}
 
 // ─── تبويب الاستلام (سجل — يُحسب تلقائياً بدون تأكيد) ──────────
 function renderReceive(app){
