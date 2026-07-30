@@ -1420,6 +1420,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     return () => clearTimeout(t);
   }, [searchQuery]);
   const [searchScan, setSearchScan] = useState(false);
+  const [searchSort, setSearchSort] = useState("none");  // none | best | worst
   const [starred, setStarred] = useState(settings?.starred ?? []);
 
   const toggleStar = async (barcode) => {
@@ -1494,7 +1495,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
 
   if (showSearch) {
     const q = searchDebounced.trim().toLowerCase();
-    const results = q
+    let results = q
       ? products.filter(p => {
           const fac = getFactoryCode(p.barcode);
           const facName = settings?.factories?.[fac] ?? "";
@@ -1504,6 +1505,21 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
               || arabicIncludes(facName, searchDebounced);  // اسم المصنع
         })
       : [];
+    // فلتر الترتيب: الأفضل مبيعاً أو الأسوأ مبيعاً (حسب نسبة البيع)
+    if (searchSort !== "none" && results.length > 1) {
+      const pctOf = (p) => {
+        const x = calcItem(p);
+        return x.bought > 0 ? (x.sold / x.bought) * 100 : null;  // null = ما له مشتريات
+      };
+      results = [...results].sort((a, b) => {
+        const pa = pctOf(a), pb = pctOf(b);
+        // اللي ما له مشتريات ينزل آخر القائمة دايماً (نسبته غير معروفة)
+        if (pa === null && pb === null) return 0;
+        if (pa === null) return 1;
+        if (pb === null) return -1;
+        return searchSort === "best" ? pb - pa : pa - pb;
+      });
+    }
     return (
       <div className="space-y-3">
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
@@ -1515,8 +1531,30 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
           <button onClick={()=>setSearchScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
         </div>
+        {q && results.length > 1 && (
+          <div className="flex gap-2">
+            <button onClick={()=>setSearchSort(searchSort==="best" ? "none" : "best")}
+              className={`flex-1 py-2 rounded-xl text-xs font-black border transition ${
+                searchSort==="best"
+                  ? "bg-emerald-600 text-white border-emerald-500"
+                  : "bg-slate-800 text-emerald-400 border-slate-600"}`}>
+              🔥 الأفضل مبيعاً
+            </button>
+            <button onClick={()=>setSearchSort(searchSort==="worst" ? "none" : "worst")}
+              className={`flex-1 py-2 rounded-xl text-xs font-black border transition ${
+                searchSort==="worst"
+                  ? "bg-red-600 text-white border-red-500"
+                  : "bg-slate-800 text-red-400 border-slate-600"}`}>
+              📉 الأسوأ مبيعاً
+            </button>
+          </div>
+        )}
         {q && <div className="flex items-center justify-between">
-          <div className="text-xs text-slate-500">{results.length} نتيجة</div>
+          <div className="text-xs text-slate-500">
+            {results.length} نتيجة
+            {searchSort==="best" && <span className="text-emerald-400 font-bold"> · مرتّبة بالأفضل</span>}
+            {searchSort==="worst" && <span className="text-red-400 font-bold"> · مرتّبة بالأسوأ</span>}
+          </div>
           {results.length > 0 && <button onClick={()=>printSearchResults(results, calcItem, images, settings, searchQuery)}
             className="bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black">🖨️ طباعة النتائج</button>}
         </div>}
@@ -1555,6 +1593,21 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                     <div className="text-[9px] text-slate-500">باقي</div>
                   </div>
                 </div>
+                {/* نسبة البيع — تبيّن الأفضل من الأسوأ */}
+                {x.bought > 0 && (()=>{ 
+                  const pct = Math.round((x.sold / x.bought) * 100);
+                  const box = pct >= 70 ? "bg-emerald-950/30" : pct >= 40 ? "bg-amber-950/30" : "bg-red-950/30";
+                  const bar = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-red-500";
+                  const txt = pct >= 70 ? "text-emerald-300" : pct >= 40 ? "text-amber-300" : "text-red-300";
+                  return (
+                    <div className={`mt-1.5 flex items-center gap-2 ${box} rounded-lg px-2.5 py-1.5`}>
+                      <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div className={`h-full ${bar} rounded-full`} style={{width:`${Math.min(100,pct)}%`}} />
+                      </div>
+                      <span className={`text-xs font-black ${txt} shrink-0`}>{pct}% باع</span>
+                    </div>
+                  );
+                })()}
                 {/* الأسعار */}
                 <div className="flex gap-1.5 mt-1.5">
                   <span className="flex-1 text-center text-xs px-2 py-1 rounded-lg bg-emerald-900/25 text-emerald-300 font-bold">بيع {fmtN(sell)} ﷼</span>
