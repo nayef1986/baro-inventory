@@ -41,7 +41,7 @@
   .cardh .noimg{width:56px;height:56px;border-radius:9px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:24px}
   .cardh .info{flex:1;min-width:0}
   .cardh .nm{font-weight:900;font-size:14px;color:#fff;line-height:1.3}
-  .cardh .bc{font-family:monospace;font-size:13px;font-weight:900;color:#94a3b8;margin-top:3px;letter-spacing:1px}
+  .cardh .bc{font-family:monospace;font-size:19px;font-weight:900;color:#fff;margin-top:4px;letter-spacing:1.5px}
   .row2{display:flex;gap:7px;align-items:stretch;margin-top:11px}
   .calc{flex:0 0 60px;background:#0f1626;border-radius:9px;padding:7px 4px;text-align:center;display:flex;flex-direction:column;justify-content:center}
   .calc .v{font-size:19px;font-weight:900;color:#7cb3e8}
@@ -84,6 +84,8 @@ let activeTab = "count"; // count | receive
 let searchTerm = "";
 let EMP = "";
 let openConts = {};
+let openInv = {};      // فواتير "جهّز للفروع" المفتوحة
+let openRecvInv = {};  // فواتير "استلام من الفروع" المفتوحة
 
 // ─── كاش IndexedDB (تحميل فوري بعد أول مرة) ──────────────────
 const IDB_NAME = "baro_cache", IDB_STORE = "kv";
@@ -257,22 +259,43 @@ function render(){
   const app = document.getElementById("app");
   // عدد شحنات الاستلام المعلّقة (مرسلة للفرع، مطبوعة، ما استُلمت)
   const pendingReceive = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received).length;
-  const pendingRecvWh = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && (t.from==="المستودع"||t.from==="المستودع الرئيسي")).length;
-  const pendingRecvBr = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && t.from!=="المستودع" && t.from!=="المستودع الرئيسي").length;
-  const pendingDeliver = TRANSFERS.filter(t=>t.from===BRANCH && t.printed && !t.delivered && t.to!=="المستودع").length;
+  // العدّادات تعد الفواتير (كل فرع = فاتورة وحدة) مو المنتجات
+  const isWh = f => f==="المستودع" || f==="المستودع الرئيسي";
+  const cntInvoices = (arr, key) => new Set(arr.map(t=>t[key])).size;
+  const pendingRecvWh = cntInvoices(TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && isWh(t.from)), "from");
+  const pendingRecvBr = cntInvoices(TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && !isWh(t.from)), "from");
+  const pendingDeliver = cntInvoices(TRANSFERS.filter(t=>t.from===BRANCH && t.printed && !t.delivered && t.to!=="المستودع"), "to");
   app.innerHTML = `
     <h1>🏪 ${BRANCH}</h1>
     <div class="sub">ALBAROO · ${EMP}</div>
     <div class="empId">👤 الموظف: <b>${EMP}</b> · 🖼️ ${Object.keys(IMAGES||{}).length} صورة<button onclick="changeEmp()">تغيير</button></div>
-    <div class="tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
-      <button onclick="setTab('count')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='count'?'#2563eb':'#2d3a52'};background:${activeTab==='count'?'#2563eb':'#141b2d'};color:${activeTab==='count'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📋 جرد</button>
-      <button onclick="setTab('deliver')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='deliver'?'#ea580c':'#2d3a52'};background:${activeTab==='deliver'?'#ea580c':'#141b2d'};color:${activeTab==='deliver'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📤 جهّز للفروع${pendingDeliver>0?` (${pendingDeliver})`:''}</button>
-      <button onclick="setTab('receive')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='receive'?'#16a34a':'#2d3a52'};background:${activeTab==='receive'?'#16a34a':'#141b2d'};color:${activeTab==='receive'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام من المستودع${pendingRecvWh>0?` (${pendingRecvWh})`:''}</button>
-      <button onclick="setTab('recvbranch')" style="flex:1 1 46%;padding:11px 6px;border-radius:11px;border:1px solid ${activeTab==='recvbranch'?'#0891b2':'#2d3a52'};background:${activeTab==='recvbranch'?'#0891b2':'#141b2d'};color:${activeTab==='recvbranch'?'#fff':'#94a3b8'};font-family:'Cairo';font-weight:900;font-size:12px;cursor:pointer">📥 استلام من الفروع${pendingRecvBr>0?` (${pendingRecvBr})`:''}</button>
+    <div class="tabs" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:15px">
+      ${[
+        ["count","📋","جرد","#3b82f6",0],
+        ["deliver","📤","جهّز للفروع","#f97316",pendingDeliver],
+        ["receive","📥","استلام من المستودع","#22c55e",pendingRecvWh],
+        ["recvbranch","📥","استلام من الفروع","#06b6d4",pendingRecvBr],
+      ].map(([k,ic,lbl,col,cnt])=>{
+        const on = activeTab===k;
+        return `<button onclick="setTab('${k}')" style="
+          flex:1 1 46%;padding:12px 6px;border-radius:13px;cursor:pointer;
+          border:2px solid ${on?col:col+"55"};
+          background:${on?col+"26":"#111827"};
+          color:${on?col:"#8b96ab"};
+          font-family:'Cairo';font-weight:900;font-size:12px;line-height:1.35;
+          transition:all .15s;position:relative">
+          <div style="font-size:17px;margin-bottom:2px">${ic}</div>
+          ${lbl}
+          ${cnt>0?`<span style="position:absolute;top:-6px;left:-6px;background:${col};color:#0a0e1a;font-size:11px;font-weight:900;min-width:21px;height:21px;border-radius:100px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid #0a0e1a">${cnt}</span>`:''}
+        </button>`;
+      }).join("")}
     </div>
     <div id="tabBody"></div>`;
   renderTabBody();
 }
+
+function toggleInv(k){ openInv[k] = !openInv[k]; renderTabBody(); }
+function toggleRecvInv(k){ openRecvInv[k] = !openRecvInv[k]; renderTabBody(); }
 
 function setTab(t){ activeTab = t; render(); }
 
@@ -303,7 +326,7 @@ function renderCountTab(app){
         ? `<div class="empty">${q?`لا نتائج لـ "${q}"`:"لا منتجات"}</div>`
         : contNames.map(cont=>{
             const arr = groups[cont];
-            const isOpen = openConts[cont] !== false;
+            const isOpen = openConts[cont] === true;   // تبدأ مقفولة
             return `<div class="cont">
               <div class="conth" onclick="toggleCont('${cont.replace(/'/g,'')}')">
                 <div class="nm">📦 ${cont}</div>
@@ -315,7 +338,12 @@ function renderCountTab(app){
     }</div>`;
 }
 
-function toggleCont(cont){ openConts[cont] = openConts[cont] === false ? true : false; render(); }
+function toggleCont(cont){
+  openConts[cont] = !openConts[cont];
+  // نحدّث القائمة فقط (أسرع بكثير من إعادة رسم الصفحة كلها)
+  if (activeTab === "count" && document.getElementById("list")) updateCountList();
+  else render();
+}
 let _searchTimer = null;
 function onSearch(v){
   searchTerm = v;                       // النص يتحدّث فوراً (الكتابة ما تتعلّق)
@@ -336,7 +364,7 @@ function updateCountList(){
     ? `<div class="empty">${q?`لا نتائج لـ "${q}"`:"لا منتجات"}</div>`
     : contNames.map(cont=>{
         const arr = groups[cont];
-        const isOpen = openConts[cont] !== false;
+        const isOpen = openConts[cont] === true;   // تبدأ مقفولة
         return `<div class="cont">
           <div class="conth" onclick="toggleCont('${cont.replace(/'/g,'')}')">
             <div class="nm">📦 ${cont}</div>
@@ -482,12 +510,20 @@ function renderReceiveBranch(app){
       ? `<div class="empty">${received.length>0?"✅ استلمت كل الوارد من الفروع":"لا شحنات من الفروع"}</div>`
       : srcs.map(src=>{
           const prods = Object.values(bySrc[src]);
-          return `<div style="background:#0f1626;border:1px solid rgba(8,145,178,0.3);border-radius:14px;padding:0;margin-bottom:18px;overflow:hidden">
-            <div style="background:linear-gradient(135deg,#062f36,#0f1626);padding:13px 15px;border-bottom:1px solid rgba(8,145,178,0.25)">
-              <div style="font-size:15px;font-weight:900;color:#fff">🔄 وارد من فرع: <span style="color:#22d3ee">${src}</span></div>
-              <div style="font-size:11px;color:#5b6b85;margin-top:4px">${prods.length} منتج — راجع واستلم</div>
+          const totalPieces = prods.reduce((s,pr)=>s+pr.items.reduce((a,t)=>a+num(t.qty),0),0);
+          const isOpen = openRecvInv["r_"+src] === true;
+          return `<div style="background:#0f1626;border:2px solid ${isOpen?'#06b6d4':'rgba(6,182,212,0.35)'};border-radius:14px;padding:0;margin-bottom:12px;overflow:hidden">
+            <div onclick="toggleRecvInv('r_${src.replace(/'/g,'')}')" style="background:linear-gradient(135deg,#062f36,#0f1626);padding:14px 15px;cursor:pointer;display:flex;align-items:center;gap:11px">
+              <div style="font-size:20px;color:#22d3ee;flex-shrink:0">${isOpen?'▲':'▼'}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:16px;font-weight:900;color:#fff">📥 من: <span style="color:#22d3ee">${src}</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:6px">
+                  <span style="background:rgba(6,182,212,0.15);color:#22d3ee;border-radius:7px;padding:3px 10px;font-size:12px;font-weight:900">${prods.length} منتج</span>
+                  <span style="background:rgba(255,255,255,0.06);color:#cbd5e1;border-radius:7px;padding:3px 10px;font-size:12px;font-weight:900">${fmtN(totalPieces)} قطعة</span>
+                </div>
+              </div>
             </div>
-            <div style="padding:10px">
+            ${isOpen?`<div style="padding:10px">
             ${prods.map(pr=>{
               const img = IMAGES?.[pr.barcode];
               const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
@@ -513,7 +549,7 @@ function renderReceiveBranch(app){
                 <button class="savebtn" style="background:#0891b2;margin-top:9px" onclick="confirmReceiveBranch('${pr.barcode.replace(/'/g,'')}','${src.replace(/'/g,'')}',${totalQty})">✓ استلمت هذا المنتج</button>
               </div>`;
             }).join("")}
-            </div>
+            </div>`:''}
           </div>`;
         }).join("")}
     ${received.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ استلمت سابقاً: ${received.length} شحنة من الفروع</div>`:''}`;
@@ -605,12 +641,23 @@ function renderDeliver(app){
       : dests.map(dest=>{
           const prods = Object.values(byDest[dest]);
           const totalItems = prods.length;
-          return `<div class="invoice" style="background:#0f1626;border:1px solid rgba(234,88,12,0.25);border-radius:14px;padding:0;margin-bottom:18px;overflow:hidden">
-            <div style="background:linear-gradient(135deg,#1a1207,#0f1626);padding:13px 15px;border-bottom:1px solid rgba(234,88,12,0.2)">
-              <div style="font-size:15px;font-weight:900;color:#fff">🔄 نقل من فرعك <span style="color:#5b6b85">←</span> إلى: <span style="color:#fb923c">${dest}</span></div>
-              <div style="font-size:11px;color:#5b6b85;margin-top:4px">📅 ${dnum} · ${totalItems} منتج</div>
+          const totalPieces = prods.reduce((s,pr)=>s+pr.items.reduce((a,t)=>a+num(t.qty),0),0);
+          const isOpen = openInv["d_"+dest] === true;
+          const doneCount = prods.filter(pr=>COUNTS[pr.barcode+"_"+BRANCH]).length;
+          return `<div class="invoice" style="background:#0f1626;border:2px solid ${isOpen?'#f97316':'rgba(249,115,22,0.35)'};border-radius:14px;padding:0;margin-bottom:12px;overflow:hidden">
+            <div onclick="toggleInv('d_${dest.replace(/'/g,'')}')" style="background:linear-gradient(135deg,#1a1207,#0f1626);padding:14px 15px;cursor:pointer;display:flex;align-items:center;gap:11px">
+              <div style="font-size:20px;color:#fb923c;flex-shrink:0">${isOpen?'▲':'▼'}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:16px;font-weight:900;color:#fff">📤 إلى: <span style="color:#fb923c">${dest}</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:6px">
+                  <span style="background:rgba(249,115,22,0.15);color:#fb923c;border-radius:7px;padding:3px 10px;font-size:12px;font-weight:900">${totalItems} منتج</span>
+                  <span style="background:rgba(255,255,255,0.06);color:#cbd5e1;border-radius:7px;padding:3px 10px;font-size:12px;font-weight:900">${fmtN(totalPieces)} قطعة</span>
+                  ${doneCount>0?`<span style="background:rgba(74,222,128,0.15);color:#4ade80;border-radius:7px;padding:3px 10px;font-size:12px;font-weight:900">✓ جردت ${doneCount}</span>`:''}
+                </div>
+                <div style="font-size:11px;color:#5b6b85;margin-top:5px">📅 ${dnum}</div>
+              </div>
             </div>
-            <div style="padding:10px">
+            ${isOpen?`<div style="padding:10px">
             ${prods.map(pr=>{
               const img = IMAGES?.[pr.barcode];
               const totalQty = pr.items.reduce((s,t)=>s+num(t.qty),0);
@@ -650,7 +697,7 @@ function renderDeliver(app){
                 <button class="savebtn" style="background:#ea580c;margin-top:9px" onclick="confirmDeliver('${pr.barcode.replace(/'/g,'')}','${dest.replace(/'/g,'')}',${totalQty})">✓ سلّمت هذا المنتج</button>
               </div>`;
             }).join("")}
-            </div>
+            </div>`:''}
           </div>`;
         }).join("")}
     ${delivered.length>0?`<div style="margin-top:16px;font-size:12px;color:#5b6b85;font-weight:700">✅ سلّمت سابقاً: ${delivered.length} شحنة</div>`:''}`;
