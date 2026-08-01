@@ -712,8 +712,8 @@ const TABLE_HELP_CSS = `
   thead{display:table-header-group}
   thead th{position:sticky;top:0;z-index:5}
   @media screen{thead th{position:sticky;top:56px}}
-  tbody td[data-l]{position:relative;padding-top:16px !important}
-  tbody td[data-l]::before{content:attr(data-l);position:absolute;top:2px;right:0;left:0;text-align:center;font-size:8px;font-weight:700;color:#94a3b8;line-height:1}
+  tbody td[data-l]{position:relative;padding-top:18px !important}
+  tbody td[data-l]::before{content:attr(data-l);position:absolute;top:2px;right:0;left:0;text-align:center;font-size:9px;font-weight:900;color:#64748b;line-height:1}
   @media print{tbody tr{page-break-inside:avoid}}
 `;
 
@@ -843,6 +843,7 @@ function printSearchResults(results, calcItem, images, settings, query) {
     .w{color:#dc2626;font-weight:900}
     tfoot td{background:#f5f5f5;font-weight:900;border-top:2px solid #111}
     ${FINSUM_CSS}
+    ${TABLE_HELP_CSS}
     .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
     .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
     .bk{background:#334155;color:#fff}.pr{background:#059669;color:#fff}
