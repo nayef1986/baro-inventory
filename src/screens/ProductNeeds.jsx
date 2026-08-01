@@ -816,8 +816,8 @@ function printSearchResults(results, calcItem, images, settings, query) {
     .ttl{font-size:13px;color:#555;margin-top:2px}
     .dt{font-size:11px;color:#666;text-align:left;line-height:1.6}
     table{width:100%;border-collapse:collapse;font-size:12px}
-    th{background:#111;color:#fff;padding:7px 4px;font-size:11px;font-weight:900}
-    td{border-bottom:1px solid #e5e5e5;padding:6px 4px;vertical-align:middle}
+    th{background:#111;color:#fff;padding:7px 4px;font-size:11px;font-weight:900;border:1px solid #333}
+    td{border:1px solid #d8dee6;padding:6px 4px;vertical-align:middle}
     tbody tr:nth-child(even){background:#f4f6f9}
     tbody tr:nth-child(odd){background:#fff}
     .ct{color:#7c3aed;font-weight:900}
