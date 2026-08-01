@@ -87,13 +87,93 @@ const reorderQty = (sold, bought) => Math.min(toDozen(sold), bought);
 function buildRows(items) {
   return items.map(x => {
     const cost = num(x.p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    const price = num(x.p.sellPrice);
+    const bought = Math.round(x.bought);
+    const sold = Math.round(x.sold);
     return {
       barcode: x.p.barcode, name: x.p.name ?? "",
-      qtyIn: Math.round(x.bought), sold: Math.round(x.sold),
+      qtyIn: bought, sold: sold,
       balance: Math.round(x.closing), reorder: Math.round(reorderQty(x.sold, x.bought)),
-      cost: cost, price: num(x.p.sellPrice),
+      cost: cost, price: price,
+      // 💰 المالية لكل منتج
+      totalCost: cost * bought,          // تكلفة الوارد
+      revenue: price * sold,             // إجمالي مبيعاته
+      profit: (price - cost) * sold,     // ربحه الفعلي
+      soldPct: bought > 0 ? (sold / bought) * 100 : null,  // نسبة البيع (للترتيب)
     };
   });
+}
+
+// شريط الإجماليات — يوضع أول الصفحة في كل التقارير
+function summaryBarHtml(rows) {
+  const t = rows.reduce((a,r)=>({
+    qtyIn: a.qtyIn + r.qtyIn, sold: a.sold + r.sold, balance: a.balance + r.balance,
+    cost: a.cost + r.totalCost, revenue: a.revenue + r.revenue, profit: a.profit + r.profit,
+  }), { qtyIn:0, sold:0, balance:0, cost:0, revenue:0, profit:0 });
+  return `<div class="sumbar">
+    <div class="sc"><div class="sv bl">${fmtN(t.qtyIn)}</div><div class="sl">إجمالي الوارد</div></div>
+    <div class="sc"><div class="sv or">${fmtN(t.sold)}</div><div class="sl">إجمالي المباع</div></div>
+    <div class="sc"><div class="sv gr">${fmtN(t.balance)}</div><div class="sl">إجمالي الباقي</div></div>
+    <div class="sc"><div class="sv rd">${fmtN(t.cost)}</div><div class="sl">إجمالي التكلفة ﷼</div></div>
+    <div class="sc"><div class="sv bl">${fmtN(t.revenue)}</div><div class="sl">إجمالي المبيعات ﷼</div></div>
+    <div class="sc hi"><div class="sv ${t.profit>=0?'gr':'rd'}">${fmtN(t.profit)}</div><div class="sl">صافي الربح ﷼</div></div>
+  </div>`;
+}
+
+// تنسيق موحّد: صفوف متبادلة + شريط الإجماليات + ألوان المالية
+const REPORT_CSS = `
+  tbody tr:nth-child(even){background:#f4f6f9}
+  tbody tr:nth-child(odd){background:#fff}
+  td.ct{color:#7c3aed;font-weight:900}
+  td.tt{color:#0891b2;font-weight:900}
+  td.pf{color:#059669;font-weight:900}
+  td.ls{color:#dc2626;font-weight:900}
+  .sumbar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+  .sc{flex:1 1 15%;background:#f4f6f9;border:1px solid #dde3ea;border-radius:9px;padding:9px 6px;text-align:center;min-width:95px}
+  .sc.hi{background:#eefaf3;border-color:#a7e0c3;border-width:2px}
+  .sv{font-size:19px;font-weight:900;line-height:1.1}
+  .sl{font-size:10px;color:#666;margin-top:3px;font-weight:700}
+  .sv.bl{color:#2563eb}.sv.or{color:#d97706}.sv.gr{color:#059669}.sv.rd{color:#dc2626}
+`;
+
+// خلايا المالية الثلاث لكل صف
+function finCells(r) {
+  const pCls = r.profit > 0 ? "pf" : r.profit < 0 ? "ls" : "";
+  return `<td class="ct" data-l="تكلفة">${fmtN(r.totalCost)}</td>
+          <td class="tt" data-l="إجمالي">${fmtN(r.revenue)}</td>
+          <td class="${pCls}" data-l="ربح">${fmtN(r.profit)}</td>`;
+}
+const FIN_HEADERS = `<th>Cost Total<br>التكلفة ﷼</th><th>Revenue<br>الإجمالي ﷼</th><th>Profit<br>الربح ﷼</th>`;
+
+// نفس الشي لكن لبنية تقارير الأبطال/الضعيف/الفئة (h)
+function finOf(h) {
+  const buy = num(h.buyPrice);
+  const sell = num(h.sell ?? h.p?.sellPrice);   // بعض التقارير تستخدم h.sell
+  const bought = Math.round(num(h.bought));
+  const sold = Math.round(num(h.sold));
+  return { cost: buy * bought, revenue: sell * sold, profit: (sell - buy) * sold };
+}
+function finCellsH(h) {
+  const f = finOf(h);
+  const pCls = f.profit > 0 ? "pf" : f.profit < 0 ? "ls" : "";
+  return `<td class="ct" data-l="تكلفة">${fmtN(f.cost)}</td>
+          <td class="tt" data-l="إجمالي">${fmtN(f.revenue)}</td>
+          <td class="${pCls}" data-l="ربح">${fmtN(f.profit)}</td>`;
+}
+function summaryBarH(list) {
+  const t = list.reduce((a,h)=>{ const f = finOf(h);
+    return { qtyIn: a.qtyIn + Math.round(num(h.bought)), sold: a.sold + Math.round(num(h.sold)),
+             balance: a.balance + Math.round(num(h.closing)),
+             cost: a.cost + f.cost, revenue: a.revenue + f.revenue, profit: a.profit + f.profit }; },
+    { qtyIn:0, sold:0, balance:0, cost:0, revenue:0, profit:0 });
+  return `<div class="sumbar">
+    <div class="sc"><div class="sv bl">${fmtN(t.qtyIn)}</div><div class="sl">إجمالي الوارد</div></div>
+    <div class="sc"><div class="sv or">${fmtN(t.sold)}</div><div class="sl">إجمالي المباع</div></div>
+    <div class="sc"><div class="sv gr">${fmtN(t.balance)}</div><div class="sl">إجمالي الباقي</div></div>
+    <div class="sc"><div class="sv rd">${fmtN(t.cost)}</div><div class="sl">إجمالي التكلفة ﷼</div></div>
+    <div class="sc"><div class="sv bl">${fmtN(t.revenue)}</div><div class="sl">إجمالي المبيعات ﷼</div></div>
+    <div class="sc hi"><div class="sv ${t.profit>=0?'gr':'rd'}">${fmtN(t.profit)}</div><div class="sl">صافي الربح ﷼</div></div>
+  </div>`;
 }
 
 function buildFullRows(items) {
@@ -370,7 +450,7 @@ function printReport(items, title, brandName, images = {}) {
     return `
     <tr><td class="num">${i+1}</td><td class="imgc">${imgCell}</td><td>${r.barcode}</td><td class="desc">${r.name}</td>
     <td data-l="جاء">${fmtN(r.qtyIn)}</td><td data-l="باع">${fmtN(r.sold)}</td><td data-l="باقي">${fmtN(r.balance)}</td><td class="ro" data-l="احتياج">${fmtN(r.reorder)}</td>
-    <td data-l="جملة">${fmtN(r.cost)}</td><td data-l="بيع">${fmtN(r.price)} ﷼</td></tr>`;
+    <td data-l="جملة">${fmtN(r.cost)}</td><td data-l="بيع">${fmtN(r.price)} ﷼</td>${finCells(r)}</tr>`;
   }).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
     <style>
@@ -398,20 +478,22 @@ function printReport(items, title, brandName, images = {}) {
       .tot .v{font-size:20px;font-weight:900;color:#0f172a}.tot .l{font-size:12px;color:#888}
       @media print{.tb{display:none}.w{padding:16px}}
       ${TABLE_HELP_CSS}
+      ${REPORT_CSS}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="w">
       <h1>${title}</h1>
       <div class="date">📅 ${dnum} · ${brandName ?? "ALBAROO"} · ${rows.length} صنف</div>
-      <table><thead><tr>
-        <th>#</th><th>صورة<br>Image</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
-        <th>Qty In<br>جاء</th><th>Sold<br>اتباع</th><th>Balance<br>باقي</th><th>Reorder<br>الاحتياج</th>
-        <th>Cost<br>التكلفة</th><th>Price ﷼<br>السعر</th>
-      </tr></thead><tbody>${body}</tbody></table>
-      <div class="tot">
+      ${summaryBarHtml(rows)}
+      <div class="tot" style="margin-top:0;margin-bottom:14px">
         <div><div class="v">${fmtN(totReorder)}</div><div class="l">إجمالي الاحتياج / Total Reorder</div></div>
         <div><div class="v">${fmtM(totCost)}</div><div class="l">تكلفة الطلب / Order Cost</div></div>
       </div>
+      <table><thead><tr>
+        <th>#</th><th>صورة<br>Image</th><th>Barcode<br>الباركود</th><th>Description<br>الصنف</th>
+        <th>Qty In<br>جاء</th><th>Sold<br>اتباع</th><th>Balance<br>باقي</th><th>Reorder<br>الاحتياج</th>
+        <th>Cost<br>التكلفة</th><th>Price ﷼<br>السعر</th>${FIN_HEADERS}
+      </tr></thead><tbody>${body}</tbody></table>
       ${financeSummaryRows(rows)}
     </div></body></html>`;
   const w = window.open("", "_blank");
@@ -679,6 +761,11 @@ function printSearchResults(results, calcItem, images, settings, query) {
     const fac = getFactoryCode(p.barcode);
     const facName = settings?.factories?.[fac] ?? "";
     const img = images?.[p.barcode];
+    // 💰 التكلفة والإجمالي والربح لكل منتج
+    const cost    = whole * x.bought;      // تكلفة الكمية اللي جت
+    const revenue = sell * x.sold;         // إجمالي مبيعاته
+    const profit  = (sell - whole) * x.sold; // ربحه الفعلي
+    const pCls = profit > 0 ? "pf" : profit < 0 ? "ls" : "";
     return `<tr>
       <td class="c">${i+1}</td>
       <td class="im">${img?`<img src="${img}" />`:`<div class="ph">📦</div>`}</td>
@@ -690,12 +777,34 @@ function printSearchResults(results, calcItem, images, settings, query) {
       <td class="c r" data-l="باقي">${fmtN(x.closing)}</td>
       <td class="c p" data-l="بيع">${fmtN(sell)}</td>
       <td class="c w" data-l="جملة">${fmtN(whole)}</td>
+      <td class="c ct" data-l="تكلفة">${fmtN(cost)}</td>
+      <td class="c tt" data-l="إجمالي">${fmtN(revenue)}</td>
+      <td class="c ${pCls}" data-l="ربح">${fmtN(profit)}</td>
     </tr>`;
   }).join("");
 
   const totalBought = results.reduce((s,p)=>s+calcItem(p).bought,0);
   const totalSold   = results.reduce((s,p)=>s+calcItem(p).sold,0);
   const totalRem    = results.reduce((s,p)=>s+calcItem(p).closing,0);
+  // 💰 إجماليات المال
+  const totalCost = results.reduce((s,p)=>{
+    const x = calcItem(p); return s + num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0) * x.bought; },0);
+  const totalRevenue = results.reduce((s,p)=>{
+    const x = calcItem(p); return s + num(p.sellPrice) * x.sold; },0);
+  const totalProfit = results.reduce((s,p)=>{
+    const x = calcItem(p);
+    const w = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+    return s + (num(p.sellPrice) - w) * x.sold; },0);
+
+  // شريط الإجماليات — يطلع أول الصفحة
+  const summaryBar = `<div class="sumbar">
+    <div class="sc"><div class="sv bl">${fmtN(totalBought)}</div><div class="sl">إجمالي الوارد</div></div>
+    <div class="sc"><div class="sv or">${fmtN(totalSold)}</div><div class="sl">إجمالي المباع</div></div>
+    <div class="sc"><div class="sv gr">${fmtN(totalRem)}</div><div class="sl">إجمالي الباقي</div></div>
+    <div class="sc"><div class="sv rd">${fmtN(totalCost)}</div><div class="sl">إجمالي التكلفة ﷼</div></div>
+    <div class="sc"><div class="sv bl">${fmtN(totalRevenue)}</div><div class="sl">إجمالي المبيعات ﷼</div></div>
+    <div class="sc hi"><div class="sv ${totalProfit>=0?'gr':'rd'}">${fmtN(totalProfit)}</div><div class="sl">صافي الربح ﷼</div></div>
+  </div>`;
 
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>نتائج البحث</title>
   <style>
@@ -709,6 +818,18 @@ function printSearchResults(results, calcItem, images, settings, query) {
     table{width:100%;border-collapse:collapse;font-size:12px}
     th{background:#111;color:#fff;padding:7px 4px;font-size:11px;font-weight:900}
     td{border-bottom:1px solid #e5e5e5;padding:6px 4px;vertical-align:middle}
+    tbody tr:nth-child(even){background:#f4f6f9}
+    tbody tr:nth-child(odd){background:#fff}
+    .ct{color:#7c3aed;font-weight:900}
+    .tt{color:#0891b2;font-weight:900}
+    .pf{color:#059669;font-weight:900}
+    .ls{color:#dc2626;font-weight:900}
+    .sumbar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+    .sc{flex:1 1 15%;background:#f4f6f9;border:1px solid #dde3ea;border-radius:9px;padding:9px 6px;text-align:center;min-width:95px}
+    .sc.hi{background:#eefaf3;border-color:#a7e0c3;border-width:2px}
+    .sv{font-size:19px;font-weight:900;line-height:1.1}
+    .sl{font-size:10px;color:#666;margin-top:3px;font-weight:700}
+    .sv.bl{color:#2563eb}.sv.or{color:#d97706}.sv.gr{color:#059669}.sv.rd{color:#dc2626}
     .c{text-align:center}
     .im{width:44px}.im img{width:38px;height:38px;object-fit:cover;border-radius:5px;display:block}
     .ph{width:38px;height:38px;background:#f0f0f0;border-radius:5px;display:flex;align-items:center;justify-content:center}
@@ -734,19 +855,14 @@ function printSearchResults(results, calcItem, images, settings, query) {
       <div><div class="brand">${brandName}</div><div class="ttl">🔍 نتائج البحث${query?` — "${query}"`:""} (${results.length} منتج)</div></div>
       <div class="dt">${greg}<br>${hijri}</div>
     </div>
+    ${summaryBar}
     <table>
       <thead><tr>
         <th>#</th><th>صورة</th><th>المنتج</th><th>الباركود</th><th>المصنع</th>
         <th>جاء</th><th>باع</th><th>باقي</th><th>بيع ﷼</th><th>جملة ﷼</th>
+        <th>التكلفة ﷼</th><th>الإجمالي ﷼</th><th>الربح ﷼</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr>
-        <td colspan="5" class="c">الإجمالي</td>
-        <td class="c">${fmtN(totalBought)}</td>
-        <td class="c">${fmtN(totalSold)}</td>
-        <td class="c">${fmtN(totalRem)}</td>
-        <td colspan="2"></td>
-      </tr></tfoot>
     </table>
     ${financeSummaryHtml(finItems)}
     </div>
@@ -968,20 +1084,35 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
   const [nameInput, setNameInput] = useState(factoryName ?? "");
   const [picked, setPicked] = useState([]);          // باركودات مختارة للعرض
   const [showOffer, setShowOffer] = useState(false);  // شاشة منشئ العرض
+  const [prodSort, setProdSort] = useState("none");   // none | best | worst
   const togglePick = (bc) => setPicked(s => s.includes(bc) ? s.filter(x=>x!==bc) : [...s, bc]);
 
   const filtered = useMemo(() => {
-    if (!search) return items;
-    const q = search.trim();
-    return items.filter(x => {
-      const fac = getFactoryCode(x.p.barcode);
-      const facName = settings?.factories?.[fac] ?? "";
-      return arabicIncludes(x.p.name, q)
-          || x.p.barcode.includes(q)
-          || fac.includes(q)                       // رقم المصنع
-          || arabicIncludes(facName, q);           // اسم المصنع
-    });
-  }, [items, search, settings]);
+    let list = items;
+    if (search) {
+      const q = search.trim();
+      list = items.filter(x => {
+        const fac = getFactoryCode(x.p.barcode);
+        const facName = settings?.factories?.[fac] ?? "";
+        return arabicIncludes(x.p.name, q)
+            || x.p.barcode.includes(q)
+            || fac.includes(q)                       // رقم المصنع
+            || arabicIncludes(facName, q);           // اسم المصنع
+      });
+    }
+    // ترتيب بالأفضل أو الأضعف مبيعاً (نسبة البيع)
+    if (prodSort !== "none" && list.length > 1) {
+      const pctOf = (x) => x.bought > 0 ? (x.sold / x.bought) * 100 : null;
+      list = [...list].sort((a,b) => {
+        const pa = pctOf(a), pb = pctOf(b);
+        if (pa === null && pb === null) return 0;
+        if (pa === null) return 1;      // اللي ما له مشتريات آخر القائمة
+        if (pb === null) return -1;
+        return prodSort === "best" ? pb - pa : pa - pb;
+      });
+    }
+    return list;
+  }, [items, search, settings, prodSort]);
 
   // المنتجات المختارة بكامل معلوماتها للعرض
   const pickedItems = useMemo(
@@ -1042,6 +1173,31 @@ const ProductList = memo(({ items, images, periods, settings, redMax, greenMin, 
           className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
         <button onClick={()=>setScan(true)} className="bg-blue-600 text-white px-4 rounded-xl font-bold">📷</button>
       </div>
+
+      {filtered.length > 1 && (
+        <div className="flex gap-2">
+          <button onClick={()=>setProdSort(prodSort==="best" ? "none" : "best")}
+            className={`flex-1 py-2 rounded-xl text-xs font-black border transition ${
+              prodSort==="best" ? "bg-emerald-600 text-white border-emerald-500"
+                                : "bg-slate-800 text-emerald-400 border-slate-600"}`}>
+            🔥 الأفضل مبيعاً
+          </button>
+          <button onClick={()=>setProdSort(prodSort==="worst" ? "none" : "worst")}
+            className={`flex-1 py-2 rounded-xl text-xs font-black border transition ${
+              prodSort==="worst" ? "bg-red-600 text-white border-red-500"
+                                 : "bg-slate-800 text-red-400 border-slate-600"}`}>
+            📉 الأضعف مبيعاً
+          </button>
+        </div>
+      )}
+      {prodSort !== "none" && (
+        <div className="text-xs text-slate-400 -mt-1">
+          {filtered.length} منتج ·
+          <span className={prodSort==="best" ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+            {prodSort==="best" ? " مرتّبة بالأفضل مبيعاً" : " مرتّبة بالأضعف مبيعاً"}
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         <button onClick={()=>exportExcel(filtered, title.replace(/[^\w\u0600-\u06FF]/g,"_"))} className="bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold">📊 طلب</button>
@@ -1204,11 +1360,12 @@ function printHeroesReport(groups, contNames, images, brandName, onlyCont = null
         <td class="bc">${h.p.barcode}</td>
         <td data-l="جاء">${fmtN(h.bought)}</td><td data-l="باع">${fmtN(h.sold)}</td><td data-l="باقي">${fmtN(h.closing)}</td>
         <td class="pct" data-l="نسبة">${fmtPct(h.soldPct)}</td><td class="mrg" data-l="هامش">${Math.round(h.margin)}%</td>
-        <td data-l="جملة">${fmtN(h.buyPrice)}</td><td data-l="بيع">${fmtN(num(h.p.sellPrice))}</td>
+        <td data-l="جملة">${fmtN(h.buyPrice)}</td><td data-l="بيع">${fmtN(num(h.p.sellPrice))}</td>${finCellsH(h)}
       </tr>`).join("");
     return `<div class="sec">
       <div class="sech">📦 ${cont} <span class="cnt">${list.length} بطل</span></div>
-      <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>شراء</th><th>بيع</th></tr></thead>
+      ${summaryBarH(list)}
+      <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>شراء</th><th>بيع</th>${FIN_HEADERS}</tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير الأبطال</title>
@@ -1241,6 +1398,8 @@ function printHeroesReport(groups, contNames, images, brandName, onlyCont = null
       ${TABLE_HELP_CSS}
       ${FINSUM_CSS}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+    
+      ${REPORT_CSS}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="page">
@@ -1268,7 +1427,7 @@ function printCategoryReport(cat, catName, images, brandName) {
       <td class="bc">${h.p.barcode}</td>
       <td data-l="جاء">${fmtN(h.bought)}</td><td data-l="باع">${fmtN(h.sold)}</td><td data-l="باقي">${fmtN(h.closing)}</td>
       <td class="pct" data-l="نسبة">${fmtPct(h.soldPct)}</td><td data-l="هامش">${Math.round(h.margin)}%</td>
-      <td data-l="جملة">${fmtN(h.buyPrice)}</td><td data-l="بيع">${fmtN(h.sell)}</td>
+      <td data-l="جملة">${fmtN(h.buyPrice)}</td><td data-l="بيع">${fmtN(h.sell)}</td>${finCellsH(h)}
     </tr>`).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>فئة ${title}</title>
     <style>
@@ -1300,6 +1459,8 @@ function printCategoryReport(cat, catName, images, brandName) {
       tr:nth-child(even) td{background:#fafbfc}
       ${TABLE_HELP_CSS}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+    
+      ${REPORT_CSS}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="page">
@@ -1314,8 +1475,9 @@ function printCategoryReport(cat, catName, images, brandName) {
         <div class="sc"><b>${Math.round(cat.margin)}%</b><span>هامش</span></div>
         <div class="sc"><b>${fmtM(cat.profit)}</b><span>ربح</span></div>
       </div>
+      ${summaryBarH(cat.items)}
       <table>
-        <thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th></tr></thead>
+        <thead><tr><th>صورة</th><th>المنتج</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th>${FIN_HEADERS}</tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${financeSummaryHtml(cat.items)}
@@ -1344,11 +1506,12 @@ function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
         <td class="bc">${h.p.barcode}</td>
         <td data-l="جاء">${fmtN(h.bought)}</td><td data-l="باع">${fmtN(h.sold)}</td><td data-l="باقي">${fmtN(h.closing)}</td>
         <td class="pct" data-l="نسبة">${fmtPct(h.soldPct)}</td><td class="mrg" data-l="هامش">${Math.round(h.margin)}%</td>
-        <td data-l="جملة">${fmtN(h.buyPrice)}</td><td data-l="بيع">${fmtN(num(h.p.sellPrice))}</td>
+        <td data-l="جملة">${fmtN(h.buyPrice)}</td><td data-l="بيع">${fmtN(num(h.p.sellPrice))}</td>${finCellsH(h)}
       </tr>`).join("");
     return `<div class="sec">
       <div class="sech">📦 ${cont} <span class="cnt">${list.length} منتج</span></div>
-      <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th></tr></thead>
+      ${summaryBarH(list)}
+      <table><thead><tr><th>صورة</th><th>الصنف</th><th>الباركود</th><th>جاء</th><th>باع</th><th>باقي</th><th>نسبة</th><th>هامش</th><th>جملة</th><th>بيع</th>${FIN_HEADERS}</tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }).join("");
   const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير السيئين</title>
@@ -1381,6 +1544,8 @@ function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
       ${TABLE_HELP_CSS}
       ${FINSUM_CSS}
       @media print{body{background:#fff}.tb{display:none}.page{margin:0;box-shadow:none;border-radius:0;max-width:100%}}
+    
+      ${REPORT_CSS}
     </style></head><body>
     <div class="tb"><button class="bk" onclick="window.close()">✕ إغلاق</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
     <div class="page">
