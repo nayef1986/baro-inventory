@@ -204,14 +204,21 @@ function finalPrice(sell, cost, discount){
   return p;
 }
 
-// ═══ التسعير الموحّد: نص السعر مقرّب لأقرب سعر موحّد تحته ═══
+// ═══ التسعير الموحّد: نص السعر مقرّب لأقرب سعر موحّد ═══
 // المنتج الضعيف بس. الأقوياء يبقون بأسعارهم.
+// قاعدة التقريب: كل سعر يملك نفسه + رقم واحد فوقه بس (مثلاً 5 يملك 5و6).
+// أي رقم يبعد رقمين فأكثر عن السعر الأدنى يطلع للسعر الأعلى. (7،8،9،11 ← 10 | 4،5،6 ← 5)
+function nearestFixed(v){
+  for (let i=0; i<FIXED_PRICES.length; i++){
+    const p = FIXED_PRICES[i];
+    if (v <= p + 1 || i === FIXED_PRICES.length - 1) return p;
+  }
+  return FIXED_PRICES[FIXED_PRICES.length - 1];
+}
 function fixedPrice(sell, cost){
   if (!(sell > 0)) return null;
   const half = sell / 2;                       // خصم النص
-  // ننزّل لأقرب سعر موحّد تحت النص
-  let p = FIXED_PRICES.filter(x => x <= half).pop();
-  if (p === undefined) p = FIXED_PRICES[0];    // أقل من 5 → يُسعّر بـ5
+  let p = nearestFixed(half);                   // نقرّب لأقرب سعر موحّد
   // حماية: ما ننزل تحت نص التكلفة
   const floor = cost > 0 ? cost / 2 : 0;
   if (floor > 0 && p < floor){
@@ -785,8 +792,8 @@ function render(){
       </div>
       ${DISC_MODE==='fixed'
         ? `<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);border-radius:9px;padding:10px 12px;font-size:11px;color:#c9a9e8;line-height:1.7">
-             النص الأفضل مبيعاً يبقى بسعره. النص الأضعف: ننزّل السعر للنص، ونقرّبه لأقرب سعر موحّد تحته.<br>
-             لو نزل تحت 5 → يُسعّر بـ5. ولا ننزل تحت نص التكلفة أبداً.
+             النص الأفضل مبيعاً يبقى بسعره. النص الأضعف: ننزّل السعر للنص، ونقرّبه لأقرب سعر موحّد (4~6 ← 5، 7~11 ← 10).<br>
+             كل سعر يملك نفسه ورقم واحد فوقه بس، والباقي يطلع للسعر التالي. ولا ننزل تحت نص التكلفة أبداً.
            </div>`
         : `<div class="rule"><label>الأضعف مبيعاً</label><div><input type="number" id="t1" value="${RULES.t1}" min="0" max="95" onchange="setRule('t1',this.value)"><span class="u">%</span></div></div>
            <div class="rule"><label>المتوسط</label><div><input type="number" id="t2" value="${RULES.t2}" min="0" max="95" onchange="setRule('t2',this.value)"><span class="u">%</span></div></div>
@@ -817,7 +824,9 @@ function render(){
       <button class="btn pr" onclick="doPrint()">🖨️ طباعة</button>
       <button class="btn sec" onclick="resetAll()">↺ ملفات جديدة</button>
     </div>
-    ${DISC_MODE==='fixed'?`<button onclick="printFixedPriceList()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer">🏷️ طباعة قائمة الأسعار الموحّدة</button>`:''}
+    <button onclick="doExportExcel()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#059669,#047857);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer">📊 تصدير إكسل</button>
+    ${DISC_MODE==='fixed'?`<button onclick="printFixedPriceList()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer">🏷️ طباعة قائمة الأسعار الموحّدة</button>
+    <button onclick="exportFixedPriceExcel()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer">📊 تصدير الأسعار الموحّدة إكسل</button>`:''}
 
     <div style="font-size:11px;color:#475569;margin-bottom:10px">${list.length} منتج${shown.length<list.length?` · يُعرض أول ${shown.length}`:''}</div>
 
@@ -993,6 +1002,83 @@ function printFixedPriceList(){
   const w = window.open("","_blank");
   if (w){ w.document.write(html); w.document.close(); }
   else toast("اسمح بالنوافذ المنبثقة للطباعة");
+}
+
+// ═══ تصدير إكسل — يشتغل مع أي قائمة منتجات (الكل / الأفضل / الأضعف) ═══
+function exportExcel(list, fileName){
+  if (!list || list.length===0){ toast("لا منتجات للتصدير"); return; }
+  const weak = TAB==='weak';
+  const rows = list.map((it,i) => {
+    const discPrice = it.newPrice != null ? it.newPrice : finalPrice(it.sell, it.cost, it.discount);
+    const row = {
+      "#": i+1,
+      "الباركود": it.bc,
+      "اسم المبيعات": it.salesName || "",
+      "اسم المشتريات": it.purchName || "",
+      "المصنع": it.factory,
+    };
+    if (RESULT.hasPurch){
+      row["كمية الشراء"] = it.bought;
+      row["باع"] = it.sold;
+      row["متبقي"] = it.remaining ?? "";
+      row["نسبة البيع %"] = it.soldPct!==null ? Math.round(it.soldPct) : "";
+    } else {
+      row["باع"] = it.sold;
+    }
+    row["سعر الشراء"] = it.cost || "";
+    row["سعر البيع"] = it.sell || "";
+    if (weak){
+      row["الخصم %"] = it.discount || "";
+      row["السعر بعد الخصم"] = discPrice ?? "";
+    }
+    if (RESULT.hasMonthly && it.trend) row["الاقتراح"] = it.trend.label;
+    return row;
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: Math.max(12, k.length+4) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "التقرير");
+  XLSX.writeFile(wb, fileName + ".xlsx");
+  toast("✓ نزّل ملف الإكسل");
+}
+
+// تصدير إكسل لقائمة الأسعار الموحّدة (تقرير مخصص)
+function exportFixedPriceExcel(){
+  if (!RESULT) return;
+  const list = RESULT.items
+    .filter(it => it.isWeakHalf && it.newPrice != null)
+    .sort((a,b) => a.newPrice - b.newPrice || b.sell - a.sell);
+  if (list.length === 0){ toast("لا منتجات في النص الأضعف"); return; }
+  const rows = list.map((it,i) => ({
+    "#": i+1,
+    "الباركود": it.bc,
+    "الاسم": it.salesName || it.purchName || "",
+    "السعر القديم": it.sell,
+    "السعر الجديد": it.newPrice,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:18},{wch:28},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "الأسعار الموحّدة");
+  XLSX.writeFile(wb, "قائمة_الأسعار_الموحدة.xlsx");
+  toast("✓ نزّل ملف الإكسل");
+}
+
+// يبني نفس قائمة doPrint (نفس الفلترة والترتيب) لاستخدامها في التصدير
+function currentReportList(){
+  let list = [...RESULT.items];
+  if (TAB==='weak') list = list.filter(i=>i.sold>0 && i.discount>0);
+  if (SEARCH){ const s=SEARCH.toLowerCase(); list=list.filter(i=>i.bc.toLowerCase().includes(s)||i.factory.includes(s)||(i.purchName||i.salesName||'').toLowerCase().includes(s)); }
+  const sortFns={sold_desc:(a,b)=>b.sold-a.sold,sold_asc:(a,b)=>a.sold-b.sold,pct_desc:(a,b)=>(b.soldPct??-1)-(a.soldPct??-1),pct_asc:(a,b)=>(a.soldPct??999)-(b.soldPct??999),factory:(a,b)=>a.factory.localeCompare(b.factory)||b.sold-a.sold};
+  let eff=SORT; if(TAB==='weak'&&SORT==='sold_desc')eff='sold_asc';
+  list.sort(sortFns[eff]||sortFns.sold_desc);
+  return list;
+}
+
+function doExportExcel(){
+  const list = currentReportList();
+  const ttl = TAB==='weak' ? 'الأضعف_مبيعا' : TAB==='best' ? 'الأفضل_مبيعا' : 'كل_المنتجات';
+  exportExcel(list, ttl);
 }
 
 function doPrint(){
