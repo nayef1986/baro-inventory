@@ -136,7 +136,8 @@ let SALES_FILES = [];   // [{name, map:{bc:qty}}]
 let PURCH_FILES = [];   // [{name, map:{bc:qty}, noBarcode:[...]}]
 let PRICE_FILES = [];   // [{name, prices:{bc:{sell,cost,name}}}]
 let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
-let DISC_MODE = "trend";  // trend = الحركة الشهرية | pct = نسبة البيع
+let DISC_MODE = "trend";  // trend = الحركة الشهرية | pct = نسبة البيع | fixed = أسعار موحّدة
+const FIXED_PRICES = [5, 10, 15, 20, 25, 30];  // الأسعار الموحّدة للتصفية
 let RESULT = null;      // نتيجة التجميع
 
 // ══ حفظ في Supabase (يظهر للكل) ══
@@ -200,6 +201,23 @@ function finalPrice(sell, cost, discount){
   let p = Math.round(sell * (1 - discount/100) * 100) / 100;
   const floor = cost > 0 ? cost / 2 : 0;  // الحد الأدنى = نص التكلفة
   if (floor > 0 && p < floor) p = Math.round(floor * 100) / 100;
+  return p;
+}
+
+// ═══ التسعير الموحّد: نص السعر مقرّب لأقرب سعر موحّد تحته ═══
+// المنتج الضعيف بس. الأقوياء يبقون بأسعارهم.
+function fixedPrice(sell, cost){
+  if (!(sell > 0)) return null;
+  const half = sell / 2;                       // خصم النص
+  // ننزّل لأقرب سعر موحّد تحت النص
+  let p = FIXED_PRICES.filter(x => x <= half).pop();
+  if (p === undefined) p = FIXED_PRICES[0];    // أقل من 5 → يُسعّر بـ5
+  // حماية: ما ننزل تحت نص التكلفة
+  const floor = cost > 0 ? cost / 2 : 0;
+  if (floor > 0 && p < floor){
+    const up = FIXED_PRICES.find(x => x >= floor);
+    p = up !== undefined ? up : FIXED_PRICES[FIXED_PRICES.length - 1];
+  }
   return p;
 }
 const fmt = v => (Number(v)||0).toLocaleString("en-US",{maximumFractionDigits:0});
@@ -551,10 +569,32 @@ function analyze(){
   // الضعيف = النصف الأدنى مبيعا
   const withSales = items.filter(i => i.sold > 0);
   const n = withSales.length;
-  // 💸 الخصم: خيار المستخدم — الحركة الشهرية أو نسبة البيع
+  // 💸 الخصم: خيار المستخدم — الحركة الشهرية، نسبة البيع، أو الأسعار الموحّدة
   const WEAK_THRESHOLD = 50;
+
+  // ═══ وضع الأسعار الموحّدة ═══
+  // نقسم المنتجات نصفين حسب نسبة البيع: النص الأفضل بدون تغيير، النص الأضعف يُسعّر موحّد
+  if (DISC_MODE === "fixed"){
+    // نرتّب اللي لهم نسبة بيع معروفة (من الأفضل للأضعف)
+    const ranked = items.filter(i => i.soldPct !== null).sort((a,b) => b.soldPct - a.soldPct);
+    const halfIdx = Math.ceil(ranked.length / 2);   // النص الأول = الأفضل
+    const weakSet = new Set(ranked.slice(halfIdx).map(i => i.bc));
+    items.forEach(it => {
+      it.discount = 0;
+      it.newPrice = null;
+      it.isWeakHalf = false;
+      if (weakSet.has(it.bc) && it.sell > 0){
+        it.isWeakHalf = true;
+        it.newPrice = fixedPrice(it.sell, it.cost);
+        // نحسب النسبة المكافئة (للعرض فقط)
+        it.discount = it.newPrice !== null ? Math.round((1 - it.newPrice / it.sell) * 100) : 0;
+      }
+    });
+  } else {
+
   const useTrend = DISC_MODE === "trend";
   items.forEach(it => {
+    it.newPrice = null; it.isWeakHalf = false;
     // نستخدم الحركة لو مختارة ومتوفرة
     if (useTrend && it.trend){
       const code = it.trend.code;
@@ -572,6 +612,7 @@ function analyze(){
     else if (pct < (WEAK_THRESHOLD*2)/3) it.discount = RULES.t2;
     else it.discount = RULES.t3;
   });
+  }
 
   // منتجات لها مبيعات بس بدون فاتورة شراء (تطلع لحالها لو رُفعت مشتريات)
   const noPurchase = hasPurch
@@ -612,8 +653,8 @@ function itemCard(it, idx, mode){
   const nmP = it.purchName || "";
   const nmS = it.salesName || "";
   // نعرض الاثنين لو مختلفين، وإلا واحد
-  // سعر البيع بعد الخصم
-  const discPrice = finalPrice(it.sell, it.cost, it.discount);
+  // سعر البيع بعد الخصم — في وضع الأسعار الموحّدة نستخدم newPrice المحسوب مسبقاً
+  const discPrice = it.newPrice != null ? it.newPrice : finalPrice(it.sell, it.cost, it.discount);
   const belowCost = discPrice!==null && it.cost>0 && discPrice <= it.cost/2 + 0.001 && (it.sell*(1-it.discount/100)) < it.cost/2;
   const lossItem = it.sell>0 && it.cost>0 && it.sell < it.cost; // بيع أقل من شراء
   const dupStyle = it.dupPurch ? "border:2px solid #a855f7;box-shadow:0 0 0 1px rgba(168,85,247,0.2)" : "";
@@ -647,11 +688,11 @@ function itemCard(it, idx, mode){
       <div style="font-size:12px;color:#d4a853;font-weight:700">⚠️ البيع (${fmt(it.sell)}) أقل من الشراء (${fmt(it.cost)}) — بدون خصم</div>
     </div>`:`<div class="discbar">
       <div>
-        <div style="font-size:12px;color:#94a3b8;font-weight:700">💸 خصم التصريف</div>
+        <div style="font-size:12px;color:#94a3b8;font-weight:700">${DISC_MODE==='fixed'?'🏷️ السعر الموحّد':'💸 خصم التصريف'}</div>
         ${discPrice!==null?`<div style="font-size:12px;color:#cbd5e1;margin-top:2px">${fmt(it.sell)} ← <b style="color:#4ade80">${fmt(discPrice)}</b> ﷼</div>`:''}
         ${belowCost?`<div style="font-size:10px;color:#f59e0b;margin-top:2px">⚠️ وقف عند نص التكلفة (حماية الربح)</div>`:''}
       </div>
-      <span style="font-size:26px;font-weight:900;color:${discColor}">${it.discount}%</span>
+      <span style="font-size:${DISC_MODE==='fixed'?'22px':'26px'};font-weight:900;color:${DISC_MODE==='fixed'?'#c084fc':discColor}">${DISC_MODE==='fixed'?fmt(discPrice)+' ﷼':it.discount+'%'}</span>
     </div>`):''}
   </div>`;
 }
@@ -736,14 +777,20 @@ function render(){
     </div>
 
     <div class="rules">
-      <h3>💸 شرائح خصم التصريف</h3>
-      ${RESULT.hasMonthly?`<div style="display:flex;gap:6px;margin-bottom:12px">
-        <button onclick="setDiscMode('trend')" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:900;background:${DISC_MODE==='trend'?'rgba(37,99,235,0.2)':'#0d1420'};color:${DISC_MODE==='trend'?'#7aa5e0':'#64748b'};border:1px solid ${DISC_MODE==='trend'?'#2563eb':'#1e293b'}">📊 حسب الحركة الشهرية</button>
-        <button onclick="setDiscMode('pct')" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:900;background:${DISC_MODE==='pct'?'rgba(37,99,235,0.2)':'#0d1420'};color:${DISC_MODE==='pct'?'#7aa5e0':'#64748b'};border:1px solid ${DISC_MODE==='pct'?'#2563eb':'#1e293b'}">📈 حسب نسبة البيع</button>
-      </div>`:''}
-      <div class="rule"><label>الأضعف مبيعاً</label><div><input type="number" id="t1" value="${RULES.t1}" min="0" max="95" onchange="setRule('t1',this.value)"><span class="u">%</span></div></div>
-      <div class="rule"><label>المتوسط</label><div><input type="number" id="t2" value="${RULES.t2}" min="0" max="95" onchange="setRule('t2',this.value)"><span class="u">%</span></div></div>
-      <div class="rule"><label>الأقل ضعفاً</label><div><input type="number" id="t3" value="${RULES.t3}" min="0" max="95" onchange="setRule('t3',this.value)"><span class="u">%</span></div></div>
+      <h3>💸 طريقة التسعير</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        ${RESULT.hasMonthly?`<button onclick="setDiscMode('trend')" style="flex:1 1 46%;padding:9px;border-radius:9px;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:900;background:${DISC_MODE==='trend'?'rgba(37,99,235,0.2)':'#0d1420'};color:${DISC_MODE==='trend'?'#7aa5e0':'#64748b'};border:1px solid ${DISC_MODE==='trend'?'#2563eb':'#1e293b'}">📊 الحركة الشهرية</button>`:''}
+        <button onclick="setDiscMode('pct')" style="flex:1 1 46%;padding:9px;border-radius:9px;cursor:pointer;font-family:'Cairo';font-size:12px;font-weight:900;background:${DISC_MODE==='pct'?'rgba(37,99,235,0.2)':'#0d1420'};color:${DISC_MODE==='pct'?'#7aa5e0':'#64748b'};border:1px solid ${DISC_MODE==='pct'?'#2563eb':'#1e293b'}">📈 نسبة البيع</button>
+        <button onclick="setDiscMode('fixed')" style="flex:1 1 100%;padding:11px;border-radius:9px;cursor:pointer;font-family:'Cairo';font-size:13px;font-weight:900;background:${DISC_MODE==='fixed'?'rgba(168,85,247,0.22)':'#0d1420'};color:${DISC_MODE==='fixed'?'#c084fc':'#64748b'};border:1px solid ${DISC_MODE==='fixed'?'#a855f7':'#1e293b'}">🏷️ أسعار موحّدة (5 · 10 · 15 · 20 · 25 · 30)</button>
+      </div>
+      ${DISC_MODE==='fixed'
+        ? `<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);border-radius:9px;padding:10px 12px;font-size:11px;color:#c9a9e8;line-height:1.7">
+             النص الأفضل مبيعاً يبقى بسعره. النص الأضعف: ننزّل السعر للنص، ونقرّبه لأقرب سعر موحّد تحته.<br>
+             لو نزل تحت 5 → يُسعّر بـ5. ولا ننزل تحت نص التكلفة أبداً.
+           </div>`
+        : `<div class="rule"><label>الأضعف مبيعاً</label><div><input type="number" id="t1" value="${RULES.t1}" min="0" max="95" onchange="setRule('t1',this.value)"><span class="u">%</span></div></div>
+           <div class="rule"><label>المتوسط</label><div><input type="number" id="t2" value="${RULES.t2}" min="0" max="95" onchange="setRule('t2',this.value)"><span class="u">%</span></div></div>
+           <div class="rule"><label>الأقل ضعفاً</label><div><input type="number" id="t3" value="${RULES.t3}" min="0" max="95" onchange="setRule('t3',this.value)"><span class="u">%</span></div></div>`}
     </div>
 
     <div class="seg">
@@ -770,6 +817,7 @@ function render(){
       <button class="btn pr" onclick="doPrint()">🖨️ طباعة</button>
       <button class="btn sec" onclick="resetAll()">↺ ملفات جديدة</button>
     </div>
+    ${DISC_MODE==='fixed'?`<button onclick="printFixedPriceList()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;font-family:'Cairo';cursor:pointer">🏷️ طباعة قائمة الأسعار الموحّدة</button>`:''}
 
     <div style="font-size:11px;color:#475569;margin-bottom:10px">${list.length} منتج${shown.length<list.length?` · يُعرض أول ${shown.length}`:''}</div>
 
@@ -864,6 +912,89 @@ function resetAll(){
 }
 
 // ══ الطباعة ══
+// تقرير خاص: قائمة الأسعار الموحّدة — باركود / السعر القديم / السعر بعد التخفيض
+function printFixedPriceList(){
+  if (!RESULT) return;
+  const list = RESULT.items
+    .filter(it => it.isWeakHalf && it.newPrice != null)
+    .sort((a,b) => a.newPrice - b.newPrice || b.sell - a.sell);
+  if (list.length === 0){ toast("لا منتجات في النص الأضعف"); return; }
+
+  const d = new Date();
+  const greg = d.toLocaleDateString("ar-SA-u-ca-gregory",{year:"numeric",month:"long",day:"numeric"});
+  const hijri = d.toLocaleDateString("ar-SA-u-ca-islamic",{year:"numeric",month:"long",day:"numeric"});
+
+  // نجمّع حسب السعر الجديد (يسهّل تلصيق الملصقات دفعة وحدة لكل سعر)
+  const byPrice = {};
+  list.forEach(it => { (byPrice[it.newPrice] ??= []).push(it); });
+  const prices = Object.keys(byPrice).map(Number).sort((a,b)=>a-b);
+
+  const totalItems = list.length;
+  const totalOldValue = list.reduce((s,it)=>s+it.sell,0);
+  const totalNewValue = list.reduce((s,it)=>s+it.newPrice,0);
+
+  const groupsHtml = prices.map(p => {
+    const arr = byPrice[p];
+    const rows = arr.map((it,i) => `<tr>
+      <td class="n">${i+1}</td>
+      <td class="bc">${it.bc}</td>
+      <td class="nm">${it.salesName || it.purchName || "—"}</td>
+      <td class="old">${fmt(it.sell)} ﷼</td>
+      <td class="arrow">←</td>
+      <td class="new">${fmt(p)} ﷼</td>
+    </tr>`).join("");
+    return `<div class="pgroup">
+      <div class="pghead">🏷️ السعر الموحّد: <b>${fmt(p)} ﷼</b> <span class="pgcount">(${arr.length} منتج)</span></div>
+      <table><thead><tr><th>#</th><th>الباركود</th><th>الاسم</th><th>السعر القديم</th><th></th><th>السعر الجديد</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>قائمة الأسعار الموحّدة</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
+    body{background:#fff;color:#1a1a1a}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+    .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+    .bk{background:#334155;color:#fff}.pr{background:#7c3aed;color:#fff}
+    .w{max-width:820px;margin:0 auto;padding:70px 16px 40px}
+    h1{text-align:center;color:#0f172a;font-size:24px;margin-bottom:4px;font-weight:900}
+    .date{text-align:center;color:#888;font-size:13px;margin-bottom:16px}
+    .stats{display:flex;gap:10px;justify-content:center;margin-bottom:22px;flex-wrap:wrap}
+    .sc{background:#faf5ff;border:1px solid #e9d5ff;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px}
+    .sv{font-size:22px;font-weight:900;color:#7c3aed}
+    .sl{font-size:11px;color:#666;margin-top:2px}
+    .pgroup{margin-bottom:22px;page-break-inside:avoid}
+    .pghead{background:#f3e8ff;border-radius:10px;padding:9px 14px;font-size:15px;font-weight:900;color:#6b21a8;margin-bottom:8px}
+    .pgcount{font-size:12px;color:#9333ea;font-weight:700}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:4px}
+    th{background:#0f172a;color:#fff;padding:8px 6px;font-size:11px;font-weight:700}
+    td{border:1px solid #e5e5e5;padding:7px 6px;text-align:center}
+    td.n{background:#f8f8f8;font-weight:900;color:#888;font-size:11px}
+    td.bc{font-family:monospace;font-size:14px;font-weight:900;color:#0f172a;letter-spacing:0.5px}
+    td.nm{text-align:right;font-size:12px;color:#334155;font-weight:700}
+    td.old{color:#94a3b8;font-weight:700;text-decoration:line-through}
+    td.arrow{color:#c084fc;font-weight:900;width:20px}
+    td.new{color:#059669;font-weight:900;font-size:15px}
+    @media print{.tb{display:none}.w{padding:16px}}
+  </style></head><body>
+  <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+  <div class="w">
+    <h1>🏷️ قائمة الأسعار الموحّدة</h1>
+    <div class="date">📅 ${greg} · ${hijri}هـ · ALBAROO</div>
+    <div class="stats">
+      <div class="sc"><div class="sv">${fmt(totalItems)}</div><div class="sl">منتج</div></div>
+      <div class="sc"><div class="sv">${fmt(totalOldValue)}</div><div class="sl">مجموع الأسعار القديمة</div></div>
+      <div class="sc"><div class="sv">${fmt(totalNewValue)}</div><div class="sl">مجموع الأسعار الجديدة</div></div>
+    </div>
+    ${groupsHtml}
+  </div></body></html>`;
+  const w = window.open("","_blank");
+  if (w){ w.document.write(html); w.document.close(); }
+  else toast("اسمح بالنوافذ المنبثقة للطباعة");
+}
+
 function doPrint(){
   if (!RESULT) return;
   let list = [...RESULT.items];
@@ -892,7 +1023,7 @@ function printList(list, ttl){
   const rows = list.map((it,i) => {
     const nmS = it.salesName || "—";
     const nmP = it.purchName || "—";
-    const discPrice = finalPrice(it.sell, it.cost, it.discount);
+    const discPrice = it.newPrice != null ? it.newPrice : finalPrice(it.sell, it.cost, it.discount);
     return `<tr class="${weak?'w':''}">
     <td class="n">${i+1}</td>
     <td class="bc">${it.bc}</td>
