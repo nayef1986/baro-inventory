@@ -217,13 +217,28 @@ function nearestFixed(v){
 }
 function fixedPrice(sell, cost){
   if (!(sell > 0)) return null;
+  // لو السعر الأصلي أقل من 5، ما نغيّره — يبقى كما هو
+  if (sell < FIXED_PRICES[0]) return sell;
   const half = sell / 2;                       // خصم النص
-  let p = nearestFixed(half);                   // نقرّب لأقرب سعر موحّد
+  const maxFixed = FIXED_PRICES[FIXED_PRICES.length - 1];
+  let p;
+  let proportional = false;
+  if (half > maxFixed){
+    // نص السعر تجاوز أعلى سعر موحّد (30) → نسعّر بالنسبة والتناسب مباشرة، بدون تقريب لقائمة الأسعار
+    p = Math.round(half);
+    proportional = true;
+  } else {
+    p = nearestFixed(half);                     // نقرّب لأقرب سعر موحّد
+  }
   // حماية: ما ننزل تحت نص التكلفة
   const floor = cost > 0 ? cost / 2 : 0;
   if (floor > 0 && p < floor){
-    const up = FIXED_PRICES.find(x => x >= floor);
-    p = up !== undefined ? up : FIXED_PRICES[FIXED_PRICES.length - 1];
+    if (proportional){
+      p = Math.round(floor);                    // نرفع لنص التكلفة مباشرة (تناسب حر برضه)
+    } else {
+      const up = FIXED_PRICES.find(x => x >= floor);
+      p = up !== undefined ? up : maxFixed;
+    }
   }
   return p;
 }
@@ -590,7 +605,7 @@ function analyze(){
       it.discount = 0;
       it.newPrice = null;
       it.isWeakHalf = false;
-      if (weakSet.has(it.bc) && it.sell > 0){
+      if (weakSet.has(it.bc) && it.sell > 0 && it.sell >= FIXED_PRICES[0]){
         it.isWeakHalf = true;
         it.newPrice = fixedPrice(it.sell, it.cost);
         // نحسب النسبة المكافئة (للعرض فقط)
@@ -793,7 +808,8 @@ function render(){
       ${DISC_MODE==='fixed'
         ? `<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);border-radius:9px;padding:10px 12px;font-size:11px;color:#c9a9e8;line-height:1.7">
              النص الأفضل مبيعاً يبقى بسعره. النص الأضعف: ننزّل السعر للنص، ونقرّبه لأقرب سعر موحّد (4~6 ← 5، 7~11 ← 10).<br>
-             كل سعر يملك نفسه ورقم واحد فوقه بس، والباقي يطلع للسعر التالي. ولا ننزل تحت نص التكلفة أبداً.
+             كل سعر يملك نفسه ورقم واحد فوقه بس، والباقي يطلع للسعر التالي. سعر أصلي تحت 5 يبقى كما هو.<br>
+             ولو نص السعر تجاوز 30 (يعني سعره الأصلي فوق 60)، يُسعّر بالنص مباشرة (نسبة وتناسب حرة، بدون تقريب). ولا ننزل تحت نص التكلفة أبداً.
            </div>`
         : `<div class="rule"><label>الأضعف مبيعاً</label><div><input type="number" id="t1" value="${RULES.t1}" min="0" max="95" onchange="setRule('t1',this.value)"><span class="u">%</span></div></div>
            <div class="rule"><label>المتوسط</label><div><input type="number" id="t2" value="${RULES.t2}" min="0" max="95" onchange="setRule('t2',this.value)"><span class="u">%</span></div></div>
