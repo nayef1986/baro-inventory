@@ -237,7 +237,7 @@ function changeEmp(){
 }
 
 function branchProductsGrouped(){
-  let list = PRODUCTS.filter(p => branchSoldOf(p.barcode) > 0);
+  let list = PRODUCTS.filter(p => branchSoldOf(p.barcode) > 0 || receivedFromWh(p.barcode) > 0);
   const q = searchTerm.trim().toLowerCase();
   if (q) list = list.filter(p => p.barcode.toLowerCase().includes(q) || (p.name||"").toLowerCase().includes(q));
   const groups = {};
