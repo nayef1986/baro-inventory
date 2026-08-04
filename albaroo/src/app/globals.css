@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Section 8.5 design tokens. Values are R G B triplets (no commas) so Tailwind's
+   `rgb(var(--x) / <alpha-value>)` pattern can apply opacity. */
+:root {
+  --color-ink: 16 20 24;
+  --color-slate: 107 114 128;
+  --color-surface: 245 246 248;
+  --color-card: 255 255 255;
+  --color-oud: 74 37 69;
+  --color-oud-tint: 243 235 242;
+  --color-brass: 154 123 79;
+
+  --glass-tint: rgba(255, 255, 255, 0.72);
+  --hairline: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme='dark'] {
+  --color-ink: 242 244 247;
+  --color-slate: 154 163 175;
+  --color-surface: 11 14 18;
+  --color-card: 22 26 32;
+  --color-oud: 122 68 114;
+  --color-oud-tint: 36 18 32;
+  --color-brass: 196 165 120;
+
+  --glass-tint: rgba(22, 26, 32, 0.72);
+  --hairline: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-ink: 242 244 247;
+    --color-slate: 154 163 175;
+    --color-surface: 11 14 18;
+    --color-card: 22 26 32;
+    --color-oud: 122 68 114;
+    --color-oud-tint: 36 18 32;
+    --color-brass: 196 165 120;
+
+    --glass-tint: rgba(22, 26, 32, 0.72);
+    --hairline: rgba(255, 255, 255, 0.1);
+  }
+}
+
+html {
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-ink));
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* Liquid Glass chrome layers (Section 8.5). Content layers (cards/photos/tables) stay
+   opaque — this class is reserved for top bar / bottom tab bar / sheets only. */
+.glass-chrome {
+  background: var(--glass-tint);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: var(--hairline);
+}
+
+/* Mandatory performance/accessibility control: Reduce Transparency swaps glass for a
+   solid fill. Toggled by user setting, or automatically on prefers-reduced-transparency. */
+[data-reduce-transparency='true'] .glass-chrome,
+:root[data-reduce-transparency='true'] .glass-chrome {
+  background: rgb(var(--color-card));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chrome {
+    background: rgb(var(--color-card));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[lang='ur'] {
+  line-height: 1.9;
+}
+
+[lang='ur'] * {
+  letter-spacing: 0 !important;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}
+
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
