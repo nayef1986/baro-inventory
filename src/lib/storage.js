@@ -68,11 +68,12 @@ function getLastSbError(){ return lastSbError; }
 
 async function sbDelete(key) {
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}`, {
       method: "DELETE",
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
-  } catch {}
+    return res.ok;
+  } catch { return false; }
 }
 
 // ─── Cache ───────────────────────────────────────────────────
@@ -191,25 +192,54 @@ export async function saveProducts(products) {
 
 // ─── Periods ─────────────────────────────────────────────────
 
-export async function loadPeriods() {
-  const periods = (await load(KEYS.PERIODS)) ?? [];
-  // نضمن id لكل فترة (الفترات القديمة قد تكون بدون id → الحذف الفردي يفشل)
-  let changed = false;
-  const fixed = periods.map((p, i) => {
-    if (p && (p.id == null || p.id === "")) {
-      changed = true;
+// ─── الفترات: كل فترة تنحفظ في خانتها الخاصة (مو كلهم مع بعض) ──
+// هذا يمنع مشكلة إرسال كل التاريخ من جديد مع كل رفعة (كانت تسبب فشل/بطء
+// مع تراكم الشهور، لأن الحفظ كان يعيد إرسال كل الفترات القديمة في كل مرة)
+const PERIOD_PREFIX = "baro_period_v1_";
+
+// يجيب كل الصفوف اللي مفتاحها يبدأ بالبادئة (كل فترة بصف مستقل)
+async function sbGetByPrefix(prefix) {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?key=like.${encodeURIComponent(prefix)}*&select=key,value`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows
+      .map(r => { try { return { key: r.key, value: JSON.parse(r.value) }; } catch { return null; } })
+      .filter(Boolean);
+  } catch { return []; }
+}
+
+// يحذف كل الصفوف اللي مفتاحها يبدأ بالبادئة (دفعة وحدة، للحذف الكامل)
+async function sbDeleteByPrefix(prefix) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=like.${encodeURIComponent(prefix)}*`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+  } catch {}
+}
+
+// تهجير تلقائي لمرة وحدة: لو التخزين القديم (كل الفترات في خانة وحدة) لسه موجود،
+// ننقلها لخانات مستقلة (كل فترة لحالها)، وحدة وحدة — كل نقلة صغيرة فما تفشل بسبب الحجم
+async function migrateOldPeriodsBlob() {
+  const oldBlob = await sbGet(KEYS.PERIODS);
+  if (!Array.isArray(oldBlob) || oldBlob.length === 0) return [];
+  const withIds = oldBlob.filter(Boolean).map((p, i) => {
+    if (p.id == null || p.id === "") {
       return { ...p, id: `p_${i}_${p.uploadDate ?? ""}_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}` };
     }
     return p;
   });
-  // لو أصلحنا id ناقص، نحفظ النسخة المصلّحة (مرة وحدة)
-  if (changed) { sbSet(KEYS.PERIODS, fixed).catch(()=>{}); cacheSet(KEYS.PERIODS, fixed); }
-  // نفكّ ضغط الفترات المضغوطة قبل إرجاعها للشاشات
-  return fixed.map(inflatePeriod);
-}
-
-export async function savePeriods(periods) {
-  return await save(KEYS.PERIODS, periods);
+  for (const p of withIds) {
+    await sbSet(PERIOD_PREFIX + p.id, p); // حفظ فردي صغير — ما يلمس حد الحجم/الوقت
+  }
+  // نمسح الخانة القديمة بعد نجاح النقل (يمنع إعادة التهجير، ويوقف مشكلة الحجم نهائياً)
+  await sbDelete(KEYS.PERIODS);
+  try { localStorage.removeItem(KEYS.PERIODS); } catch {}
+  return withIds;
 }
 
 // يفكّ ضغط الفترات المضغوطة من نسخة قديمة (توافق للخلف)
@@ -229,14 +259,61 @@ function inflatePeriod(per) {
   return out;
 }
 
+export async function loadPeriods() {
+  let rows = await sbGetByPrefix(PERIOD_PREFIX);
+  let periods = rows.map(r => r.value);
+
+  // لو ما فيه شي بالتخزين الجديد، نتحقق من التخزين القديم ونهجّره تلقائياً
+  if (periods.length === 0) {
+    periods = await migrateOldPeriodsBlob();
+  }
+
+  // نضمن id لكل فترة (احتياطي لفترات قديمة بدون id)
+  let anyMissing = false;
+  const fixed = periods.map((p, i) => {
+    if (p && (p.id == null || p.id === "")) {
+      anyMissing = true;
+      return { ...p, id: `p_${i}_${p.uploadDate ?? ""}_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}` };
+    }
+    return p;
+  });
+  if (anyMissing) {
+    for (const p of fixed) { if (p && p.id) await sbSet(PERIOD_PREFIX + p.id, p); }
+  }
+  return fixed.map(inflatePeriod);
+}
+
+// توافق للخلف: لو مكان ما نعرفه يستدعيها بمصفوفة كاملة، نحفظ الفرق فقط
+// (يحذف اللي انشال، ويحفظ كل فترة موجودة بخانتها الخاصة — صغير وسريع لكل وحدة)
+export async function savePeriods(periods) {
+  const desired = Array.isArray(periods) ? periods.filter(Boolean) : [];
+  const existingRows = await sbGetByPrefix(PERIOD_PREFIX);
+  const desiredIds = new Set(desired.filter(p => p.id).map(p => p.id));
+  const toDelete = existingRows.filter(r => {
+    const id = r.key.slice(PERIOD_PREFIX.length);
+    return !desiredIds.has(id);
+  });
+  for (const r of toDelete) await sbDelete(r.key);
+  let allOk = true;
+  for (const p of desired) {
+    if (!p || !p.id) continue;
+    const ok = await sbSet(PERIOD_PREFIX + p.id, p);
+    if (!ok) allOk = false;
+  }
+  return allOk;
+}
+
 export async function addPeriod(period) {
+  if (period.id == null || period.id === "") {
+    period = { ...period, id: `p_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}` };
+  }
+  // نجيب الفترات الموجودة (بس عشان فحص التكرار بالمعرّف/البصمة) — قراءة، مو كتابة، ما تسبب مشكلة الحجم
   const periods = await loadPeriods();
 
-  // نفس المعرّف = استبدال (تحديث الشهر بدل تكراره)
+  // نفس المعرّف = استبدال (تحديث الشهر بدل تكراره) — نحفظ هذي الفترة بس
   const sameId = periods.findIndex(p => p.id === period.id);
   if (sameId !== -1) {
-    periods[sameId] = period;
-    const ok = await savePeriods(periods);
+    const ok = await sbSet(PERIOD_PREFIX + period.id, period);
     return { ok, reason: ok ? "تم التحديث" : (getLastSbError() || "فشل التحديث") };
   }
 
@@ -245,40 +322,27 @@ export async function addPeriod(period) {
     return { ok: false, reason: "هذا الملف مرفوع مسبقاً — نفس الأرقام موجودة" };
   }
 
-  periods.push(period);
-  const ok = await savePeriods(periods);
+  // نحفظ الفترة الجديدة بس — خانتها الخاصة، صغيرة وسريعة بغض النظر عن كمية التاريخ المحفوظ
+  const ok = await sbSet(PERIOD_PREFIX + period.id, period);
   return { ok, reason: ok ? undefined : (getLastSbError() || "فشل الحفظ لسبب غير معروف") };
 }
 
 export async function deleteAllPeriods() {
-  // حذف سريع مباشر من Supabase + مسح الكاش (نفس طريقة الزر السريع)
-  try { localStorage.removeItem(KEYS.PERIODS); } catch {}
+  await sbDeleteByPrefix(PERIOD_PREFIX);
+  // احتياط: نمسح الخانة القديمة كمان لو لسه موجودة (نادر)
   await sbDelete(KEYS.PERIODS);
+  try { localStorage.removeItem(KEYS.PERIODS); } catch {}
   return { ok: true };
 }
 
 export async function deletePeriod(periodId, periodLabel = null) {
-  // نجيب أحدث نسخة (نتجاوز الكاش) عشان الحذف يشتغل بدقة
-  let periods = await sbGet(KEYS.PERIODS);
-  if (!Array.isArray(periods)) periods = await loadPeriods();
-  periods = Array.isArray(periods) ? periods : [];
-  // نطابق بالـid أولاً
-  let filtered = periods.filter(p => String(p?.id ?? "") !== String(periodId));
-  // لو ما انحذف شي والـid فاضي/قديم → نجرّب بالتسمية (احتياطي)
-  if (filtered.length === periods.length && periodLabel != null) {
-    let removedOne = false;
-    filtered = periods.filter(p => {
-      if (!removedOne && String(p?.label ?? "") === String(periodLabel)) { removedOne = true; return false; }
-      return true;
-    });
+  const periods = await loadPeriods();
+  let target = periods.find(p => String(p?.id ?? "") === String(periodId));
+  if (!target && periodLabel != null) {
+    target = periods.find(p => String(p?.label ?? "") === String(periodLabel));
   }
-  if (filtered.length === periods.length) {
-    cacheSet(KEYS.PERIODS, filtered);
-    return { ok: true, notFound: true };
-  }
-  const trimmed = filtered.slice(-MAX_PERIODS);
-  const ok = await sbSet(KEYS.PERIODS, trimmed);
-  cacheSet(KEYS.PERIODS, trimmed);
+  if (!target) return { ok: true, notFound: true };
+  const ok = await sbDelete(PERIOD_PREFIX + target.id); // حذف خانة وحيدة — صغير وسريع
   try { await updateMeta(); } catch {}
   // نعيد تحميل الصفحة عشان الواجهة تعكس الحذف فوراً (تتجنب مشكلة الحالة القديمة)
   if (ok && typeof window !== "undefined") {
@@ -289,13 +353,11 @@ export async function deletePeriod(periodId, periodLabel = null) {
 
 // حذف فترة بالفهرس (احتياطي — لو الـid ناقص)
 export async function deletePeriodByIndex(index) {
-  let periods = await sbGet(KEYS.PERIODS);
-  if (!Array.isArray(periods)) periods = await loadPeriods();
-  periods = Array.isArray(periods) ? periods : [];
+  const periods = await loadPeriods();
   if (index < 0 || index >= periods.length) return { ok: false };
-  const filtered = periods.filter((_, i) => i !== index);
-  const ok = await sbSet(KEYS.PERIODS, filtered.slice(-MAX_PERIODS));
-  cacheSet(KEYS.PERIODS, filtered.slice(-MAX_PERIODS));
+  const target = periods[index];
+  if (!target || !target.id) return { ok: false };
+  const ok = await sbDelete(PERIOD_PREFIX + target.id);
   try { await updateMeta(); } catch {}
   return { ok };
 }
@@ -373,6 +435,7 @@ export async function loadAll() {
 export async function clearAll() {
   cacheClear();
   await Promise.all(Object.values(KEYS).map(k => sbDelete(k)));
+  await sbDeleteByPrefix(PERIOD_PREFIX); // الفترات المخزّنة كل وحدة بخانتها الخاصة
 }
 
 function defaultSettings() {
