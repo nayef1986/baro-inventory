@@ -195,6 +195,25 @@ async function fetchRemote(key){
   }
 }
 
+// ✅ قراءة الفترات: الشكل الجديد أولاً (كل شهر بمفتاحه الخاص)،
+// ولو ما فيه شي (نظام قديم لسه ما تحدّث)، نرجع للشكل القديم (كل الشهور بمفتاح واحد)
+async function fetchPeriodsSmart(){
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 20000);
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=like.baro_period_v1_*&select=value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }, signal: ctrl.signal });
+    clearTimeout(timer);
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows.length > 0){
+      return rows.map(row => { try { return JSON.parse(row.value); } catch { return null; } }).filter(Boolean);
+    }
+  } catch(e){ /* نكمل للشكل القديم */ }
+  // احتياط: الشكل القديم (كل الشهور بمفتاح واحد)
+  const old = await fetchRemote("baro_periods_v2");
+  return Array.isArray(old) ? old : [];
+}
+
 // load: يرجع الكاش فوراً لو موجود، ويحدّثه من Supabase بالخلفية
 async function load(key) {
   const cached = await idbGet(key);
@@ -206,6 +225,18 @@ async function load(key) {
   // أول مرة: من Supabase + خزّن
   const fresh = await fetchRemote(key);
   if (fresh != null) idbSet(key, fresh);
+  return fresh;
+}
+
+// نفس أسلوب load() لكن للفترات خاصة (تدعم الشكل الجديد كل شهر بمفتاحه + القديم احتياطاً)
+async function loadPeriodsSmart(){
+  const cached = await idbGet("baro_periods_v2");
+  if (cached != null){
+    fetchPeriodsSmart().then(fresh => { if (fresh != null) idbSet("baro_periods_v2", fresh); }).catch(()=>{});
+    return cached;
+  }
+  const fresh = await fetchPeriodsSmart();
+  if (fresh != null) idbSet("baro_periods_v2", fresh);
   return fresh;
 }
 // 🛡️ حماية: لا نحفظ أبداً مصفوفة فاضية فوق بيانات حرجة (يمنع مسح كل شي)
@@ -741,7 +772,7 @@ async function refreshAll(){
     // الصور والإعدادات تُقرأ من الكاش (ما تتغيّر كثير) وتُحدّث بالخلفية
     const [prods, pers, trans, counts, whc] = await Promise.all([
       fetchRemote("baro_products_v2"),
-      fetchRemote("baro_periods_v2"),
+      fetchPeriodsSmart(),
       fetchRemote("baro_transfers_v2"),
       fetchRemote("baro_branch_counts_v2"),
       fetchRemote("baro_wh_counts_v2")
@@ -1947,7 +1978,7 @@ function closeScanner(){
 async function init(){
   try {
     const [prods, pers, sett, imgs, trans, counts, whc] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
+      load("baro_products_v2"), loadPeriodsSmart(), load("baro_settings_v2"), load("baro_images_v2"), load("baro_transfers_v2"), load("baro_branch_counts_v2"), load("baro_wh_counts_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; SETTINGS = sett ?? {}; IMAGES = imgs ?? {}; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
     await loadRegions();
