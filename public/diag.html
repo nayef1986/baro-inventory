@@ -49,13 +49,29 @@ async function sbGet(key){
   const j=await res.json();const raw=j?.[0]?.value;
   return raw==null?null:(typeof raw==="string"?JSON.parse(raw):raw);
 }
+async function sbDelete(key){
+  const res=await fetch(`${U}/rest/v1/baro_store?key=eq.${key}`,{method:"DELETE",headers:{apikey:K,Authorization:`Bearer ${K}`}});
+  return res.ok;
+}
+// ✅ الفترات: الشكل الجديد أولاً (كل شهر بمفتاحه الخاص)، والقديم احتياطاً
+async function fetchPeriodsSmart(){
+  try {
+    const res=await fetch(`${U}/rest/v1/baro_store?key=like.baro_period_v1_*&select=key,value`,{headers:{apikey:K,Authorization:`Bearer ${K}`}});
+    const rows=await res.json();
+    if(Array.isArray(rows)&&rows.length>0){
+      return rows.map(r=>{try{return JSON.parse(r.value);}catch{return null;}}).filter(Boolean);
+    }
+  } catch(e){}
+  const old=await sbGet("baro_periods_v2");
+  return Array.isArray(old)?old:[];
+}
 async function sbSet(key,value){
   const res=await fetch(`${U}/rest/v1/baro_store`,{method:"POST",headers:{apikey:K,Authorization:`Bearer ${K}`,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify({key,value:JSON.stringify(value),updated_at:new Date().toISOString()})});
   return res.ok;
 }
 async function load(){
   if(!PRODUCTS)PRODUCTS=await sbGet("baro_products_v2")||[];
-  if(!PERIODS)PERIODS=await sbGet("baro_periods_v2")||[];
+  if(!PERIODS)PERIODS=await fetchPeriodsSmart();
 }
 function soldMap(){
   const m={};
@@ -125,8 +141,8 @@ function renderPeriods(){
 }
 window.delPeriod=async(id,label)=>{
   if(!confirm(`حذف "${label}"؟ نهائي.`))return;
+  const ok=await sbDelete("baro_period_v1_"+id);
   PERIODS=PERIODS.filter(p=>p.id!==id);
-  const ok=await sbSet("baro_periods_v2",PERIODS);
   alert(ok?`✅ حُذفت. الفترات: ${PERIODS.length}`:"❌ فشل");
   if(ok)renderPeriods();
 };
