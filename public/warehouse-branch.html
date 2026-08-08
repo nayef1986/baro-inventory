@@ -144,7 +144,8 @@ async function load(key){
 // نفس أسلوب load() لكن للفترات (شكل جديد أولاً، قديم احتياطاً)
 async function loadPeriodsSmart(){
   const cached = await idbGet("baro_periods_v2");
-  if (cached != null){
+  // ⚠️ لو الذاكرة المؤقتة فاضية (صفر فترات)، ما نثق فيها — نجيب الحقيقي فوراً
+  if (cached != null && Array.isArray(cached) && cached.length > 0){
     fetchPeriodsSmart().then(fresh => { if (fresh != null) idbSet("baro_periods_v2", fresh); }).catch(()=>{});
     return cached;
   }
