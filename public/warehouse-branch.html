@@ -116,6 +116,20 @@ async function fetchRemote(key){
   return raw;
 }
 
+// ✅ قراءة الفترات: الشكل الجديد أولاً (كل شهر بمفتاحه الخاص)، والقديم احتياطاً
+async function fetchPeriodsSmart(){
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=like.baro_period_v1_*&select=value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows.length > 0){
+      return rows.map(row => { try { return JSON.parse(row.value); } catch { return null; } }).filter(Boolean);
+    }
+  } catch(e){ /* نكمل للشكل القديم */ }
+  const old = await fetchRemote("baro_periods_v2");
+  return Array.isArray(old) ? old : [];
+}
+
 async function load(key){
   const cached = await idbGet(key);
   if (cached != null){
@@ -124,6 +138,18 @@ async function load(key){
   }
   const fresh = await fetchRemote(key);
   if (fresh != null) idbSet(key, fresh);
+  return fresh;
+}
+
+// نفس أسلوب load() لكن للفترات (شكل جديد أولاً، قديم احتياطاً)
+async function loadPeriodsSmart(){
+  const cached = await idbGet("baro_periods_v2");
+  if (cached != null){
+    fetchPeriodsSmart().then(fresh => { if (fresh != null) idbSet("baro_periods_v2", fresh); }).catch(()=>{});
+    return cached;
+  }
+  const fresh = await fetchPeriodsSmart();
+  if (fresh != null) idbSet("baro_periods_v2", fresh);
   return fresh;
 }
 async function save(key, value){
@@ -187,7 +213,7 @@ async function init(){
   }
   try {
     const [prods, pers, counts, trans] = await Promise.all([
-      load("baro_products_v2"), load("baro_periods_v2"), load("baro_branch_counts_v2"), load("baro_transfers_v2")
+      load("baro_products_v2"), loadPeriodsSmart(), load("baro_branch_counts_v2"), load("baro_transfers_v2")
     ]);
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; COUNTS = counts ?? {}; TRANSFERS = trans ?? [];
     _rcvMap = null; _soldMap = null; // نعيد بناء الخرائط بالبيانات الجديدة
