@@ -152,7 +152,25 @@ export async function loadProducts() {
 }
 
 export async function saveProducts(products) {
-  const ok = await save(KEYS.PRODUCTS, products);
+  // نجيب آخر نسخة من القاعدة قبل الحفظ وندمج التغييرات عليها،
+  // بدل استبدال كل شيء بالنسخة المحفوظة في الذاكرة (تحمي من تعارض تبويبات/أدوات مفتوحة بالتوازي،
+  // مثل تغييرات كمية الصندوق في المستودع اللي تنمسح لو صفحة ثانية حفظت نسخة قديمة فوقها)
+  let merged = products;
+  try {
+    const fresh = await loadProducts();
+    if (fresh && fresh.length) {
+      const freshMap = {};
+      fresh.forEach(p => { freshMap[p.barcode] = p; });
+      merged = products.map(p => {
+        const f = freshMap[p.barcode];
+        // نبدأ من أحدث نسخة محفوظة، ونطبّق فوقها تغييرات هذا الحفظ فقط —
+        // أي حقل ما نعرفه هنا (مثل unitQty من المستودع) يبقى كما هو من أحدث نسخة
+        return f ? { ...f, ...p } : p;
+      });
+    }
+  } catch (e) { /* لو فشل الجلب، نكمل بالنسخة الحالية بدون دمج (سلوك قديم كاحتياط) */ }
+
+  const ok = await save(KEYS.PRODUCTS, merged);
   if (ok) await save(KEYS.META, { version: VERSION, lastSave: new Date().toISOString() });
   return ok;
 }
