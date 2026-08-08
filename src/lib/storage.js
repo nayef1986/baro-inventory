@@ -23,6 +23,8 @@ const MAX_PERIODS = 52; // أقصى عدد فترات محفوظة
 
 // ─── Supabase REST ───────────────────────────────────────────
 
+let lastSbError = null; // آخر سبب فشل حقيقي من الخادم (للتشخيص فقط — ما يغيّر سلوك أي مكان ثاني)
+
 async function sbGet(key) {
   try {
     const res = await fetch(
@@ -38,6 +40,7 @@ async function sbGet(key) {
 
 async function sbSet(key, value) {
   try {
+    const body = JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() });
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
       method: "POST",
       headers: {
@@ -46,11 +49,22 @@ async function sbSet(key, value) {
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates",
       },
-      body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }),
+      body,
     });
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.text()).slice(0, 200); } catch {}
+      lastSbError = `HTTP ${res.status}${detail ? " — " + detail : ""} (حجم البيانات: ${(body.length/1024).toFixed(0)} كيلوبايت)`;
+    } else {
+      lastSbError = null;
+    }
     return res.ok;
-  } catch { return false; }
+  } catch (e) {
+    lastSbError = `خطأ شبكة: ${e?.message || e}`;
+    return false;
+  }
 }
+function getLastSbError(){ return lastSbError; }
 
 async function sbDelete(key) {
   try {
@@ -223,7 +237,7 @@ export async function addPeriod(period) {
   if (sameId !== -1) {
     periods[sameId] = period;
     const ok = await savePeriods(periods);
-    return { ok, reason: "تم التحديث" };
+    return { ok, reason: ok ? "تم التحديث" : (getLastSbError() || "فشل التحديث") };
   }
 
   // منع رفع نفس الأرقام بمعرّف مختلف (ملف مكرر فعلاً)
@@ -233,7 +247,7 @@ export async function addPeriod(period) {
 
   periods.push(period);
   const ok = await savePeriods(periods);
-  return { ok };
+  return { ok, reason: ok ? undefined : (getLastSbError() || "فشل الحفظ لسبب غير معروف") };
 }
 
 export async function deleteAllPeriods() {
