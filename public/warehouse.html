@@ -440,7 +440,13 @@ function computeNeeds(){
     const branchSales = SALES_MAP[p.barcode];
     if (!branchSales) return;
     const totalSold = Object.values(branchSales).reduce((s,q)=>s+q,0);
-    const closing = Math.max(0, bought-totalSold);
+    const calcClosing = Math.max(0, bought-totalSold);
+    // ✅ لو المنتج مجرود فعلياً بالمستودع، الجرد هو الأساس (مو الحساب)
+    const whCnt = WH_COUNTS[p.barcode];
+    const whCounted = !!whCnt;
+    const closing = whCounted ? Math.max(0, num(whCnt.count)) : calcClosing;
+    // الفرق: لو المحسوب أكبر من المجرود، يعني كمية راحت لفرع غير معروف
+    const closingDiff = whCounted ? (calcClosing - closing) : 0;
     if (closing <= 0) return;
     const unit = unitOf(p.barcode);
     const threshold = Math.ceil(unit/2); // العتبة = نص الوحدة (12→6, 24→12, 36→18)
@@ -485,7 +491,7 @@ function computeNeeds(){
     // هل أي فرع في هذا المنتج مجرود فعلياً؟
     const hasCount = branches.some(b=>b.counted);
     const hasStale = branches.some(b=>b.staleCount);
-    needs.push({ p, bought, totalSold, closing, branches, distributedBefore, lastDistDate, priorBranches, hasCount, hasStale });
+    needs.push({ p, bought, totalSold, closing, whCounted, closingDiff, branches, distributedBefore, lastDistDate, priorBranches, hasCount, hasStale });
   });
   // نجمّع الموزّع سابقاً فوق (عشان الموظف يلقاها بسرعة)
   // الترتيب: الموزّع سابقاً (يحتاج توزيع مرة أخرى) أولاً، ثم الأكثر متبقّي
@@ -959,9 +965,10 @@ function renderProd(n){
         <div class="pstats">
           <span class="ps-buy"><b>${fmtN(n.bought)}</b>مشترى</span>
           <span class="ps-sold"><b>${fmtN(n.totalSold)}</b>اتباع</span>
-          <span class="ps-left"><b>${fmtN(n.closing)}</b>باقي</span>
+          <span class="ps-left"><b>${fmtN(n.closing)}</b>باقي${n.whCounted?' 📋':''}</span>
           <span class="ps-br" style="background:rgba(124,179,232,0.15);color:#7cb3e8;border-radius:7px;padding:2px 7px;font-weight:900"><b>${n.branches.length}</b> فرع يحتاج</span>
         </div>
+        ${n.whCounted && n.closingDiff > 0 ? `<div style="margin-top:5px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:5px 9px;font-size:11px;color:#fbbf24;font-weight:700">⚠️ فرق ${fmtN(n.closingDiff)} قطعة عن المحسوب — غالباً موجودة بأحد الفروع (غير معروف أي فرع)</div>` : ""}
       </div>
       <span class="arrow" onclick="toggleProd('${safeBc}')">${isOpen?'▲':'▼'}</span>
     </div>
