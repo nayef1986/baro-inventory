@@ -135,6 +135,7 @@
 let SALES_FILES = [];   // [{name, map:{bc:qty}}]
 let PURCH_FILES = [];   // [{name, map:{bc:qty}, noBarcode:[...]}]
 let PRICE_FILES = [];   // [{name, prices:{bc:{sell,cost,name}}}]
+let SMART_FILES = [];   // [{name, salesMap, purchMap, contOf, info}] — ملف شامل يفهم كل الأعمدة بأسمائها
 let RULES = { t1:85, t2:75, t3:50 };  // شرائح الخصم
 let DISC_MODE = "trend";  // trend = الحركة الشهرية | pct = نسبة البيع | fixed = أسعار موحّدة
 const FIXED_PRICES = [5, 10, 15, 20, 25, 30];  // الأسعار الموحّدة للتصفية
@@ -148,7 +149,7 @@ const STORE_KEY = "baro_analyzer_v1";
 
 async function saveToCloud(){
   try {
-    const payload = { salesFiles: SALES_FILES, purchFiles: PURCH_FILES, priceFiles: PRICE_FILES, rules: RULES };
+    const payload = { salesFiles: SALES_FILES, purchFiles: PURCH_FILES, priceFiles: PRICE_FILES, smartFiles: SMART_FILES, rules: RULES };
     await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
       method:"POST",
       headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
@@ -172,8 +173,9 @@ async function loadFromCloud(){
     SALES_FILES = raw.salesFiles || [];
     PURCH_FILES = raw.purchFiles || [];
     PRICE_FILES = raw.priceFiles || [];
+    SMART_FILES = raw.smartFiles || [];
     RULES = raw.rules || RULES;
-    if (SALES_FILES.length || PURCH_FILES.length || PRICE_FILES.length){ analyze(); }
+    if (SALES_FILES.length || PURCH_FILES.length || PRICE_FILES.length || SMART_FILES.length){ analyze(); }
   } catch(e){ /* أول مرة أو نت ضعيف */ }
 }
 
@@ -309,6 +311,71 @@ function classifyMonthly(m){
   if (lastHalf < firstHalf*0.5 && firstHalf>3) return { code:"declining", label:"يضعف شهرياً — راقبه أو خصم خفيف", disc:50 };
   if (lastHalf >= firstHalf) return { code:"stable", label:"مستقر/صاعد — سليم", disc:0 };
   return { code:"normal", label:"عادي", disc:0 };
+}
+
+// ══ الملف الشامل: يفهم الأعمدة بأسمائها (مو بترتيبها)، ويوزّع كل شي لمكانه ══
+// يقبل ملف فيه: باركود، اسم، سعر بيع، تكلفة، مشتريات، مبيعات، متبقي، كونتينر — بأي ترتيب
+function parseSmartFile(rows){
+  if (!rows || rows.length < 2) return null;
+  const header = rows[0].map(h => String(h||"").trim().toLowerCase());
+  const findCol = (...names) => {
+    for (const n of names){
+      const i = header.findIndex(h => h === n.toLowerCase());
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+  const bcCol    = findCol("default_code","الباركود","barcode","باركود");
+  const idCol    = findCol("id");
+  const nameCol  = findCol("name","اسم الصنف","اسم","الاسم");
+  const sellCol  = findCol("list_price","سعر البيع","بيع","سعر بيع");
+  const costCol  = findCol("التكلفة","cost","تكلفة");
+  const purchCol = findCol("مشتريات","purchases","المشتريات");
+  const soldCol  = findCol("qty_available","المبيعات","مبيعات");
+  const remCol   = findCol("virtual_available","المتبقي","متبقي");
+  const contCol  = findCol("categ_id","الفئة/الكونتينر","الكونتينر","الفئة");
+
+  if (bcCol === -1) return null; // بدون عمود باركود ما نقدر نكمل
+
+  const salesMap = {}, purchMap = {}, contOf = {}, info = {};
+  for (let i=1; i<rows.length; i++){
+    const row = rows[i];
+    if (!row) continue;
+    const bc = String(row[bcCol]||"").trim();
+    if (!bc) continue;
+    const sold = soldCol>=0 ? Math.abs(num(row[soldCol])) : 0;
+    // المشتريات: من عمودها مباشرة، وإلا نحسبها (متبقي + مبيعات) لو الاثنين متوفرين
+    let bought = purchCol>=0 ? num(row[purchCol]) : 0;
+    if (bought <= 0 && remCol>=0 && soldCol>=0) bought = num(row[remCol]) + sold;
+    const sell = sellCol>=0 ? num(row[sellCol]) : 0;
+    const cost = costCol>=0 ? num(row[costCol]) : 0;
+    const name = nameCol>=0 ? String(row[nameCol]||"").trim() : "";
+    const id = idCol>=0 ? String(row[idCol]||"").trim() : "";
+    const contRaw = contCol>=0 ? String(row[contCol]||"").trim() : "";
+    const cont = contRaw ? containerCode(contRaw) : "";
+
+    if (sold > 0) salesMap[bc] = (salesMap[bc]||0) + sold;
+    if (bought > 0){
+      purchMap[bc] = (purchMap[bc]||0) + bought;
+      if (!contOf[bc]) contOf[bc] = cont || "بدون كونتينر";
+      if (!info[bc]) info[bc] = { name, cost, sell, id };
+    }
+  }
+  return { salesMap, purchMap, contOf, info };
+}
+
+async function onSmartFiles(files){
+  for (const f of files){
+    try {
+      const rows = await readFile(f);
+      const parsed = parseSmartFile(rows);
+      if (!parsed){ toast("الملف "+f.name+" ما فيه عمود باركود مفهوم"); continue; }
+      SMART_FILES.push({ name: f.name, ...parsed });
+    } catch(e){ toast("تعذّر قراءة "+f.name); }
+  }
+  RESULT = null;
+  render();
+  if (SMART_FILES.length) saveToCloud();
 }
 
 function parseSales(rows){
@@ -520,10 +587,11 @@ async function onPurchFiles(files){
 
 // ══ التجميع والتحليل ══
 function analyze(){
-  if (SALES_FILES.length === 0){ toast("ارفع ملف مبيعات أولاً"); return; }
+  if (SALES_FILES.length === 0 && SMART_FILES.length === 0){ toast("ارفع ملف مبيعات أولاً"); return; }
   // اجمع المبيعات
   const sales = {};
   SALES_FILES.forEach(f => Object.entries(f.map).forEach(([bc,q]) => sales[bc] = (sales[bc]||0) + q));
+  SMART_FILES.forEach(f => Object.entries(f.salesMap||{}).forEach(([bc,q]) => sales[bc] = (sales[bc]||0) + q));
   // اجمع المشتريات + الكونتينر
   const purch = {};
   const contMap = {};   // bc -> كود الكونتينر
@@ -535,6 +603,11 @@ function analyze(){
     Object.entries(f.contOf||{}).forEach(([bc,c]) => { if (!contMap[bc]) contMap[bc] = c; });
     Object.entries(f.info||{}).forEach(([bc,d]) => { if (!infoMap[bc]) infoMap[bc] = d; });
     NO_BC.push(...f.noBarcode);
+  });
+  SMART_FILES.forEach(f => {
+    Object.entries(f.purchMap||{}).forEach(([bc,q]) => { purch[bc] = (purch[bc]||0) + q; purchCount[bc] = (purchCount[bc]||0) + 1; });
+    Object.entries(f.contOf||{}).forEach(([bc,c]) => { if (!contMap[bc]) contMap[bc] = c; });
+    Object.entries(f.info||{}).forEach(([bc,d]) => { if (!infoMap[bc]) infoMap[bc] = d; });
   });
   const hasPurch = Object.keys(purch).length > 0;
 
@@ -574,6 +647,7 @@ function analyze(){
     const prodName = pr.name || inf.name || "";
     return {
       bc, sold, bought, remaining, soldPct,
+      id: inf.id || "",
       factory: factoryCode(bc), cont: contMap[bc] || "بدون كونتينر",
       purchName: prodName, salesName: salesNames[bc] || "",
       monthly: monthlyMap[bc] || null,
@@ -651,7 +725,9 @@ function analyze(){
 function fileList(arr, kind){
   if (arr.length === 0) return "";
   return `<div class="files">` + arr.map((f,i) => {
-    const cnt = kind==='price' ? Object.keys(f.prices||{}).length : Object.keys(f.map||{}).length;
+    const cnt = kind==='price' ? Object.keys(f.prices||{}).length
+              : kind==='smart' ? new Set([...Object.keys(f.purchMap||{}), ...Object.keys(f.salesMap||{})]).size
+              : Object.keys(f.map||{}).length;
     return `<div class="file">
        <span class="nm">📄 ${f.name}</span>
        <span style="display:flex;align-items:center">
@@ -725,6 +801,18 @@ function render(){
   // شاشة الرفع (ما فيه نتيجة)
   if (!RESULT){
     app.innerHTML = `
+      <div class="drop ${SMART_FILES.length?'has':''}" style="border-color:#a855f7">
+        <input type="file" id="smartInput" accept=".xlsx,.xls" multiple style="display:none">
+        <label for="smartInput" style="cursor:pointer;display:block">
+          <div class="ic">🧠</div>
+          <div class="t" style="color:#c084fc">ملف شامل (يفهم كل شي تلقائياً)</div>
+          <div class="d">${SMART_FILES.length? SMART_FILES.length+' ملف · أضف المزيد' : 'ملف فيه: باركود، اسم، بيع، تكلفة، مشتريات، مبيعات، كونتينر — بأي ترتيب'}</div>
+        </label>
+      </div>
+      ${fileList(SMART_FILES,'smart')}
+
+      <div style="text-align:center;color:#475569;font-size:11px;margin:10px 0">— أو ارفع كل ملف لخانته لحاله —</div>
+
       <div class="drop has" style="${SALES_FILES.length?'':'border-style:dashed'}">
         <input type="file" id="salesInput" accept=".xlsx,.xls" multiple style="display:none">
         <label for="salesInput" style="cursor:pointer;display:block">
@@ -755,12 +843,13 @@ function render(){
       </div>
       ${fileList(PURCH_FILES,'purch')}
 
-      <button class="btn go" onclick="analyze()" style="width:100%;margin-top:6px" ${SALES_FILES.length?'':'disabled'}>
+      <button class="btn go" onclick="analyze()" style="width:100%;margin-top:6px" ${(SALES_FILES.length||SMART_FILES.length)?'':'disabled'}>
         🔍 حلّل واعرض النتائج
       </button>
 
       ${SALES_FILES.length===0?`<div class="empty"><div class="ic">📊</div><div style="font-size:13px">ارفع ملفات فواتيرك القديمة<br>والنظام يجمّع ويرتّب ويقترح التخفيض</div></div>`:''}
     `;
+    $("smartInput").onchange = e => onSmartFiles([...e.target.files]);
     $("salesInput").onchange = e => onSalesFiles([...e.target.files]);
     $("priceInput").onchange = e => onPriceFiles([...e.target.files]);
     $("purchInput").onchange = e => onPurchFiles([...e.target.files]);
@@ -878,9 +967,10 @@ function render(){
 function removeFile(kind, i){
   if (kind==='sales') SALES_FILES.splice(i,1);
   else if (kind==='price') PRICE_FILES.splice(i,1);
+  else if (kind==='smart') SMART_FILES.splice(i,1);
   else PURCH_FILES.splice(i,1);
   RESULT = null; render();
-  if (SALES_FILES.length || PURCH_FILES.length || PRICE_FILES.length) saveToCloud(); else clearCloud();
+  if (SALES_FILES.length || PURCH_FILES.length || PRICE_FILES.length || SMART_FILES.length) saveToCloud(); else clearCloud();
 }
 function setRule(k,v){ RULES[k]=Math.max(0,Math.min(95,num(v))); if(RESULT) analyze(); }
 function setDiscMode(m){ DISC_MODE=m; if(RESULT) analyze(); }
@@ -930,7 +1020,7 @@ function printGroup(key, mode){
 }
 function resetAll(){
   if (!confirm("مسح كل الملفات والبيانات من النظام؟ (يظهر للكل)")) return;
-  SALES_FILES=[]; PURCH_FILES=[]; PRICE_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; OPEN_GROUPS={};
+  SALES_FILES=[]; PURCH_FILES=[]; PRICE_FILES=[]; SMART_FILES=[]; RESULT=null; NO_BC=[]; SEARCH=""; OPEN_GROUPS={};
   clearCloud();
   toast("🗑️ مُسح الكل");
   render();
@@ -1028,6 +1118,7 @@ function exportExcel(list, fileName){
     const discPrice = it.newPrice != null ? it.newPrice : finalPrice(it.sell, it.cost, it.discount);
     const row = {
       "#": i+1,
+      "id": it.id || "",
       "الباركود": it.bc,
       "اسم المبيعات": it.salesName || "",
       "اسم المشتريات": it.purchName || "",
