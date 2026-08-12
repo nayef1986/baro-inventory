@@ -195,6 +195,17 @@ async function fetchRemote(key){
   }
 }
 
+// فحص خفيف: بس تاريخ آخر تحديث (بايتات قليلة)، بدل تحميل البيانات الكاملة كل مرة —
+// يوفّر Egress بشكل كبير، خصوصاً لبيانات الصور اللي تكون كبيرة نسبياً
+async function fetchUpdatedAt(key){
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=updated_at`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+    const j = await r.json();
+    return j?.[0]?.updated_at ?? null;
+  } catch { return null; }
+}
+
 // ✅ قراءة الفترات: الشكل الجديد أولاً (كل شهر بمفتاحه الخاص)،
 // ولو ما فيه شي (نظام قديم لسه ما تحدّث)، نرجع للشكل القديم (كل الشهور بمفتاح واحد)
 async function fetchPeriodsSmart(){
@@ -216,6 +227,27 @@ async function fetchPeriodsSmart(){
 
 // load: يرجع الكاش فوراً لو موجود، ويحدّثه من Supabase بالخلفية
 async function load(key) {
+  // الصور خاصة: فحص خفيف لآخر تحديث قبل أي تحميل كامل (يوفّر Egress)
+  if (key === "baro_images_v2") {
+    const cached = await idbGet(key);
+    const cachedAt = await idbGet(key+"_updated_at");
+    if (cached != null){
+      fetchUpdatedAt(key).then(remoteAt => {
+        if (remoteAt && remoteAt !== cachedAt){
+          fetchRemote(key).then(fresh => {
+            if (fresh != null) { idbSet(key, fresh); idbSet(key+"_updated_at", remoteAt); }
+          }).catch(()=>{});
+        }
+      }).catch(()=>{});
+      return cached;
+    }
+    const fresh = await fetchRemote(key);
+    if (fresh != null) {
+      idbSet(key, fresh);
+      fetchUpdatedAt(key).then(at => { if (at) idbSet(key+"_updated_at", at); }).catch(()=>{});
+    }
+    return fresh;
+  }
   const cached = await idbGet(key);
   if (cached != null){
     // حدّث بالخلفية (ما ننتظره)
