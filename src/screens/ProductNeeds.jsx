@@ -8,6 +8,12 @@ import {
 import { loadBranchCounts, loadTransfers } from "../lib/storage.js";
 import OfferBuilder from "./OfferBuilder.jsx";
 
+// آخر رقمين بنهاية كود الكونتينر = السنة (مثلاً BAR04YW25 → "25")
+function getContainerYear(c){
+  const m = String(c||"").match(/(\d{2})$/);
+  return m ? m[1] : "أخرى";
+}
+
 const MIN = 12;
 const toDozen = n => Math.ceil(n / MIN) * MIN;
 
@@ -1564,6 +1570,7 @@ function printBadReport(groups, contNames, images, brandName, onlyCont = null) {
 // ─── الشاشة الرئيسية: كونتينر → مصنع → منتجات ────────────────
 export default function ProductNeedsScreen({ products = [], periods = [], images = {}, settings = {}, onSaveSettings }) {
   const [container, setContainer] = useState(null);
+  const [year, setYear] = useState(null); // السنة المختارة (فوق الكونتينرات)
   const scrollPos = useRef(0);
   const saveScroll = () => { scrollPos.current = window.scrollY || document.documentElement.scrollTop || 0; };
   const restoreScroll = () => { requestAnimationFrame(()=>{ window.scrollTo(0, scrollPos.current); }); };
@@ -1614,6 +1621,11 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   };
 
   const containers = useMemo(() => allContainers(products), [products]);
+  const years = useMemo(() => {
+    const ys = [...new Set(containers.map(getContainerYear))];
+    const real = ys.filter(y => y !== "أخرى").sort().reverse();
+    return ys.includes("أخرى") ? [...real, "أخرى"] : real;
+  }, [containers]);
 
   const factories = useMemo(() => {
     if (!container) return [];
@@ -2150,18 +2162,38 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           <button onClick={()=>setShowCats(true)} className="bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ الفئات</button>
         </div>
       </div>
-      <div className="space-y-2">
-        {containers.map(c => {
-          const count = products.filter(p=>p.container===c).length;
-          return (
-            <div key={c} onClick={()=>setContainer(c)} className="bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer flex items-center justify-between">
-              <div className="font-black text-slate-100">📦 {c}</div>
-              <div className="text-xs text-slate-500">{count} منتج ←</div>
-            </div>
-          );
-        })}
-        {containers.length === 0 && <div className="text-center text-slate-500 py-12">لا توجد كونتينرات</div>}
-      </div>
+
+      {year === null ? (
+        <div className="space-y-2">
+          <div className="text-sm font-bold text-slate-300 mb-1">📅 اختر السنة</div>
+          <div className="grid grid-cols-3 gap-2">
+            {years.map(y => {
+              const count = containers.filter(c => getContainerYear(c) === y).length;
+              return (
+                <button key={y} onClick={()=>setYear(y)} className="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col items-center gap-1">
+                  <div className="font-black text-2xl text-amber-400">{y}</div>
+                  <div className="text-[11px] text-slate-500">{count} كونتينر</div>
+                </button>
+              );
+            })}
+            {years.length === 0 && <div className="col-span-3 text-center text-slate-500 py-12">لا توجد كونتينرات</div>}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <button onClick={()=>setYear(null)} className="text-blue-400 font-bold text-sm">← رجوع للسنوات</button>
+          <div className="text-sm font-bold text-slate-300">📅 سنة {year}</div>
+          {containers.filter(c => getContainerYear(c) === year).map(c => {
+            const count = products.filter(p=>p.container===c).length;
+            return (
+              <div key={c} onClick={()=>setContainer(c)} className="bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer flex items-center justify-between">
+                <div className="font-black text-slate-100">📦 {c}</div>
+                <div className="text-xs text-slate-500">{count} منتج ←</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
