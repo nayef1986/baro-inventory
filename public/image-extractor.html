@@ -57,81 +57,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const TABLE = "baro_store";
 const IMAGES_KEY = "baro_images_v2";
 const PRODUCTS_KEY = "baro_products_v2";
-
-// ═══ جوجل درايف: منطقة حفظ الصور ═══
-// ⚠️ هذا المفتاح مكشوف بالكود (بطلب صريح من صاحب المشروع) — أي شخص يشوف مصدر الصفحة يقدر يستخدمه
-const GOOGLE_SERVICE_ACCOUNT = {
-  "client_email": "baro-uploader@baro-uploader.iam.gserviceaccount.com",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCpl/qkwXOmxCBf\nfmOEgE9hA5bm01wF/MVe8aAi6HwOTuytgszji/cgISmmyXTjFg0qjrgdshCXymyq\nD05lu8A0TIuQ2DAgQ0Yo66OCAwv/5/ammaLs6Uw3F8Sv08QKI9qMj890tSGC0kJl\niV+0mBR+Jeo8L5T32f6xy1Bg8rppBMuU3+Sthm8tYic7laEdhcbxrce4jW80nJ7K\nTQm1XPkiyu++5R5Z282w8kTuL//GcvjtFdVou3hePUTBu+fE30r3E5VBqG4K/40E\nrXXy96Ax8cmlBYpqjPWKdLZGAzMlCa2IxkiV0qGKD8uvPiHXvWnJbgw47I/2CppO\nU85J3YkdAgMBAAECggEAN8kXt9kwhzMtaOwEpUGlmsZY/W2Z8BhA/iWh5MmvgO9i\nOAL2DYVtUULHVicfTVFkHFMc6hu4DI4X52qogZtcMnfZUthiIEKw0eYM/0esS03M\nmumfp6loGhk16BZS/njju2fUuFGah9NM5uRkuF1sJECph4mpSUwKVQaJVpKRUdiq\nOGluIFzWb8Owd1Pqt47x0iZgSdiNJoGboOiXS3WCbxUerD9AhBSuSGDoN1hiPpre\nWgQcDukUaBbjufYvX7+WtcDHNH6QFr/lS+Rp8w1g3TIf6itiCcX4aYRozdvi2usc\nqNkH3mjwPyUdrhP/c9L/CFhaHHNCgt7HQa/sF0bIWwKBgQDaiqrp7wEKCwDgfZP4\nByr93D+vP1LEpphvzUaDtjxhhmskwRyYbRnIsoNKWjyY7n/hk6H4KBjS2wqIegVC\nDezcimFJX5qK8sfqtxJZzjyAAFxvmffL4dXuqYR6m0m739JdPZdmty3UgTYF4W2r\nEJ+SutejgDsVhJsQ7kPodvSFqwKBgQDGqYjy3I3OGqRMHZRiW9u9akm8Aq5HByJy\nKQzcxKl5I0/IOFW+/LvQ+s8vTQfiqqTvWuVZUY5OdAk0Ps7f7YCPdRem4rE8U8QK\nQuXcQVWfkoPXJSVcktIWmgKF5Uv2RCpeZV8lhIBTBxCpeSvtMZKTPU/b4jv8P+OL\nSyLGqrhUVwKBgAcc3kUw3zLJeuTTkX5QFWkfwv7cK8B0v59b6gCdbMerzU7r7hdT\n7bPng3hnCXPcx1K7MFlYTL6IHIammgc1VtEyu8ncj7YYAsOz46gCm1t7J4cGVtdO\n6VyULdijtzmjJkCcoZHZQmeZMP3uAVjA+MCYzi3nHYUsxLM/Xfxx6rFzAoGAOmnD\nENX1BDMlOBRCeyFTXUCRaazIHa5lXHfhhlB1HF9bqB2YaM3bU7lLjjbyKJ3QXWi2\noyqt0zefNTN6lLE66fOd/r4NKxXeQL4m5Dp5uK/WAD6126B4EZk7QK+JRGIKqzLX\nZSquqLsdFRfB6L54wL54asj8plEK0PxIv22XQYUCgYEAxpJ5tPnccjBlk7gosash\nYYnUNuVwQJsV2WgQb0AoATI0W4HJtgcJd7vqlK16Pam5EtImmgMs+uOUU3y3UV7E\nO/amnOVeeae7yZth3hyyb4FFRP/ZNtBgIYy/sceMWXKr5f7eSTXZaYxDGFTPtP4E\nlFbhmhQ0zwyA97WYF65FOrI=\n-----END PRIVATE KEY-----\n"
-};
-// ⚠️ عبّي هذا بـID المجلد اللي شاركته مع الحساب أعلاه (الجزء اللي بعد /folders/ برابط الدرايف)
-const GOOGLE_DRIVE_FOLDER_ID = "1HkxY2nOyja2-0UIFjWXOghNiSFkdd2cr";
-
-// نحوّل نص PEM لمفتاح تشفير يفهمه المتصفح
-async function importGooglePrivateKey(pem){
-  const clean = pem.replace(/-----BEGIN PRIVATE KEY-----/,"").replace(/-----END PRIVATE KEY-----/,"").replace(/\s+/g,"");
-  const binary = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
-  return crypto.subtle.importKey("pkcs8", binary.buffer, { name:"RSASSA-PKCS1-v1_5", hash:"SHA-256" }, false, ["sign"]);
-}
-function base64url(input){
-  let b64;
-  if (typeof input === "string") b64 = btoa(unescape(encodeURIComponent(input)));
-  else b64 = btoa(String.fromCharCode(...new Uint8Array(input)));
-  return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-}
-// نبني ونوقّع JWT — بديل تسجيل الدخول اليدوي، يثبت هويتنا لجوجل تلقائياً
-async function buildGoogleJWT(sa){
-  const now = Math.floor(Date.now()/1000);
-  const header = { alg:"RS256", typ:"JWT" };
-  const claims = { iss: sa.client_email, scope:"https://www.googleapis.com/auth/drive.file",
-    aud:"https://oauth2.googleapis.com/token", exp: now+3600, iat: now };
-  const signInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(claims))}`;
-  const key = await importGooglePrivateKey(sa.private_key);
-  const sig = await crypto.subtle.sign({name:"RSASSA-PKCS1-v1_5"}, key, new TextEncoder().encode(signInput));
-  return `${signInput}.${base64url(sig)}`;
-}
-// نستبدل الـJWT بتوكن دخول فعلي صالح لمدة ساعة
-let _driveTokenCache = null, _driveTokenExpiry = 0;
-async function getGoogleAccessToken(){
-  if (_driveTokenCache && Date.now() < _driveTokenExpiry) return _driveTokenCache;
-  const jwt = await buildGoogleJWT(GOOGLE_SERVICE_ACCOUNT);
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt })
-  });
-  if (!res.ok) throw new Error("فشل الحصول على إذن دخول جوجل: " + (await res.text()).slice(0,150));
-  const data = await res.json();
-  _driveTokenCache = data.access_token;
-  _driveTokenExpiry = Date.now() + (data.expires_in-60)*1000; // نجدّده قبل ما ينتهي بدقيقة
-  return _driveTokenCache;
-}
-// نرفع صورة واحدة لمجلد الدرايف المحدّد
-async function driveUploadImage(accessToken, fileName, blob){
-  const boundary = "baro_boundary_7a8f3c";
-  const metadata = { name: fileName, parents: [GOOGLE_DRIVE_FOLDER_ID] };
-  const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${blob.type||"image/jpeg"}\r\n\r\n`;
-  const tail = `\r\n--${boundary}--`;
-  const body = new Blob([head, blob, tail]);
-  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-    method:"POST",
-    headers:{ Authorization:`Bearer ${accessToken}`, "Content-Type":`multipart/related; boundary=${boundary}` },
-    body
-  });
-  if (!res.ok) throw new Error("فشل رفع الصورة: " + (await res.text()).slice(0,150));
-  return res.json(); // {id, ...}
-}
-// نخلي الصورة قابلة للعرض من أي حد عنده الرابط (مو تعديل، عرض بس)
-async function driveMakePublic(accessToken, fileId){
-  await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-    method:"POST",
-    headers:{ Authorization:`Bearer ${accessToken}`, "Content-Type":"application/json" },
-    body: JSON.stringify({ role:"reader", type:"anyone" })
-  });
-}
-// رابط مباشر للصورة يشتغل داخل <img> (رابط الدرايف العادي ما يشتغل مباشرة)
-function driveDirectImageUrl(fileId){
-  return `https://lh3.googleusercontent.com/d/${fileId}`;
-}
+const BUCKET = "product-images"; // منطقة حفظ الصور بـSupabase Storage
 
 // ═══ قراءة فاتورة المشتريات — نفس منطق parsePurchaseFile بالنظام الأساسي بالضبط ═══
 function cleanBarcode(raw){
@@ -404,16 +330,7 @@ function dataUrlToBlob(dataUrl){
 
 $("saveBtn").onclick = async () => {
   if(matched.length===0) return;
-  if (GOOGLE_DRIVE_FOLDER_ID === "ضع_ID_المجلد_هنا"){
-    log("⚠️ لازم تحط ID المجلد أول بأعلى الكود (GOOGLE_DRIVE_FOLDER_ID)","err");
-    return;
-  }
-  log(`جاري تسجيل الدخول لجوجل درايف…`,"info");
-  let accessToken;
-  try { accessToken = await getGoogleAccessToken(); }
-  catch(e){ log("فشل الاتصال بجوجل: "+e.message,"err"); return; }
-
-  log(`جاري رفع ${matched.length} صورة لجوجل درايف…`,"info");
+  log(`جاري رفع ${matched.length} صورة لـ Supabase Storage…`,"info");
   let done=0, failed=0;
   const urls = {}; // باركود → رابط الصورة
 
@@ -421,10 +338,15 @@ $("saveBtn").onclick = async () => {
     try {
       const blob = dataUrlToBlob(m.img);
       const safeName = m.barcode.replace(/[^A-Za-z0-9]/g,"_") + ".jpg";
-      const file = await driveUploadImage(accessToken, safeName, blob);
-      await driveMakePublic(accessToken, file.id);
-      urls[m.barcode] = driveDirectImageUrl(file.id);
-      done++;
+      const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${safeName}`, {
+        method:"POST",
+        headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"image/jpeg", "x-upsert":"true" },
+        body: blob,
+      });
+      if(up.ok || up.status===200){
+        urls[m.barcode] = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${safeName}`;
+        done++;
+      } else { failed++; }
     } catch { failed++; }
     if((done+failed)%25===0) log(`تقدّم: ${done+failed}/${matched.length}`,"info");
   }
@@ -443,7 +365,7 @@ $("saveBtn").onclick = async () => {
       headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
       body: JSON.stringify({ key:IMAGES_KEY, value:JSON.stringify(images), updated_at:new Date().toISOString() })
     });
-    if(save.ok) log(`✅ الصور: ${done} صورة في جوجل درايف + روابطها بالنظام`,"ok");
+    if(save.ok) log(`✅ الصور: ${done} صورة في Supabase Storage + روابطها بالنظام`,"ok");
     else { log("رُفعت الصور بس فشل حفظ الروابط","err"); return; }
   } catch(err){ log("خطأ بحفظ الروابط: "+err.message,"err"); return; }
 
