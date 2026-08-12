@@ -38,6 +38,20 @@ async function sbGet(key) {
   } catch { return null; }
 }
 
+// فحص خفيف جداً: يجيب بس تاريخ آخر تحديث (بايتات قليلة)، بدون تحميل البيانات الكاملة —
+// يستخدم قبل أي جلب كامل لبيانات كبيرة (زي الصور)، يوفّر Egress بشكل كبير
+async function sbGetUpdatedAt(key) {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}&select=updated_at`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return rows?.[0]?.updated_at ?? null;
+  } catch { return null; }
+}
+
 async function sbSet(key, value) {
   try {
     const body = JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() });
@@ -114,16 +128,28 @@ async function idbSet(key, val) {
 }
 
 async function load(key) {
-  // الصور: كاش IndexedDB أولاً (فوري + بدون egress)، ثم تحديث بالخلفية
+  // الصور: كاش IndexedDB أولاً (فوري)، ثم فحص خفيف لتاريخ آخر تحديث —
+  // ما نجيب البيانات الكاملة إلا لو فعلاً تغيّرت (يوفّر Egress بشكل كبير)
   if (key === KEYS.IMAGES) {
     const cached = await idbGet("images");
+    const cachedAt = await idbGet("images_updated_at");
     if (cached) {
-      // حدّث بالخلفية بدون انتظار (عشان أي صورة جديدة توصل لاحقاً)
-      sbGet(key).then(fresh => { if (fresh) idbSet("images", fresh); }).catch(()=>{});
+      // فحص خفيف بالخلفية (بايتات قليلة)، مو تحميل كامل زي قبل
+      sbGetUpdatedAt(key).then(remoteAt => {
+        if (remoteAt && remoteAt !== cachedAt) {
+          sbGet(key).then(fresh => {
+            if (fresh) { idbSet("images", fresh); idbSet("images_updated_at", remoteAt); }
+          }).catch(()=>{});
+        }
+      }).catch(()=>{});
       return cached;
     }
     const remote = await sbGet(key);
-    if (remote !== null) { idbSet("images", remote); return remote; }
+    if (remote !== null) {
+      idbSet("images", remote);
+      sbGetUpdatedAt(key).then(at => { if (at) idbSet("images_updated_at", at); }).catch(()=>{});
+      return remote;
+    }
     return {};
   }
   const remote = await sbGet(key);
@@ -137,7 +163,9 @@ async function load(key) {
 async function save(key, value) {
   if (key === KEYS.IMAGES) {
     idbSet("images", value); // حدّث كاش الصور
-    return await sbSet(key, value);
+    const ok = await sbSet(key, value);
+    if (ok) sbGetUpdatedAt(key).then(at => { if (at) idbSet("images_updated_at", at); }).catch(()=>{});
+    return ok;
   }
   cacheSet(key, value);
   return await sbSet(key, value);
