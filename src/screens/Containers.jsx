@@ -17,6 +17,12 @@ import {
 } from "../lib/calc.js";
 import { exportContainerReport, printContainerReport } from "../lib/exporters.js";
 
+// آخر رقمين بنهاية كود الكونتينر = السنة (مثلاً BAR04YW25 → "25")
+function getContainerYear(c){
+  const m = String(c||"").match(/(\d{2})$/);
+  return m ? m[1] : "أخرى";
+}
+
 // ─── نافذة تعديل منتج ────────────────────────────────────────
 
 const ProductEditModal = memo(({ product, products, container, onSave, onClose }) => {
@@ -864,6 +870,8 @@ const ContainerDetail = memo(({ container, products, periods, images, onSaveImag
 // ─── قائمة الكونتينرات ───────────────────────────────────────
 
 const ContainerList = memo(({ products, periods, onSelect }) => {
+  const [year, setYear] = useState(null); // السنة المختارة (فوق الكونتينرات)
+
   const summaries = useMemo(() =>
     allContainers(products)
       .map(c => containerSummary(products, periods, c))
@@ -871,29 +879,51 @@ const ContainerList = memo(({ products, periods, onSelect }) => {
     [products, periods]
   );
 
+  const years = useMemo(() => {
+    const ys = [...new Set(summaries.map(s => getContainerYear(s.container)))];
+    const real = ys.filter(y => y !== "أخرى").sort().reverse();
+    return ys.includes("أخرى") ? [...real, "أخرى"] : real;
+  }, [summaries]);
+
+  const effYear = (year && years.includes(year)) ? year : years[0]; // لو ما فيه اختيار أو صار غير صالح، نمشي بأحدث سنة
+  const filtered = effYear ? summaries.filter(s => getContainerYear(s.container) === effYear) : summaries;
+
   return (
-    <div className="space-y-2">
-      {summaries.map(s => (
-        <Card key={s.container} onClick={() => onSelect(s.container)} className="!p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <div className="font-black text-slate-100">{s.container}</div>
-              <div className="text-xs text-slate-500">{s.productCount} منتج</div>
+    <div className="space-y-3">
+      {years.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {years.map(y => (
+            <button key={y} onClick={() => setYear(y)}
+              className={`rounded-xl p-2.5 flex flex-col items-center gap-0.5 border ${effYear===y ? "bg-amber-500/15 border-amber-500 text-amber-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>
+              <div className="font-black text-lg">{y}</div>
+              <div className="text-[10px] opacity-70">{summaries.filter(s=>getContainerYear(s.container)===y).length} كونتينر</div>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="space-y-2">
+        {filtered.map(s => (
+          <Card key={s.container} onClick={() => onSelect(s.container)} className="!p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="font-black text-slate-100">{s.container}</div>
+                <div className="text-xs text-slate-500">{s.productCount} منتج</div>
+              </div>
+              <div className={`text-2xl font-black tabular-nums ${s.soldPct>=70?"text-orange-400":s.soldPct>=40?"text-amber-400":"text-blue-400"}`}>
+                {fmtPct(s.soldPct)}
+              </div>
             </div>
-            <div className={`text-2xl font-black tabular-nums ${s.soldPct>=70?"text-orange-400":s.soldPct>=40?"text-amber-400":"text-blue-400"}`}>
-              {fmtPct(s.soldPct)}
+            <ProgressBar value={s.totalSold} max={s.totalBought}
+              color={s.soldPct>=70?"bg-orange-500":s.soldPct>=40?"bg-amber-500":"bg-blue-500"} />
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <StatPill label="الإيرادات" value={fmtM(s.totalRevenue)} color="text-emerald-400" />
+              <StatPill label="المباع"    value={fmtN(s.totalSold)}    color="text-amber-400" />
+              <StatPill label="الربح"     value={fmtM(s.totalProfit)}  color="text-emerald-300" />
             </div>
-          </div>
-          <ProgressBar value={s.totalSold} max={s.totalBought}
-            color={s.soldPct>=70?"bg-orange-500":s.soldPct>=40?"bg-amber-500":"bg-blue-500"} />
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            <StatPill label="الإيرادات" value={fmtM(s.totalRevenue)} color="text-emerald-400" />
-            <StatPill label="المباع"    value={fmtN(s.totalSold)}    color="text-amber-400" />
-            <StatPill label="الربح"     value={fmtM(s.totalProfit)}  color="text-emerald-300" />
-          </div>
-        </Card>
-      ))}
-      {summaries.length === 0 && <EmptyState icon="📦" title="لا توجد كونتينرات" subtitle="ارفع فاتورة شراء أولاً" />}
+          </Card>
+        ))}
+        {summaries.length === 0 && <EmptyState icon="📦" title="لا توجد كونتينرات" subtitle="ارفع فاتورة شراء أولاً" />}
+      </div>
     </div>
   );
 });
