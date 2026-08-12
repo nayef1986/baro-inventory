@@ -83,7 +83,11 @@
 
 <div id="previewArea"></div>
 
+<h3 class="sec" id="fixTitle" style="display:none">⚠️ فواتير بدون كونتينر (تحتاج تصحيح)</h3>
+<div id="fixList"></div>
+
 <h3 class="sec" id="contsTitle" style="display:none">الكونتينرات المرفوعة</h3>
+<div id="yearsList"></div>
 <div id="contsList"></div>
 
 <div class="toast" id="toast"></div>
@@ -96,6 +100,13 @@ const PKEY = "baro_products_v2";
 
 let PRODUCTS = [];
 let LOADED = false;
+let selectedYear = null; // السنة المختارة (فوق الكونتينرات)
+
+// آخر رقمين بنهاية كود الكونتينر = السنة (مثلاً BAR04YW25 → "25")
+function getContainerYear(c){
+  const m = String(c||"").match(/(\d{2})$/);
+  return m ? m[1] : "أخرى";
+}
 let pending = null; // الفاتورة المعلّقة للمراجعة
 
 // ─── Supabase ───
@@ -310,7 +321,7 @@ window.confirmSave = async ()=>{
     lg(`✅ تم! إجمالي المنتجات الآن: ${updated.length}`,"ok");
     toast("✅ اعتُمدت الفاتورة");
     pending = null;
-    setTimeout(()=>{ renderPreview(); refreshStats(); renderConts(); }, 800);
+    setTimeout(()=>{ renderPreview(); refreshStats(); renderConts(); renderFixList(); }, 800);
   } catch(e){
     lg("❌ خطأ: "+e.message,"err");
     btn.disabled = false;
@@ -328,6 +339,58 @@ function refreshStats(){
 }
 
 // ─── قائمة الكونتينرات ───
+// فواتير محفوظة بكونتينر فاضي (بسبب مشكلة كشف قديمة) — نجمّعها حسب تاريخ الرفع
+// عشان تقدر تحدد اسم الكونتينر الصحيح لكل دفعة يدوياً
+function renderFixList(){
+  const groups = {};
+  PRODUCTS.forEach(p => (p.purchases||[]).forEach(x => {
+    if (x.container) return; // بس اللي بلا كونتينر
+    const d = x.date || "بدون تاريخ";
+    if (!groups[d]) groups[d] = { count:0, units:0 };
+    groups[d].count++;
+    groups[d].units += num(x.qty);
+  }));
+  const entries = Object.entries(groups);
+  document.getElementById("fixTitle").style.display = entries.length ? "block" : "none";
+  if (!entries.length){ document.getElementById("fixList").innerHTML=""; return; }
+  let h = "";
+  entries.forEach(([date,d])=>{
+    h += `<div class="list-item">
+      <div class="ic">⚠️</div>
+      <div class="info">
+        <div class="t">فاتورة بتاريخ ${date}</div>
+        <div class="s">${d.count} منتج · ${d.units.toLocaleString()} قطعة — بدون كونتينر</div>
+      </div>
+      <button class="del" style="background:rgba(34,197,94,0.15);color:#4ade80;border-color:rgba(34,197,94,0.3)" onclick="fixCont('${date}')">✏️ صحّح</button>
+    </div>`;
+  });
+  document.getElementById("fixList").innerHTML = h;
+}
+
+// نحدّث كونتينر كل فاتورة بلا كونتينر من نفس تاريخ الرفع (دفعة وحدة)
+window.fixCont = async (date) => {
+  const newName = prompt(`اكتب اسم الكونتينر الصحيح لهذي الفاتورة (بتاريخ ${date}):`);
+  if (!newName || !newName.trim()) return;
+  const container = newName.trim().toUpperCase();
+  if (!LOADED){ toast("انتظر التحميل"); return; }
+  try {
+    const fresh = await sbGet(PKEY);
+    const base = Array.isArray(fresh) ? fresh : PRODUCTS;
+    const result = base.map(p => {
+      const purchases = (p.purchases||[]).map(x => {
+        if (!x.container && (x.date||"بدون تاريخ")===date) return { ...x, container };
+        return x;
+      });
+      return { ...p, purchases };
+    });
+    const ok = await sbSet(PKEY, result);
+    if (ok){ PRODUCTS = result; toast("✅ تم التصحيح"); refreshStats(); renderConts(); renderFixList(); }
+    else toast("فشل الحفظ");
+  } catch(e){ toast("خطأ: "+e.message); }
+};
+
+window.pickYear = (y) => { selectedYear = y; renderConts(); };
+
 function renderConts(){
   const conts = {};
   PRODUCTS.forEach(p=>(p.purchases||[]).forEach(x=>{
@@ -336,8 +399,30 @@ function renderConts(){
     conts[x.container].count++;
     conts[x.container].units += num(x.qty);
   }));
-  const entries = Object.entries(conts);
-  document.getElementById("contsTitle").style.display = entries.length ? "block":"none";
+  const allNames = Object.keys(conts);
+  document.getElementById("contsTitle").style.display = allNames.length ? "block":"none";
+
+  // أزرار السنوات
+  const allYears = [...new Set(allNames.map(getContainerYear))];
+  const realYears = allYears.filter(y=>y!=="أخرى").sort().reverse();
+  const years = allYears.includes("أخرى") ? [...realYears,"أخرى"] : realYears;
+  if (!years.length){ document.getElementById("yearsList").innerHTML=""; document.getElementById("contsList").innerHTML=""; return; }
+  let yh = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">`;
+  years.forEach(y=>{
+    const cnt = allNames.filter(n=>getContainerYear(n)===y).length;
+    const active = selectedYear===y;
+    yh += `<button onclick="pickYear('${y}')" style="flex:1;min-width:70px;padding:10px 6px;border-radius:12px;border:1px solid ${active?'#f59e0b':'#333'};background:${active?'rgba(245,158,11,0.15)':'#1a1a1a'};color:${active?'#f59e0b':'#999'};font-weight:900;cursor:pointer">
+      <div style="font-size:18px">${y}</div>
+      <div style="font-size:10px;opacity:0.7">${cnt} كونتينر</div>
+    </button>`;
+  });
+  yh += `</div>`;
+  document.getElementById("yearsList").innerHTML = yh;
+
+  // لو ما فيه سنة مختارة، أو السنة المختارة ما عادت موجودة (بعد حذف)، نختار الأحدث تلقائياً
+  if (selectedYear===null || !years.includes(selectedYear)) selectedYear = years[0];
+
+  const entries = Object.entries(conts).filter(([name]) => getContainerYear(name)===selectedYear);
   if(!entries.length){ document.getElementById("contsList").innerHTML=""; return; }
   let h = "";
   entries.forEach(([name,d])=>{
@@ -366,7 +451,7 @@ window.delCont = async (container)=>{
       return { ...p, purchases };
     }).filter(Boolean);
     const ok = await sbSet(PKEY, result);
-    if(ok){ PRODUCTS = result; toast("🗑️ حُذف الكونتينر"); refreshStats(); renderConts(); }
+    if(ok){ PRODUCTS = result; toast("🗑️ حُذف الكونتينر"); refreshStats(); renderConts(); renderFixList(); }
     else toast("فشل الحذف");
   } catch(e){ toast("خطأ: "+e.message); }
 };
@@ -379,6 +464,7 @@ async function init(){
     LOADED = true;
     refreshStats();
     renderConts();
+    renderFixList();
   } catch(e){
     document.getElementById("sProds").textContent = "!";
     toast("تعذّر الاتصال — حدّث الصفحة");
