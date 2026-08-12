@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>أداة استخراج صور المنتجات — البارو</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
   *{font-family:'Cairo',sans-serif;box-sizing:border-box;margin:0;padding:0}
@@ -31,7 +32,7 @@
 </head>
 <body>
 <h1>📷 أداة استخراج صور المنتجات</h1>
-<div class="sub">ترفع ملف الفاتورة بالصور · تستخرج وتربط بالنظام · ALBAROO</div>
+<div class="sub">ترفع ملف الفاتورة بالصور · تربط الصور وتسجّل المشتريات معاً · ALBAROO</div>
 
 <div class="card">
   <label class="drop">
@@ -47,7 +48,7 @@
 <div class="card" id="previewCard" style="display:none">
   <div style="font-weight:900;color:#fff;margin-bottom:10px">معاينة الربط (تأكد قبل الحفظ)</div>
   <div id="preview"></div>
-  <button class="btn btn2" id="saveBtn">💾 احفظ الكل في النظام</button>
+  <button class="btn btn2" id="saveBtn">💾 احفظ الصور + المشتريات في النظام</button>
 </div>
 
 <script>
@@ -55,8 +56,165 @@ const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
 const TABLE = "baro_store";
 const IMAGES_KEY = "baro_images_v2";
+const PRODUCTS_KEY = "baro_products_v2";
+
+// ═══ جوجل درايف: منطقة حفظ الصور ═══
+// ⚠️ هذا المفتاح مكشوف بالكود (بطلب صريح من صاحب المشروع) — أي شخص يشوف مصدر الصفحة يقدر يستخدمه
+const GOOGLE_SERVICE_ACCOUNT = {
+  "client_email": "baro-uploader@baro-uploader.iam.gserviceaccount.com",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCpl/qkwXOmxCBf\nfmOEgE9hA5bm01wF/MVe8aAi6HwOTuytgszji/cgISmmyXTjFg0qjrgdshCXymyq\nD05lu8A0TIuQ2DAgQ0Yo66OCAwv/5/ammaLs6Uw3F8Sv08QKI9qMj890tSGC0kJl\niV+0mBR+Jeo8L5T32f6xy1Bg8rppBMuU3+Sthm8tYic7laEdhcbxrce4jW80nJ7K\nTQm1XPkiyu++5R5Z282w8kTuL//GcvjtFdVou3hePUTBu+fE30r3E5VBqG4K/40E\nrXXy96Ax8cmlBYpqjPWKdLZGAzMlCa2IxkiV0qGKD8uvPiHXvWnJbgw47I/2CppO\nU85J3YkdAgMBAAECggEAN8kXt9kwhzMtaOwEpUGlmsZY/W2Z8BhA/iWh5MmvgO9i\nOAL2DYVtUULHVicfTVFkHFMc6hu4DI4X52qogZtcMnfZUthiIEKw0eYM/0esS03M\nmumfp6loGhk16BZS/njju2fUuFGah9NM5uRkuF1sJECph4mpSUwKVQaJVpKRUdiq\nOGluIFzWb8Owd1Pqt47x0iZgSdiNJoGboOiXS3WCbxUerD9AhBSuSGDoN1hiPpre\nWgQcDukUaBbjufYvX7+WtcDHNH6QFr/lS+Rp8w1g3TIf6itiCcX4aYRozdvi2usc\nqNkH3mjwPyUdrhP/c9L/CFhaHHNCgt7HQa/sF0bIWwKBgQDaiqrp7wEKCwDgfZP4\nByr93D+vP1LEpphvzUaDtjxhhmskwRyYbRnIsoNKWjyY7n/hk6H4KBjS2wqIegVC\nDezcimFJX5qK8sfqtxJZzjyAAFxvmffL4dXuqYR6m0m739JdPZdmty3UgTYF4W2r\nEJ+SutejgDsVhJsQ7kPodvSFqwKBgQDGqYjy3I3OGqRMHZRiW9u9akm8Aq5HByJy\nKQzcxKl5I0/IOFW+/LvQ+s8vTQfiqqTvWuVZUY5OdAk0Ps7f7YCPdRem4rE8U8QK\nQuXcQVWfkoPXJSVcktIWmgKF5Uv2RCpeZV8lhIBTBxCpeSvtMZKTPU/b4jv8P+OL\nSyLGqrhUVwKBgAcc3kUw3zLJeuTTkX5QFWkfwv7cK8B0v59b6gCdbMerzU7r7hdT\n7bPng3hnCXPcx1K7MFlYTL6IHIammgc1VtEyu8ncj7YYAsOz46gCm1t7J4cGVtdO\n6VyULdijtzmjJkCcoZHZQmeZMP3uAVjA+MCYzi3nHYUsxLM/Xfxx6rFzAoGAOmnD\nENX1BDMlOBRCeyFTXUCRaazIHa5lXHfhhlB1HF9bqB2YaM3bU7lLjjbyKJ3QXWi2\noyqt0zefNTN6lLE66fOd/r4NKxXeQL4m5Dp5uK/WAD6126B4EZk7QK+JRGIKqzLX\nZSquqLsdFRfB6L54wL54asj8plEK0PxIv22XQYUCgYEAxpJ5tPnccjBlk7gosash\nYYnUNuVwQJsV2WgQb0AoATI0W4HJtgcJd7vqlK16Pam5EtImmgMs+uOUU3y3UV7E\nO/amnOVeeae7yZth3hyyb4FFRP/ZNtBgIYy/sceMWXKr5f7eSTXZaYxDGFTPtP4E\nlFbhmhQ0zwyA97WYF65FOrI=\n-----END PRIVATE KEY-----\n"
+};
+// ⚠️ عبّي هذا بـID المجلد اللي شاركته مع الحساب أعلاه (الجزء اللي بعد /folders/ برابط الدرايف)
+const GOOGLE_DRIVE_FOLDER_ID = "1HkxY2nOyja2-0UIFjWXOghNiSFkdd2cr";
+
+// نحوّل نص PEM لمفتاح تشفير يفهمه المتصفح
+async function importGooglePrivateKey(pem){
+  const clean = pem.replace(/-----BEGIN PRIVATE KEY-----/,"").replace(/-----END PRIVATE KEY-----/,"").replace(/\s+/g,"");
+  const binary = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+  return crypto.subtle.importKey("pkcs8", binary.buffer, { name:"RSASSA-PKCS1-v1_5", hash:"SHA-256" }, false, ["sign"]);
+}
+function base64url(input){
+  let b64;
+  if (typeof input === "string") b64 = btoa(unescape(encodeURIComponent(input)));
+  else b64 = btoa(String.fromCharCode(...new Uint8Array(input)));
+  return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+// نبني ونوقّع JWT — بديل تسجيل الدخول اليدوي، يثبت هويتنا لجوجل تلقائياً
+async function buildGoogleJWT(sa){
+  const now = Math.floor(Date.now()/1000);
+  const header = { alg:"RS256", typ:"JWT" };
+  const claims = { iss: sa.client_email, scope:"https://www.googleapis.com/auth/drive.file",
+    aud:"https://oauth2.googleapis.com/token", exp: now+3600, iat: now };
+  const signInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(claims))}`;
+  const key = await importGooglePrivateKey(sa.private_key);
+  const sig = await crypto.subtle.sign({name:"RSASSA-PKCS1-v1_5"}, key, new TextEncoder().encode(signInput));
+  return `${signInput}.${base64url(sig)}`;
+}
+// نستبدل الـJWT بتوكن دخول فعلي صالح لمدة ساعة
+let _driveTokenCache = null, _driveTokenExpiry = 0;
+async function getGoogleAccessToken(){
+  if (_driveTokenCache && Date.now() < _driveTokenExpiry) return _driveTokenCache;
+  const jwt = await buildGoogleJWT(GOOGLE_SERVICE_ACCOUNT);
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt })
+  });
+  if (!res.ok) throw new Error("فشل الحصول على إذن دخول جوجل: " + (await res.text()).slice(0,150));
+  const data = await res.json();
+  _driveTokenCache = data.access_token;
+  _driveTokenExpiry = Date.now() + (data.expires_in-60)*1000; // نجدّده قبل ما ينتهي بدقيقة
+  return _driveTokenCache;
+}
+// نرفع صورة واحدة لمجلد الدرايف المحدّد
+async function driveUploadImage(accessToken, fileName, blob){
+  const boundary = "baro_boundary_7a8f3c";
+  const metadata = { name: fileName, parents: [GOOGLE_DRIVE_FOLDER_ID] };
+  const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${blob.type||"image/jpeg"}\r\n\r\n`;
+  const tail = `\r\n--${boundary}--`;
+  const body = new Blob([head, blob, tail]);
+  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    method:"POST",
+    headers:{ Authorization:`Bearer ${accessToken}`, "Content-Type":`multipart/related; boundary=${boundary}` },
+    body
+  });
+  if (!res.ok) throw new Error("فشل رفع الصورة: " + (await res.text()).slice(0,150));
+  return res.json(); // {id, ...}
+}
+// نخلي الصورة قابلة للعرض من أي حد عنده الرابط (مو تعديل، عرض بس)
+async function driveMakePublic(accessToken, fileId){
+  await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+    method:"POST",
+    headers:{ Authorization:`Bearer ${accessToken}`, "Content-Type":"application/json" },
+    body: JSON.stringify({ role:"reader", type:"anyone" })
+  });
+}
+// رابط مباشر للصورة يشتغل داخل <img> (رابط الدرايف العادي ما يشتغل مباشرة)
+function driveDirectImageUrl(fileId){
+  return `https://lh3.googleusercontent.com/d/${fileId}`;
+}
+
+// ═══ قراءة فاتورة المشتريات — نفس منطق parsePurchaseFile بالنظام الأساسي بالضبط ═══
+function cleanBarcode(raw){
+  if (raw instanceof Date) return "X" + raw.getTime().toString(36).toUpperCase();
+  let s = String(raw ?? "").trim().replace(/了/g,"B").replace(/\s+/g,"");
+  if (/^\d{4}-\d{2}-\d{2}/.test(s) || /\d{2}:\d{2}:\d{2}/.test(s)) s = "X" + s.replace(/[^0-9]/g,"").slice(0,12);
+  return s.replace(/[^A-Za-z0-9\-]/g,"");
+}
+function toNum(raw){ const n = parseFloat(String(raw ?? "").replace(/,/g,"")); return isNaN(n) ? 0 : n; }
+
+function parsePurchaseItems(buf){
+  const wb = XLSX.read(buf, { type:"array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+  let container = "";
+  if (rows.length){
+    const m = rows[0].join(" ").match(/BAR[A-Z0-9]+/i);
+    if (m) container = m[0].toUpperCase();
+  }
+  const merged = {};
+  for (let i=2; i<rows.length; i++){
+    const row = rows[i];
+    const barcodeStr = cleanBarcode(row[1]);
+    const nameStr = String(row[2] ?? "").trim();
+    if (!barcodeStr || barcodeStr.toLowerCase()==="item no") continue;
+    if (!nameStr || nameStr.toLowerCase()==="name") continue;
+    if (nameStr.toLowerCase()==="freight") continue;
+    if (nameStr==="الإجمالي" || nameStr==="Total") continue;
+    const qty = parseInt(row[3]);
+    if (isNaN(qty) || qty<=0) continue;
+    const buyPrice = toNum(row[4]);
+    const sellPrice = toNum(row[0]);
+    if (merged[barcodeStr]){
+      merged[barcodeStr].qty += qty;
+      if (buyPrice>0) merged[barcodeStr].buyPrice = buyPrice;
+      if (sellPrice>0) merged[barcodeStr].sellPrice = sellPrice;
+    } else {
+      merged[barcodeStr] = { barcode:barcodeStr, name:nameStr, qty, buyPrice, sellPrice, container };
+    }
+  }
+  return { items: Object.values(merged), container };
+}
+
+// نفس منطق applyPurchases بالنظام الأساسي — يدمج فوق منتجات موجودة أو يضيف جديدة
+function applyPurchasesLocal(existingProducts, newItems, container){
+  const result = existingProducts.map(p => ({ ...p }));
+  const resultMap = {};
+  result.forEach(p => { resultMap[p.barcode] = p; });
+  const date = new Date().toISOString().slice(0,10);
+  newItems.forEach(item => {
+    if (resultMap[item.barcode]){
+      const existing = resultMap[item.barcode];
+      existing.purchases = existing.purchases ?? [];
+      existing.purchases.push({ container, qty:item.qty, buyPrice:item.buyPrice, date });
+      if (item.sellPrice>0) existing.sellPrice = item.sellPrice;
+    } else {
+      const newProduct = { barcode:item.barcode, name:item.name, sellPrice:item.sellPrice,
+        container:item.container||container, purchases:[{ container, qty:item.qty, buyPrice:item.buyPrice, date }] };
+      result.push(newProduct);
+      resultMap[item.barcode] = newProduct;
+    }
+  });
+  return result;
+}
+
+// حفظ آمن: نجيب أحدث نسخة من المنتجات مباشرة قبل الدمج (يمنع الكتابة فوق تغييرات صفحات ثانية)
+async function saveAsPurchases(purchaseItems, container){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${PRODUCTS_KEY}&select=value`,
+    { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+  const rows = await res.json();
+  let products = [];
+  if (rows?.length){ try{ products = JSON.parse(rows[0].value) || []; }catch{} }
+  const updated = applyPurchasesLocal(products, purchaseItems, container);
+  const save = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+    method:"POST",
+    headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key:PRODUCTS_KEY, value:JSON.stringify(updated), updated_at:new Date().toISOString() })
+  });
+  return save.ok;
+}
 
 let matched = [];
+let lastBuf = null; // محتوى آخر ملف مرفوع (لقراءة فاتورة المشتريات لاحقاً)
 
 const $ = id => document.getElementById(id);
 function log(msg, type="info"){ const d=document.createElement("div"); d.className="log "+type; d.textContent=msg; $("status").appendChild(d); }
@@ -77,6 +235,46 @@ function shrink(dataUrl, max=800, q=0.85){
   });
 }
 
+// يدمج عدة صور بجانب بعض أفقياً (يمين ليسار) في صورة واحدة —
+// للمنتج المكوّن من قطعتين أو أكثر بنفس الباركود
+function mergeSideBySide(dataUrls, q=0.85){
+  return new Promise(res=>{
+    if (dataUrls.length === 1){ res(dataUrls[0]); return; }
+    const imgs = [];
+    let loaded = 0;
+    dataUrls.forEach((url, i) => {
+      const img = new Image();
+      img.onload = () => {
+        imgs[i] = img;
+        loaded++;
+        if (loaded === dataUrls.length) draw();
+      };
+      img.onerror = () => { loaded++; if (loaded === dataUrls.length) draw(); };
+      img.src = url;
+    });
+    function draw(){
+      const valid = imgs.filter(Boolean);
+      if (valid.length === 0){ res(null); return; }
+      if (valid.length === 1){ res(dataUrls[0]); return; }
+      // نوحّد ارتفاع كل الصور على أطول وحدة، عشان تترصّ بشكل مرتّب
+      const targetH = Math.max(...valid.map(im=>im.height));
+      const widths = valid.map(im => Math.round(im.width * targetH / im.height));
+      const gap = 4; // فاصل بسيط بين الصور
+      const totalW = widths.reduce((s,w)=>s+w,0) + gap*(valid.length-1);
+      const c = document.createElement("canvas");
+      c.width = totalW; c.height = targetH;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,totalW,targetH);
+      let x = 0;
+      valid.forEach((im,i)=>{
+        ctx.drawImage(im, x, 0, widths[i], targetH);
+        x += widths[i] + gap;
+      });
+      res(c.toDataURL("image/jpeg", q));
+    }
+  });
+}
+
 $("file").onchange = async (e) => {
   const f = e.target.files[0];
   if(!f) return;
@@ -87,6 +285,7 @@ $("file").onchange = async (e) => {
 
   try {
     const buf = await f.arrayBuffer();
+    lastBuf = buf.slice(0); // نسخة مستقلة — تضمن سلامتها حتى لو مكتبة ثانية لمست الأصلية
     const zip = await JSZip.loadAsync(buf);
     const names = Object.keys(zip.files);
 
@@ -130,38 +329,56 @@ $("file").onchange = async (e) => {
       });
     }
 
-    // 4) drawing1: كل anchor → صف الصورة + rId
+    // 4) drawing1: كل anchor → نطاق الصفوف (من - إلى) + rId
     const dxml = await zip.files["xl/drawings/drawing1.xml"].async("string");
     const anchors = dxml.split(/<xdr:twoCellAnchor/).slice(1);
     const imgAnchors = [];
     anchors.forEach(a=>{
-      const rowM = a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+      const rowFromM = a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+      const rowToM   = a.match(/<xdr:to>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
       const embM = a.match(/r:embed="(rId\d+)"/);
-      if(rowM && embM){
-        imgAnchors.push({ row: parseInt(rowM[1]) + 1, media: relMap[embM[1]] });
+      if(rowFromM && embM){
+        const rowFrom = parseInt(rowFromM[1]) + 1;
+        const rowTo   = rowToM ? Math.max(rowFrom, parseInt(rowToM[1]) + 1) : rowFrom;
+        imgAnchors.push({ rowFrom, rowTo, media: relMap[embM[1]] });
       }
     });
     log(`صور بمواقع: ${imgAnchors.length}`,"info");
 
-    // 5) نربط كل صورة بباركود صفها (xdr:row صفر-based، الصف الفعلي +1)
-    matched = [];
-    const seen = new Set();
+    // 5) نربط كل صورة بكل الباركودات داخل نطاقها (صورة ممدودة على كذا صف تاخذها الكل)
+    // نجمّع أول (بدل ما نستبدل عند التكرار) — عشان لو نفس الباركود له كذا صورة (منتج مركّب)
+    const imagesByBarcode = {}; // باركود → [صورة1, صورة2, ...]
     for(const ia of imgAnchors){
-      // نلقى باركود نفس الصف، أو الصف القريب (±2)
-      let bc = rowBarcode[ia.row];
-      if(!bc){ for(let d=1;d<=2;d++){ if(rowBarcode[ia.row+d]){bc=rowBarcode[ia.row+d];break;} if(rowBarcode[ia.row-d]){bc=rowBarcode[ia.row-d];break;} } }
-      if(!bc) continue;
+      let bcs = [];
+      for(let r=ia.rowFrom; r<=ia.rowTo; r++){ if(rowBarcode[r]) bcs.push(rowBarcode[r]); }
+      // لو النطاق ما فيه باركود (صورة نقطة بلا "إلى" صحيح)، رجوع لطريقة التقريب (±2 صف)
+      if(bcs.length===0){
+        let bc = rowBarcode[ia.rowFrom];
+        if(!bc){ for(let d=1;d<=2;d++){ if(rowBarcode[ia.rowFrom+d]){bc=rowBarcode[ia.rowFrom+d];break;} if(rowBarcode[ia.rowFrom-d]){bc=rowBarcode[ia.rowFrom-d];break;} } }
+        if(bc) bcs = [bc];
+      }
+      if(bcs.length===0) continue;
       if(!ia.media || !zip.files[ia.media]) continue;
       const blob = await zip.files[ia.media].async("base64");
       const ext = ia.media.split(".").pop();
       const small = await shrink(`data:image/${ext};base64,${blob}`);
       if(small){
-        // لو الباركود مكرر، آخر صورة (عادي)
-        if(!seen.has(bc)) matched.push({ barcode: bc, name:"", img: small });
-        else { const idx = matched.findIndex(x=>x.barcode===bc); if(idx>=0) matched[idx].img = small; }
-        seen.add(bc);
+        bcs.forEach(bc=>{
+          if(!imagesByBarcode[bc]) imagesByBarcode[bc] = [];
+          imagesByBarcode[bc].push(small);
+        });
       }
     }
+    // 6) لو الباركود له أكثر من صورة (منتج مركّب من قطعتين أو أكثر)، ندمجهم جنب بعض
+    matched = [];
+    let mergedCount = 0;
+    for(const bc in imagesByBarcode){
+      const imgs = imagesByBarcode[bc];
+      const finalImg = imgs.length > 1 ? await mergeSideBySide(imgs) : imgs[0];
+      if (imgs.length > 1) mergedCount++;
+      if (finalImg) matched.push({ barcode: bc, name:"", img: finalImg });
+    }
+    if (mergedCount > 0) log(`تم دمج ${mergedCount} منتج له أكثر من صورة (جنب بعض)`,"info");
     log(`تم ربط ${matched.length} صورة بباركودها (بالموقع) ✓`,"ok");
     if(matched.length===0){ log("لم يُربط شي — أرسل تشخيص جديد","err"); return; }
 
@@ -184,28 +401,30 @@ function dataUrlToBlob(dataUrl){
   return new Blob([arr], {type:mime});
 }
 
-const BUCKET = "product-images";
 
 $("saveBtn").onclick = async () => {
   if(matched.length===0) return;
-  log(`جاري رفع ${matched.length} صورة لـ Storage…`,"info");
+  if (GOOGLE_DRIVE_FOLDER_ID === "ضع_ID_المجلد_هنا"){
+    log("⚠️ لازم تحط ID المجلد أول بأعلى الكود (GOOGLE_DRIVE_FOLDER_ID)","err");
+    return;
+  }
+  log(`جاري تسجيل الدخول لجوجل درايف…`,"info");
+  let accessToken;
+  try { accessToken = await getGoogleAccessToken(); }
+  catch(e){ log("فشل الاتصال بجوجل: "+e.message,"err"); return; }
+
+  log(`جاري رفع ${matched.length} صورة لجوجل درايف…`,"info");
   let done=0, failed=0;
   const urls = {}; // باركود → رابط الصورة
 
-  // نرفع كل صورة لـ Storage
   for(const m of matched){
     try {
       const blob = dataUrlToBlob(m.img);
       const safeName = m.barcode.replace(/[^A-Za-z0-9]/g,"_") + ".jpg";
-      const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${safeName}`, {
-        method:"POST",
-        headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"image/jpeg", "x-upsert":"true" },
-        body: blob,
-      });
-      if(up.ok || up.status===200){
-        urls[m.barcode] = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${safeName}`;
-        done++;
-      } else { failed++; }
+      const file = await driveUploadImage(accessToken, safeName, blob);
+      await driveMakePublic(accessToken, file.id);
+      urls[m.barcode] = driveDirectImageUrl(file.id);
+      done++;
     } catch { failed++; }
     if((done+failed)%25===0) log(`تقدّم: ${done+failed}/${matched.length}`,"info");
   }
@@ -224,9 +443,22 @@ $("saveBtn").onclick = async () => {
       headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
       body: JSON.stringify({ key:IMAGES_KEY, value:JSON.stringify(images), updated_at:new Date().toISOString() })
     });
-    if(save.ok) log(`✅ تم! ${done} صورة في Storage + روابطها بالنظام. افتح النظام وحدّث`,"ok");
-    else log("رُفعت الصور بس فشل حفظ الروابط","err");
-  } catch(err){ log("خطأ بحفظ الروابط: "+err.message,"err"); }
+    if(save.ok) log(`✅ الصور: ${done} صورة في جوجل درايف + روابطها بالنظام`,"ok");
+    else { log("رُفعت الصور بس فشل حفظ الروابط","err"); return; }
+  } catch(err){ log("خطأ بحفظ الروابط: "+err.message,"err"); return; }
+
+  // ═══ الخطوة الثانية: حفظ نفس الملف كفاتورة مشتريات ═══
+  if (!lastBuf){ log("⚠️ ما قدرت ألقى الملف لقراءة المشتريات — أعد رفع الملف","err"); return; }
+  log("جاري قراءة فاتورة المشتريات من نفس الملف…","info");
+  try {
+    const { items, container } = parsePurchaseItems(lastBuf);
+    if (items.length === 0){ log("⚠️ ما لقيت أصناف صالحة للمشتريات بالملف","err"); return; }
+    const totalQty = items.reduce((s,x)=>s+x.qty,0);
+    log(`جاري حفظ ${items.length} صنف (${totalQty} قطعة) كفاتورة مشتريات — كونتينر: ${container||"غير محدد"}…`,"info");
+    const ok = await saveAsPurchases(items, container);
+    if (ok) log(`✅ المشتريات: تم حفظ ${items.length} صنف بنجاح. افتح النظام وحدّث`,"ok");
+    else log("❌ فشل حفظ فاتورة المشتريات","err");
+  } catch(err){ log("خطأ بقراءة/حفظ المشتريات: "+err.message,"err"); }
 };
 </script>
 </body>
