@@ -1583,7 +1583,9 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [showCats, setShowCats] = useState(false);
   const [openCatCode, setOpenCatCode] = useState(null);
   const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
+  const [yearBad, setYearBad] = useState(null);           // سنة السيئين المختارة
   const [openHeroCont, setOpenHeroCont] = useState(null);
+  const [yearHero, setYearHero] = useState(null);          // سنة الأبطال المختارة
   const [heroViewImg, setHeroViewImg] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1988,6 +1990,13 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     });
     Object.values(groups).forEach(g => g.sort((a,b)=> a.soldPct-b.soldPct || a.margin-b.margin));
     const contNames = Object.keys(groups).sort();
+    const badYears = (() => {
+      const ys = [...new Set(contNames.map(getContainerYear))];
+      const real = ys.filter(y => y !== "أخرى").sort().reverse();
+      return ys.includes("أخرى") ? [...real, "أخرى"] : real;
+    })();
+    const effBadYear = (yearBad && badYears.includes(yearBad)) ? yearBad : badYears[0];
+    const shownContNames = effBadYear ? contNames.filter(c => getContainerYear(c) === effBadYear) : contNames;
 
     return (
       <div className="space-y-3">
@@ -1995,6 +2004,18 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         <button onClick={()=>setShowBad(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">⚠️ السيئين ({bads.length})</div>
         <div className="text-xs text-slate-500">بيع ضعيف 🐌 (أقل من 30%) أو هامش ضعيف 📉 (أقل من 5%) — مقسّمة بالكونتينر</div>
+
+        {badYears.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {badYears.map(y => (
+              <button key={y} onClick={()=>setYearBad(y)}
+                className={`rounded-xl p-2 flex flex-col items-center gap-0.5 border ${effBadYear===y ? "bg-amber-500/15 border-amber-500 text-amber-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>
+                <div className="font-black text-base">{y}</div>
+                <div className="text-[10px] opacity-70">{contNames.filter(c=>getContainerYear(c)===y).length} كونتينر</div>
+              </button>
+            ))}
+          </div>
+        )}
 
         {bads.length > 0 && (
           <button onClick={()=>printBadReport(groups, contNames, images, settings?.brandName ?? "ALBAROO")}
@@ -2006,7 +2027,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {bads.length === 0 && <div className="text-center text-slate-500 py-12">لا منتجات سيئة 🎉</div>}
 
         <div className="space-y-2">
-          {contNames.map(cont => {
+          {shownContNames.map(cont => {
             const list = groups[cont];
             const open = openBadCont === cont;
             return (
@@ -2078,6 +2099,13 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     });
     Object.values(groups).forEach(g => g.sort((a,b)=> (b.winner?1:0)-(a.winner?1:0) || b.soldPct-a.soldPct));
     const contNames = Object.keys(groups).sort();
+    const heroYears = (() => {
+      const ys = [...new Set(contNames.map(getContainerYear))];
+      const real = ys.filter(y => y !== "أخرى").sort().reverse();
+      return ys.includes("أخرى") ? [...real, "أخرى"] : real;
+    })();
+    const effHeroYear = (yearHero && heroYears.includes(yearHero)) ? yearHero : heroYears[0];
+    const shownHeroContNames = effHeroYear ? contNames.filter(c => getContainerYear(c) === effHeroYear) : contNames;
 
     return (
       <div className="space-y-3">
@@ -2085,6 +2113,18 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         <button onClick={()=>setShowHeroes(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">⭐ الأبطال ({heroes.length})</div>
         <div className="text-xs text-slate-500">المنتجات الرابحة 🎉 والمفضّلة ⭐ — مقسّمة بالكونتينر</div>
+
+        {heroYears.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {heroYears.map(y => (
+              <button key={y} onClick={()=>setYearHero(y)}
+                className={`rounded-xl p-2 flex flex-col items-center gap-0.5 border ${effHeroYear===y ? "bg-amber-500/15 border-amber-500 text-amber-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>
+                <div className="font-black text-base">{y}</div>
+                <div className="text-[10px] opacity-70">{contNames.filter(c=>getContainerYear(c)===y).length} كونتينر</div>
+              </button>
+            ))}
+          </div>
+        )}
 
         {heroes.length > 0 && (
           <button onClick={()=>printHeroesReport(groups, contNames, images, settings?.brandName ?? "ALBAROO")}
@@ -2096,7 +2136,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {heroes.length === 0 && <div className="text-center text-slate-500 py-12">لا أبطال بعد — نجّم منتجاتك المفضّلة ⭐</div>}
 
         <div className="space-y-2">
-          {contNames.map(cont => {
+          {shownHeroContNames.map(cont => {
             const list = groups[cont];
             const open = openHeroCont === cont;
             return (
