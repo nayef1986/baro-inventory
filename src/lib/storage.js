@@ -406,21 +406,42 @@ export async function loadImages() {
   return (await load(KEYS.IMAGES)) ?? {};
 }
 
+// يحذف الملف الفعلي من Storage لو الرابط من النوع اللي يخزّن بمكان منفصل
+// (الصور اللي رُفعت جماعياً من أداة استخراج الصور، مو الصور اليدوية المباشرة)
+async function deleteStorageFileIfUrl(value){
+  if (typeof value !== "string" || !value.includes("/storage/v1/object/public/")) return;
+  try {
+    const path = value.split("/storage/v1/object/public/")[1]; // bucket/filename
+    if (!path) return;
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${path}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+  } catch { /* لو فشل الحذف، نكمل عادي — الرابط بأي حال بينشال من القائمة */ }
+}
+
 export async function saveImage(key, base64) {
   const bytes = Math.round((base64.length * 3) / 4);
   if (bytes > MAX_IMAGE_BYTES) {
     return { ok: false, reason: `الصورة أكبر من 500KB (${Math.round(bytes/1024)}KB)` };
   }
   const images = await loadImages();
+  const oldValue = images[key];
   images[key]  = base64;
-  return { ok: await save(KEYS.IMAGES, images) };
+  const result = { ok: await save(KEYS.IMAGES, images) };
+  // لو كانت الصورة القديمة رابط تخزين منفصل، نمسح ملفها الفعلي بعد نجاح الاستبدال (يمنع تراكم ملفات يتيمة)
+  if (result.ok && oldValue && oldValue !== base64) deleteStorageFileIfUrl(oldValue);
+  return result;
 }
 
 export async function deleteImage(key) {
   const images = await loadImages();
   if (!images[key]) return { ok: false };
+  const oldValue = images[key];
   delete images[key];
-  return { ok: await save(KEYS.IMAGES, images) };
+  const result = { ok: await save(KEYS.IMAGES, images) };
+  if (result.ok) deleteStorageFileIfUrl(oldValue);
+  return result;
 }
 
 // ─── Branch Counts (جرد الفروع) ──────────────────────────────
