@@ -355,11 +355,11 @@ function parseSmartFile(rows){
     const cont = contRaw ? containerCode(contRaw) : "";
 
     if (sold > 0) salesMap[bc] = (salesMap[bc]||0) + sold;
-    if (bought > 0){
-      purchMap[bc] = (purchMap[bc]||0) + bought;
-      if (!contOf[bc]) contOf[bc] = cont || "بدون كونتينر";
-      if (!info[bc]) info[bc] = { name, cost, sell, id };
-    }
+    // نسجّل الفئة والاسم والسعر لكل منتج له باركود، حتى لو مشترياته صفر أو سالبة —
+    // كذا المنتج يظهر بالنتيجة بفئته الصحيحة، بدل ما يختفي بالكامل
+    purchMap[bc] = (purchMap[bc]||0) + Math.max(0, bought);
+    if (!contOf[bc]) contOf[bc] = cont || "بدون كونتينر";
+    if (!info[bc]) info[bc] = { name, cost, sell, id };
   }
   return { salesMap, purchMap, contOf, info };
 }
@@ -655,6 +655,7 @@ function analyze(){
       cost: costPrice, sell: sellPrice,
       totalCost: costPrice * bought,
       dupPurch: (purchCount[bc]||0) > 1,
+      hasPurchData: (purchCount[bc]||0) > 0,
     };
   });
 
@@ -710,9 +711,9 @@ function analyze(){
   });
   }
 
-  // منتجات لها مبيعات بس بدون فاتورة شراء (تطلع لحالها لو رُفعت مشتريات)
+  // منتجات لها مبيعات، وما وصلتها بيانات مشتريات إطلاقاً (مو مجرد صفر) — تطلع لحالها كتنبيه
   const noPurchase = hasPurch
-    ? items.filter(i => i.sold > 0 && i.bought === 0).sort((a,b) => b.sold - a.sold)
+    ? items.filter(i => i.sold > 0 && i.bought === 0 && !i.hasPurchData).sort((a,b) => b.sold - a.sold)
     : [];
 
   RESULT = { items, hasPurch, noPurchase, hasMonthly, monthNames, totalSold: items.reduce((s,i)=>s+i.sold,0),
@@ -994,8 +995,8 @@ function renderGrouped(items, mode){
   const icon = mode==='container' ? "📦" : "🏭";
   const label = mode==='container' ? "" : "مصنع ";
   return sorted.map(g => {
-    const open = OPEN_GROUPS[g.key] === true;
     const safeKey = g.key.replace(/'/g,"");
+    const open = OPEN_GROUPS[safeKey] === true;
     return `
     <div class="facgroup">
       <div class="fachead">
