@@ -154,6 +154,19 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
   const [closedBranches, setClosedBranches] = useState(settings?.closedBranches ?? []);
   const [newBranches, setNewBranches] = useState(settings?.newBranches ?? []);
   const [whPin, setWhPin] = useState(settings?.warehousePin ?? "1234");
+
+  // ═══ ربط أودو (مقفول برقم سري) ═══
+  const odoo = settings?.odoo ?? {};
+  const [odooUnlocked, setOdooUnlocked] = useState(false);
+  const [odooPinInput, setOdooPinInput] = useState("");
+  const [odooPin, setOdooPin] = useState(odoo.pin ?? "0000");
+  const [odooUrl, setOdooUrl] = useState(odoo.url ?? "");
+  const [odooDb, setOdooDb] = useState(odoo.db ?? "");
+  const [odooUser, setOdooUser] = useState(odoo.user ?? "");
+  const [odooKey, setOdooKey] = useState(odoo.apiKey ?? "");
+  const [odooPort, setOdooPort] = useState(odoo.port ?? "");        // اختياري (لخوادم بمنفذ غير قياسي)
+  const [odooModel, setOdooModel] = useState(odoo.model ?? "sale.order.line"); // النموذج اللي نسحب منه
+  const [odooTesting, setOdooTesting] = useState(false);
   const [delSearch, setDelSearch]   = useState("");
   const [delPin,    setDelPin]      = useState("");
   const [delTarget, setDelTarget]   = useState(null);
@@ -186,6 +199,53 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
     if (!whPin || whPin.length < 4) { show("الرقم 4 خانات على الأقل", "error"); return; }
     const ok = await onSaveSettings({ ...settings, brandName, minStock, factories: localFac, closedBranches, newBranches, warehousePin: whPin });
     if (ok) show("تم حفظ رقم المستودع ✓"); else show("فشل الحفظ", "error");
+  };
+
+  // ═══ دوال ربط أودو ═══
+  const saveOdoo = async () => {
+    if (!odooUrl.trim() || !odooDb.trim() || !odooUser.trim() || !odooKey.trim()){
+      show("عبّي الخانات الأساسية أولاً", "error"); return;
+    }
+    const ok = await onSaveSettings({
+      ...settings, brandName, minStock, factories: localFac, closedBranches, newBranches, warehousePin: whPin,
+      odoo: {
+        pin: odooPin,
+        url: odooUrl.trim().replace(/\/+$/,""),
+        db: odooDb.trim(),
+        user: odooUser.trim(),
+        apiKey: odooKey.trim(),
+        port: odooPort.trim(),
+        model: odooModel.trim() || "sale.order.line",
+      },
+    });
+    if (ok) show("تم حفظ إعدادات أودو ✓"); else show("فشل الحفظ", "error");
+  };
+
+  const testOdoo = async () => {
+    if (!odooUrl.trim() || !odooDb.trim() || !odooUser.trim() || !odooKey.trim()){
+      show("عبّي الخانات الأساسية أولاً", "error"); return;
+    }
+    setOdooTesting(true);
+    try {
+      const res = await fetch("/api/odoo-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "test",
+          url: odooUrl.trim().replace(/\/+$/,""),
+          db: odooDb.trim(),
+          user: odooUser.trim(),
+          apiKey: odooKey.trim(),
+          port: odooPort.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) show(`✓ الاتصال ناجح — المستخدم رقم ${data.uid}`);
+      else show(data.error || "فشل الاتصال", "error");
+    } catch (e) {
+      show("تعذّر الاتصال: " + e.message, "error");
+    }
+    setOdooTesting(false);
   };
 
   const branches = useMemo(() => allBranches(periods), [periods]);
@@ -388,6 +448,100 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
           className="block w-full text-center bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold text-sm">
           🏬 افتح صفحة مدير المستودع
         </a>
+      </Card>
+
+      {/* ربط أودو — مقفول برقم سري */}
+      <Card>
+        <SectionHeader icon="🔗" title="ربط أودو" subtitle="مقفول برقم سري · تحديث المبيعات تلقائياً" />
+
+        {!odooUnlocked ? (
+          <div className="space-y-3">
+            <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3">
+              🔒 هذا القسم محمي — أدخل الرقم السري للوصول لإعدادات الربط
+            </div>
+            <div className="flex gap-2">
+              <input type="password" value={odooPinInput} onChange={e=>setOdooPinInput(e.target.value)}
+                placeholder="الرقم السري" inputMode="numeric"
+                className="flex-1 bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:border-blue-500" />
+              <button onClick={()=>{
+                if (odooPinInput === odooPin){ setOdooUnlocked(true); setOdooPinInput(""); }
+                else show("رقم سري خاطئ", "error");
+              }} className="bg-blue-600 text-white px-5 rounded-xl text-sm font-bold">فتح</button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-emerald-400 font-bold">🔓 مفتوح</div>
+              <button onClick={()=>setOdooUnlocked(false)} className="text-xs text-slate-400 underline">قفل</button>
+            </div>
+
+            <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 space-y-1">
+              <div>الصق بيانات أودو هنا — النظام يستخدمها لسحب المبيعات تلقائياً</div>
+              <div className="text-slate-600">مفتاح الـAPI تجيبه من أودو: الإعدادات ← المستخدمون ← حسابك ← مفاتيح API</div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">رابط أودو</label>
+              <input type="text" value={odooUrl} onChange={e=>setOdooUrl(e.target.value)}
+                placeholder="https://شركتك.odoo.com" dir="ltr"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">اسم قاعدة البيانات</label>
+              <input type="text" value={odooDb} onChange={e=>setOdooDb(e.target.value)}
+                placeholder="database name" dir="ltr"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">المستخدم (الإيميل)</label>
+              <input type="text" value={odooUser} onChange={e=>setOdooUser(e.target.value)}
+                placeholder="admin@company.com" dir="ltr"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">مفتاح API</label>
+              <input type="password" value={odooKey} onChange={e=>setOdooKey(e.target.value)}
+                placeholder="API Key" dir="ltr"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div className="text-[11px] text-slate-500 border-t border-slate-700 pt-3">اختياري — عبّيها بس لو الشركة المشغّلة طلبتها</div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">المنفذ (Port)</label>
+                <input type="text" value={odooPort} onChange={e=>setOdooPort(e.target.value)}
+                  placeholder="فارغ = تلقائي" dir="ltr" inputMode="numeric"
+                  className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">النموذج</label>
+                <input type="text" value={odooModel} onChange={e=>setOdooModel(e.target.value)}
+                  placeholder="sale.order.line" dir="ltr"
+                  className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">الرقم السري لهذا القسم</label>
+              <input type="text" value={odooPin} onChange={e=>setOdooPin(e.target.value)}
+                placeholder="مثال: 5678" inputMode="numeric"
+                className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={saveOdoo} className="bg-blue-600 text-white py-2.5 rounded-xl text-sm font-bold">💾 إضافة / حفظ</button>
+              <button onClick={testOdoo} disabled={odooTesting}
+                className={`py-2.5 rounded-xl text-sm font-bold ${odooTesting ? "bg-slate-600 text-slate-400" : "bg-emerald-600 text-white"}`}>
+                {odooTesting ? "جاري…" : "🔌 اختبر الاتصال"}
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* قراءة الباركود تلقائياً */}
