@@ -44,31 +44,36 @@ class Features:
     data_age_min: float
 
     price: float
-    prev_close: float
-    prev_high: float
-    prev_low: float
+    prev_close: Optional[float]
+    prev_high: Optional[float]
+    prev_low: Optional[float]
 
     vwap: Optional[float]
     opening_range_high: Optional[float]
     opening_range_low: Optional[float]
 
     rvol: Optional[float]
-    adv_usd: float
-    adv_shares: float
+    adv_usd: Optional[float]
+    adv_shares: Optional[float]
 
-    atr14: float
-    ma20: float
-    ma50: float
+    atr14: Optional[float]
+    ma20: Optional[float]
+    ma50: Optional[float]
     ma200: Optional[float]
 
-    ret_today: float
-    bench_ret_today: float
-    bench_above_ma50: bool
+    ret_today: Optional[float]
+    bench_ret_today: Optional[float]
+    bench_above_ma50: Optional[bool]
     sector_ret_today: Optional[float]
     sector_symbol: Optional[str]
 
     news_24h: Optional[int]
     days_to_earnings: Optional[int]
+
+    # مصدر البيانات: "bars" من مزوّد أسعار، "shot" من لقطة شاشة مؤكَّدة
+    origin: str = "bars"
+    # ملاحظات دقة لكل حقل جاء من قراءة صورة
+    read_notes: dict = field(default_factory=dict)
 
     daily: pd.DataFrame = field(repr=False, default=None)
 
@@ -102,6 +107,8 @@ class Verdict:
     features: Optional[Features] = None
     plan: Optional[Plan] = None
     gated: bool = False
+    completeness: float = 1.0        # نسبة أوزان العوامل التي توفّرت لها بيانات
+    missing: list[str] = field(default_factory=list)
 
     @property
     def is_actionable(self) -> bool:

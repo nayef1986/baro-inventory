@@ -24,11 +24,17 @@ def check(f: Features, cfg: dict) -> Optional[str]:
         return f"السعر {f.price:.2f} دون الحد الأدنى المقبول"
 
     min_adv = float(g.get("min_adv_usd", 5_000_000))
-    if f.adv_usd < min_adv:
+    if f.adv_usd is not None and f.adv_usd < min_adv:
         return (f"سيولة غير كافية: متوسط تداول يومي ${f.adv_usd/1e6:.2f}M "
                 f"دون الحد ${min_adv/1e6:.1f}M")
 
-    if f.atr14 <= 0:
+    if f.origin == "shot":
+        # لقطة الشاشة لا تحمل تاريخاً: يكفي سعر وأحد مرجعَي الاتجاه
+        if f.vwap is None and f.ret_today is None:
+            return "اللقطة لا تحمل VWAP ولا تغيّر اليوم — لا مرجع لاتجاه الجلسة"
+        return None
+
+    if f.atr14 is None or f.atr14 <= 0:
         return "تعذّر حساب التقلّب (ATR) — بيانات ناقصة"
 
     if f.rvol is None or f.vwap is None:

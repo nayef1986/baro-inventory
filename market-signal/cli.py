@@ -5,6 +5,7 @@
     python cli.py AAPL                 تحليل رمز واحد
     python cli.py --watchlist          كل رموز قائمة المراقبة
     python cli.py --demo bull          تجربة بلا شبكة ببيانات صناعية
+    python cli.py --shot 2222 q.png c.png   تحليل من لقطات شاشة منصتك
     python cli.py --evaluate           ملء نتائج التشغيلات السابقة
     python cli.py --summary            هل الأداة تنفع فعلاً؟
 """
@@ -17,7 +18,7 @@ from pathlib import Path
 import yaml
 
 from msignal import disclaimer, evaluate, store
-from msignal.decide import analyze
+from msignal.decide import analyze, analyze_features
 from msignal.models import GRAY, GREEN, RED
 
 ROOT = Path(__file__).resolve().parent
@@ -53,14 +54,23 @@ def render(v) -> str:
     if f:
         vwap = f"{f.vwap:.2f}" if f.vwap else "—"
         rvol = f"{f.rvol:.1f}x" if f.rvol else "—"
-        L += [f"  السعر {f.price:.2f}   VWAP {vwap}   حجم نسبي {rvol}   "
-              f"اليوم {f.ret_today*100:+.2f}%",
+        ret = f"{f.ret_today*100:+.2f}%" if f.ret_today is not None else "—"
+        adv = f"${f.adv_usd/1e6:.1f}M" if f.adv_usd else "—"
+        atr = f"{f.atr14:.2f}" if f.atr14 else "—"
+        L += [f"  السعر {f.price:.2f}   VWAP {vwap}   حجم نسبي {rvol}   اليوم {ret}",
               f"  البيانات بعمر {f.data_age_min:.0f} دقيقة   "
-              f"متوسط تداول ${f.adv_usd/1e6:.1f}M   ATR {f.atr14:.2f}", ""]
+              f"متوسط تداول {adv}   ATR {atr}", ""]
 
     for s in v.signals:
         flag = "" if s.is_fresh else "  (بيانات ناقصة)"
         L.append(f"  {mark(s.score)} {s.name:<13}{s.score:+.2f}  {s.evidence}{flag}")
+
+    if v.features and v.features.origin == "shot":
+        L += ["", f"  مصدر البيانات: لقطة شاشة مؤكَّدة يدوياً   "
+                  f"اكتمال الأدلة: {v.completeness*100:.0f}%"]
+        for k, note in (v.features.read_notes or {}).items():
+            if k in ("rvol", "regime"):
+                L.append(f"    · {k}: {note}")
 
     L += ["", f"  ▸ {v.reason}"]
 
@@ -76,12 +86,90 @@ def render(v) -> str:
     return "\n".join(L)
 
 
+PRIVACY = """
+قبل الرفع — اقتصّ الصورة:
+  • أخفِ رصيد الحساب والمراكز المملوكة ورقم الحساب والاسم.
+  • تكفي شاشة السهم (السعر، التغيّر، الحجم، أعلى/أدنى) وشاشة المؤشر العام.
+الصورة تُرسل إلى واجهة Claude لقراءة الأرقام منها. لا ترفع ما لا تريد إرساله.
+"""
+
+
+def edit_field(label: str, value):
+    """يعرض ما قُرئ ويقبل تصحيحاً. Enter يُبقي القيمة، كلمة 'لا' تجعلها فارغة."""
+    shown = "—" if value is None else value
+    raw = input(f"    {label:<24} [{shown}] : ").strip()
+    if raw == "":
+        return value
+    if raw in ("لا", "-", "none", "null"):
+        return None
+    try:
+        return float(raw) if raw.replace(".", "", 1).replace("-", "", 1).isdigit() else raw
+    except ValueError:
+        return raw
+
+
+def run_shot(argv: list[str], cfg: dict, log: bool = True) -> int:
+    from msignal import snapshot as snap_mod
+    from msignal import vision
+
+    symbol, paths = argv[0], argv[1:]
+    if not paths:
+        print("  ⚠️  أعطِ مسار صورة واحدة على الأقل بعد الرمز.")
+        return 1
+
+    print(PRIVACY)
+    if input("متابعة؟ [y/N] ").strip().lower() != "y":
+        return 1
+
+    print("\n  جاري قراءة الصور…")
+    try:
+        ex = vision.read_screens(symbol, paths)
+    except Exception as exc:
+        print(f"  ⚠️  تعذّرت القراءة: {exc}")
+        return 1
+
+    if ex.contains_account_info:
+        print("\n  🔒 تنبيه: الصورة تحتوي على معلومات حساب. اقتصّها قبل أي مشاركة.")
+    if ex.symbol_seen and symbol.upper() not in str(ex.symbol_seen).upper():
+        print(f"\n  ⚠️  الرمز في الصورة يبدو '{ex.symbol_seen}' لا '{symbol}' — تأكّد.")
+
+    print("\n  ── راجع ما قُرئ من الصورة ──")
+    print("  Enter للقبول · اكتب القيمة الصحيحة للتصحيح · 'لا' لتفريغ الحقل\n")
+    for key, label in vision.REVIEW_FIELDS:
+        setattr(ex, key, edit_field(label, getattr(ex, key)))
+
+    if ex.unreadable:
+        print(f"\n  حقول لم تُقرأ: {'، '.join(ex.unreadable)}")
+
+    if input("\n  أؤكّد أن الأرقام أعلاه مطابقة لشاشتي [y/N] ").strip().lower() != "y":
+        print("  لم تُؤكَّد القراءة — تم الإيقاف بلا تحليل.")
+        return 1
+
+    try:
+        snap = vision.to_snapshot(symbol, ex)
+    except ValueError as exc:
+        print(f"  ⚠️  {exc}")
+        return 1
+
+    con = snap_mod.connect()
+    snap_mod.save(snap, con)
+    v = analyze_features(snap_mod.to_features(snap, con=con), cfg)
+    con.close()
+
+    print(render(v))
+    if log:
+        store.log_run(v)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="أداة إشارة شخصية — تعليمية، ليست توصية")
     ap.add_argument("symbols", nargs="*", help="رموز الأسهم")
     ap.add_argument("--watchlist", action="store_true", help="استخدم قائمة config.yaml")
     ap.add_argument("--demo", metavar="SCENARIO",
                     help="بيانات صناعية: bull|bull_extended|bear|quiet|thin|stale")
+    ap.add_argument("--shot", nargs="+", metavar="ARG",
+                    help="رمز السهم ثم مسار صورة أو أكثر من منصتك")
     ap.add_argument("--evaluate", action="store_true", help="املأ نتائج التشغيلات السابقة")
     ap.add_argument("--summary", action="store_true", help="تقرير أداء الإشارات")
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
@@ -96,6 +184,9 @@ def main() -> int:
 
     if not ensure_ack():
         return 1
+
+    if args.shot:
+        return run_shot(args.shot, cfg, log=not args.no_log)
 
     if args.demo:
         from msignal.providers import SyntheticProvider

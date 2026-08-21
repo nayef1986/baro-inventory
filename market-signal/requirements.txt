@@ -4,3 +4,7 @@ pandas>=2.0
 numpy>=1.24
 streamlit>=1.30
 PyYAML>=6.0
+
+# مسار لقطات الشاشة (اختياري — لا يلزم للمسار الطبيعي)
+anthropic>=0.40
+pydantic>=2.0

@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from .models import Features, Signal
 
 
@@ -12,32 +14,44 @@ def _clamp(x: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, x))
 
 
-def _direction(f: Features) -> float:
-    """من يسيطر على الجلسة: +1 مشترون، -1 بائعون."""
+def _direction(f: Features) -> Optional[float]:
+    """من يسيطر على الجلسة: +1 مشترون، -1 بائعون، None إذا تعذّر تحديده."""
     if f.vwap:
         return 1.0 if f.price >= f.vwap else -1.0
-    return 1.0 if f.ret_today >= 0 else -1.0
+    if f.ret_today is not None:
+        return 1.0 if f.ret_today >= 0 else -1.0
+    return None
+
+
+def _missing(name: str, w: float, what: str) -> Signal:
+    """عامل بلا بيانات: درجة صفر ومعلَّم غير طازج حتى يُستبعد وزنه من القرار."""
+    return Signal(name, 0.0, w, f"غير متاح — {what}", is_fresh=False)
 
 
 # ---------------------------------------------------------------- 1. البيئة
 def sig_regime(f: Features, w: float) -> Signal:
-    trend = 0.5 if f.bench_above_ma50 else -0.5
-    momo = _clamp(f.bench_ret_today / 0.01) * 0.35
+    if f.bench_above_ma50 is None and f.bench_ret_today is None:
+        return _missing("regime", w, "لا بيانات عن المؤشر العام")
+
+    trend = 0.0 if f.bench_above_ma50 is None else (0.5 if f.bench_above_ma50 else -0.5)
+    momo = 0.0 if f.bench_ret_today is None else _clamp(f.bench_ret_today / 0.01) * 0.35
     sect = 0.0
     sect_txt = ""
-    if f.sector_ret_today is not None:
+    if f.sector_ret_today is not None and f.bench_ret_today is not None:
         sect = _clamp((f.sector_ret_today - f.bench_ret_today) / 0.01) * 0.15
         sect_txt = f"، القطاع {f.sector_symbol} {(f.sector_ret_today - f.bench_ret_today)*100:+.1f}% مقابل المؤشر"
 
-    above = "فوق" if f.bench_above_ma50 else "تحت"
-    ev = f"المؤشر {above} متوسط 50 يوماً، وأداؤه اليوم {f.bench_ret_today*100:+.2f}%{sect_txt}"
+    above = "غير معروف موقعه من" if f.bench_above_ma50 is None else (
+        "فوق" if f.bench_above_ma50 else "تحت")
+    day = "—" if f.bench_ret_today is None else f"{f.bench_ret_today*100:+.2f}%"
+    ev = f"المؤشر {above} متوسط 50 يوماً، وأداؤه اليوم {day}{sect_txt}"
     return Signal("regime", _clamp(trend + momo + sect), w, ev).clamp()
 
 
 # ------------------------------------------------------- 2. الحجم النسبي
 def sig_rvol(f: Features, w: float) -> Signal:
     if f.rvol is None:
-        return Signal("rvol", 0.0, w, "الحجم النسبي غير متاح", is_fresh=False)
+        return _missing("rvol", w, "لا مرجع لحجم اليوم")
 
     r = f.rvol
     if r < 0.7:
@@ -54,6 +68,8 @@ def sig_rvol(f: Features, w: float) -> Signal:
         mag = 0.0
 
     d = _direction(f)
+    if d is None:
+        return _missing("rvol", w, "تعذّر تحديد اتجاه السيطرة")
     side = "المشترون" if d > 0 else "البائعون"
     ev = f"حجم نسبي {r:.1f}x و{side} مسيطرون (السعر {'فوق' if d > 0 else 'تحت'} VWAP)"
     return Signal("rvol", mag * d, w, ev).clamp()
@@ -61,6 +77,9 @@ def sig_rvol(f: Features, w: float) -> Signal:
 
 # ----------------------------------------------------- 3. القوة النسبية
 def sig_rel_strength(f: Features, w: float) -> Signal:
+    if f.ret_today is None or f.bench_ret_today is None:
+        return _missing("rel_strength", w, "يلزم أداء السهم وأداء المؤشر معاً")
+
     d = f.ret_today - f.bench_ret_today
     ev = (f"السهم {f.ret_today*100:+.2f}% مقابل المؤشر {f.bench_ret_today*100:+.2f}% "
           f"= أداء نسبي {d*100:+.2f}%")
@@ -71,7 +90,7 @@ def sig_rel_strength(f: Features, w: float) -> Signal:
 def sig_levels(f: Features, w: float) -> Signal:
     parts, notes = [], []
 
-    if f.vwap and f.atr14 > 0:
+    if f.vwap and f.atr14 and f.atr14 > 0:
         v = _clamp((f.price - f.vwap) / (0.5 * f.atr14))
         parts.append(v * 0.50)
         notes.append(f"{'فوق' if v >= 0 else 'تحت'} VWAP بـ{abs(f.price - f.vwap):.2f}")
@@ -83,6 +102,16 @@ def sig_levels(f: Features, w: float) -> Signal:
             parts.append(-0.25); notes.append("كسر نطاق أول 30 دقيقة هبوطاً")
         else:
             parts.append(0.0); notes.append("داخل نطاق الافتتاح")
+
+    if f.vwap and not f.atr14:
+        # بلا مقياس تقلّب، يبقى جانب VWAP إشارة اتجاه لا مسافة
+        parts.append(0.35 if f.price >= f.vwap else -0.35)
+        notes.append(f"{'فوق' if f.price >= f.vwap else 'تحت'} VWAP")
+
+    if f.prev_high is None or f.prev_low is None:
+        if not parts:
+            return _missing("levels", w, "لا مستويات مرجعية")
+        return Signal("levels", _clamp(sum(parts)), w, "، ".join(notes)).clamp()
 
     rng = f.prev_high - f.prev_low
     if f.price > f.prev_high:
@@ -100,12 +129,16 @@ def sig_levels(f: Features, w: float) -> Signal:
 # ------------------------------------------------------------ 5. المحفّز
 def sig_catalyst(f: Features, w: float) -> Signal:
     if f.news_24h is None:
-        return Signal("catalyst", 0.0, w, "بيانات الأخبار غير متاحة", is_fresh=False)
+        return _missing("catalyst", w, "لا بيانات أخبار")
+
+    d = _direction(f)
+    if d is None:
+        return _missing("catalyst", w, "تعذّر تحديد اتجاه السيطرة")
 
     r = f.rvol or 1.0
     if f.news_24h == 0:
         if r >= 2.0:
-            return Signal("catalyst", 0.2 * _direction(f), w,
+            return Signal("catalyst", 0.2 * d, w,
                           "حركة بحجم مرتفع دون خبر معلن — سبب غير معروف")
         return Signal("catalyst", -0.3, w, "لا محفّز اليوم")
 
@@ -116,14 +149,14 @@ def sig_catalyst(f: Features, w: float) -> Signal:
     else:
         mag = 0.1
     ev = f"{f.news_24h} خبر/أخبار خلال 24 ساعة مع حجم نسبي {r:.1f}x"
-    return Signal("catalyst", mag * _direction(f), w, ev).clamp()
+    return Signal("catalyst", mag * d, w, ev).clamp()
 
 
 # --------------------------------------------------- 6. التمدد المفرط
 def sig_extension(f: Features, w: float) -> Signal:
     """عقوبة سالبة فقط: مطاردة سهم تمدّد كثيراً عن متوسطه أسوأ صفقات المبتدئين."""
-    if f.atr14 <= 0:
-        return Signal("extension", 0.0, w, "التقلّب غير محسوب", is_fresh=False)
+    if not f.atr14 or f.atr14 <= 0 or f.ma20 is None:
+        return _missing("extension", w, "يلزم متوسط 20 يوماً ومقياس تقلّب")
 
     ext = (f.price - f.ma20) / f.atr14
     a = abs(ext)
