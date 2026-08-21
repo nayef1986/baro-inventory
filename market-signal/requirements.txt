@@ -1,0 +1,6 @@
+# Personal market-signal tool — Python 3.10+
+yfinance>=0.2.40
+pandas>=2.0
+numpy>=1.24
+streamlit>=1.30
+PyYAML>=6.0
