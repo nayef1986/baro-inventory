@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>مكتبة أفكار الليبل — البارو</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;700;900&display=swap');
+
+:root{
+  --ink:#12100E;        /* عمق الصندوق */
+  --velvet:#1C1815;     /* سطح المخمل */
+  --velvet-2:#241F1A;   /* طبقة أعلى */
+  --gold:#C9A227;       /* المعدن — للمهم فقط */
+  --gold-dim:#8A6F47;   /* نحاس هادئ */
+  --cream:#EFE6D6;      /* النص الأساسي */
+  --muted:#9A8B75;      /* النص الثانوي */
+  --line:#2E271F;       /* الحدود */
+  --alert:#C86B4A;      /* التنبيه — طين محروق، مو أحمر صارخ */
+}
+
+*{font-family:'Tajawal',sans-serif;box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--ink);color:var(--cream);padding-bottom:90px;line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding:16px}
+
+/* الترويسة — الحرف نفسه هو البطل */
+.hd{padding:34px 0 26px;text-align:center;position:relative}
+.hd::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:52px;height:1px;background:var(--gold);opacity:.55}
+.hd h1{font-size:34px;font-weight:900;color:var(--cream);letter-spacing:-.8px;line-height:1.15}
+.hd .sub{font-size:13px;color:var(--muted);margin-top:8px;font-weight:300}
+
+.card{background:var(--velvet);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+.sec{font-size:19px;font-weight:900;color:var(--cream);margin:26px 0 12px;letter-spacing:-.3px}
+
+.btn{border:none;border-radius:13px;padding:14px;font-family:'Tajawal';font-size:15px;font-weight:700;cursor:pointer;width:100%;transition:transform .12s ease,filter .12s ease}
+.btn:active{transform:scale(.985)}
+.pr{background:var(--gold);color:#1A1509}
+.ok{background:#2F6B4F;color:#EAF6EF}
+.dg{background:var(--alert);color:#fff}
+.sec2{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+input,select,textarea{width:100%;background:var(--velvet-2);border:1px solid var(--line);color:var(--cream);border-radius:12px;padding:13px;font-family:'Tajawal';font-size:15px;font-weight:400}
+input::placeholder{color:#6B5E4D}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-dim)}
+label{font-size:13px;color:var(--muted);display:block;margin-bottom:7px;font-weight:400}
+
+/* صف المنتج — سطر واضح، مو بطاقة مكرّرة */
+.prod{background:var(--velvet);border:1px solid var(--line);border-radius:15px;padding:15px;margin-bottom:9px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:border-color .15s ease}
+.prod:active{border-color:var(--gold-dim)}
+.prod.hot{border-right:3px solid var(--gold)}
+.prod .nm{font-weight:700;color:var(--cream);font-size:16px;line-height:1.35}
+.prod .bc{font-size:12px;color:#6B5E4D;margin-top:3px;letter-spacing:.4px}
+.prod .cnt{color:var(--muted);font-size:14px;font-weight:700;white-space:nowrap;text-align:center;min-width:52px}
+.prod .cnt b{display:block;font-size:22px;color:var(--cream);font-weight:900;line-height:1}
+.prod.hot .cnt b{color:var(--gold)}
+
+/* الشبكة — نسبة طولية زي ليبل معلّق */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.lab{background:var(--velvet);border:1px solid var(--line);border-radius:15px;overflow:hidden;position:relative}
+.lab img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;cursor:pointer}
+.lab .meta{padding:11px 12px 13px}
+.lab .src{font-size:12px;color:var(--muted);font-weight:400}
+.lab .note{font-size:13px;color:var(--cream);margin-top:6px;line-height:1.55;font-weight:300}
+.lab .del{position:absolute;top:9px;left:9px;background:rgba(18,16,14,.82);color:var(--alert);border:1px solid rgba(200,107,74,.35);border-radius:9px;width:30px;height:30px;font-size:15px;cursor:pointer;backdrop-filter:blur(6px)}
+/* الرقم — ختم محفور، مو شارة */
+.lab .no{position:absolute;top:9px;right:9px;background:rgba(18,16,14,.82);color:var(--gold);border:1px solid rgba(201,162,39,.4);border-radius:9px;padding:5px 11px;font-size:14px;font-weight:900;backdrop-filter:blur(6px);letter-spacing:.5px}
+
+.empty{text-align:center;padding:64px 24px;color:var(--muted);font-size:15px;font-weight:300;line-height:1.9}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);padding:14px 26px;border-radius:13px;font-size:14px;font-weight:700;opacity:0;transition:opacity .3s;z-index:999;pointer-events:none}
+.toast.show{opacity:1}
+
+.back{color:var(--gold);font-size:15px;font-weight:700;background:none;border:none;cursor:pointer;padding:10px 0;margin-bottom:6px}
+.tip{background:rgba(201,162,39,.07);border:1px solid rgba(201,162,39,.22);border-radius:14px;padding:14px 16px;font-size:14px;color:var(--cream);line-height:1.75;margin-bottom:14px;font-weight:300}
+
+/* الإحصاءات — الرقم يقود، التسمية تتبع بهدوء */
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.st{background:var(--velvet);border:1px solid var(--line);border-radius:14px;padding:15px 10px;text-align:center}
+.st .v{font-size:26px;font-weight:900;color:var(--cream);line-height:1.05;letter-spacing:-.5px}
+.st .l{font-size:12px;color:var(--muted);margin-top:6px;font-weight:400}
+
+.viewer{position:fixed;inset:0;background:rgba(10,9,8,.97);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px}
+.viewer img{max-width:100%;max-height:84vh;border-radius:14px}
+.viewer .x{position:absolute;top:24px;left:24px;background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);border-radius:12px;padding:12px 20px;font-family:'Tajawal';font-weight:700;cursor:pointer}
+
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+@media (max-width:380px){ .grid{grid-template-columns:1fr} .hd h1{font-size:29px} }
+
+@media print{
+  body{background:#fff;color:#000}
+  .noprint{display:none !important}
+  .lab{border:1px solid #ddd;break-inside:avoid}
+  .lab img{aspect-ratio:auto}
+  .lab .no{background:#fff;color:#000;border-color:#999}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <h1>مكتبة الليبل</h1>
+    <div class="sub">كل فكرة صممتها أو أعجبتك — محفوظة ومربوطة بمنتجها</div>
+  </div>
+  <div id="app"><div class="empty">جاري التحميل</div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+const LABELS_KEY = "baro_labels_v1";   // بيانات هذا النظام (منفصلة عن البارو)
+const BUCKET = "product-images";
+
+let PRODUCTS = [], PERIODS = [], LABELS = { items: [], names: {}, nextNo: 1, custom: [], archived: [] };
+let view = "list", currentBc = null, search = "", srcFilter = "all", showArchived = false;
+
+const $ = id => document.getElementById(id);
+const num = v => { const n = parseFloat(String(v??"").replace(/,/g,"")); return isNaN(n)?0:n; };
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+const esc = s => String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+// ─── Supabase ───
+async function sbGet(key){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+    { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+  const j = await r.json();
+  const raw = j?.[0]?.value;
+  if (raw == null) return null;
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+async function sbSet(key, value){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+    method:"POST",
+    headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  });
+  return r.ok;
+}
+async function saveLabels(){ return await sbSet(LABELS_KEY, LABELS); }
+
+// ─── حسابات البارو (نقرأ بس، ما نغيّر) ───
+function totalPurchases(p){ return (p.purchases||[]).reduce((s,x)=>s+num(x.qty),0); }
+function soldOf(bc){
+  let t = 0;
+  PERIODS.forEach(per => Object.values(per.sales||{}).forEach(b => { t += num(b[bc]?.qty ?? 0); }));
+  return t;
+}
+function revenueOf(bc){
+  let t = 0;
+  PERIODS.forEach(per => Object.values(per.sales||{}).forEach(b => { t += num(b[bc]?.totalPrice ?? 0); }));
+  return t;
+}
+function statsOf(p){
+  const bought = totalPurchases(p);
+  const sold = soldOf(p.barcode);
+  const revenue = revenueOf(p.barcode);
+  const buy = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
+  const profit = revenue - (sold * buy);
+  const soldPct = bought > 0 ? (sold/bought)*100 : 0;
+  return { bought, sold, revenue, profit, soldPct };
+}
+
+// الاسم المعروض: المخصص لو غيّرته، وإلا الأصلي (الباركود دايماً هو المرجع)
+function nameOf(p){ return LABELS.names[p.barcode] || p.name || p.barcode; }
+function labelsOf(bc){ return LABELS.items.filter(x => x.bc === bc); }
+
+// ─── ضغط الصور قبل الرفع ───
+function shrink(dataUrl, max=900, q=0.85){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = () => {
+      let {width:w, height:h} = img;
+      if (w>max || h>max){ if(w>h){h=Math.round(h*max/w);w=max;} else {w=Math.round(w*max/h);h=max;} }
+      const c = document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      res(c.toDataURL("image/jpeg", q));
+    };
+    img.onerror = () => res(null);
+    img.src = dataUrl;
+  });
+}
+function dataUrlToBlob(d){
+  const [meta, b64] = d.split(",");
+  const mime = meta.match(/:(.*?);/)[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type:mime });
+}
+
+// ─── الاقتراح الذكي ───
+// منتج مبيعاته قوية وما له أفكار كافية = فرصة ضائعة
+function suggestionFor(p){
+  const s = statsOf(p);
+  const n = labelsOf(p.barcode).length;
+  if (s.sold >= 100 && s.soldPct >= 50 && n === 0)
+    return { level:"hot", text:`🔥 باع ${Math.round(s.sold)} قطعة (${Math.round(s.soldPct)}%) — وما له ولا فكرة ليبل! فرصة كبيرة` };
+  if (s.sold >= 100 && s.soldPct >= 50 && n < 3)
+    return { level:"hot", text:`🔥 منتج قوي (${Math.round(s.soldPct)}% بيع) — زد أفكاره، عندك ${n} بس` };
+  if (s.profit > 0 && s.soldPct >= 70 && n < 5)
+    return { level:"good", text:`💡 بيعه ممتاز (${Math.round(s.soldPct)}%) — يستاهل أفكار تطقيم أو كومبو` };
+  return null;
+}
+
+// ─── الشاشات ───
+function render(){
+  if (view === "list") return renderList();
+  if (view === "product") return renderProduct();
+}
+
+function renderList(){
+  const q = search.trim().toLowerCase();
+  const archived = new Set(LABELS.archived || []);
+  let list = PRODUCTS.filter(p => {
+    if (showArchived !== archived.has(p.barcode)) return false; // نعرض المؤرشفة بس لو الوضع مفعّل
+    if (!q) return true;
+    return String(p.barcode).toLowerCase().includes(q) || nameOf(p).toLowerCase().includes(q);
+  });
+
+  // نرتّب: اللي عنده اقتراح ساخن أول، ثم الأكثر مبيعاً
+  const withMeta = list.map(p => ({ p, sug: suggestionFor(p), n: labelsOf(p.barcode).length, st: statsOf(p) }));
+  withMeta.sort((a,b) => {
+    const ha = a.sug?.level==="hot" ? 1:0, hb = b.sug?.level==="hot" ? 1:0;
+    if (ha !== hb) return hb - ha;
+    return b.st.sold - a.st.sold;
+  });
+
+  const shown = withMeta.slice(0, 100);
+  const totalIdeas = LABELS.items.length;
+  const withIdeas = new Set(LABELS.items.map(x=>x.bc)).size;
+  const hotCount = withMeta.filter(x=>x.sug?.level==="hot").length;
+
+  $("app").innerHTML = `
+    <div class="stat">
+      <div class="st"><div class="v">${totalIdeas}</div><div class="l">فكرة محفوظة</div></div>
+      <div class="st"><div class="v">${withIdeas}</div><div class="l">منتج له أفكار</div></div>
+      <div class="st"><div class="v" style="color:var(--gold)">${hotCount}</div><div class="l">يحتاج أفكار</div></div>
+    </div>
+
+    ${hotCount > 0 && !showArchived ? `<div class="tip">${hotCount} منتج يبيع كويس وأفكاره قليلة. مرتّبين لك بالأعلى.</div>` : ""}
+
+    <div class="row2" style="margin-bottom:10px">
+      <button class="btn ${showArchived?"sec2":"pr"}" onclick="addCustomProduct()">أضف منتج</button>
+      <button class="btn ${showArchived?"pr":"sec2"}" onclick="toggleArchived()">${showArchived?"رجوع للنشط":`الأرشيف (${(LABELS.archived||[]).length})`}</button>
+    </div>
+
+    <input id="search" placeholder="ابحث بالاسم أو الباركود" value="${esc(search)}" oninput="onSearch(this.value)">
+
+    <div style="font-size:11px;color:#666;margin:10px 0">${withMeta.length} منتج${shown.length<withMeta.length?` · يُعرض أول ${shown.length}`:""}</div>
+
+    ${shown.map(({p, sug, n, st}) => `
+      <div class="prod ${sug?.level==="hot"?"hot":""}" onclick="openProduct('${esc(p.barcode)}')">
+        <div style="flex:1;min-width:0">
+          <div class="nm">${esc(nameOf(p))}</div>
+          <div class="bc">${esc(p.barcode)}</div>
+          ${sug ? `<div style="font-size:13px;color:${sug.level==="hot"?"var(--gold)":"var(--muted)"};margin-top:7px;line-height:1.6;font-weight:400">${sug.text}</div>` : ""}
+          <div style="font-size:12px;color:#6B5E4D;margin-top:5px">باع ${Math.round(st.sold).toLocaleString()} · ربح ${Math.round(st.profit).toLocaleString()} ﷼</div>
+        </div>
+        <div class="cnt"><b>${n}</b>فكرة</div>
+      </div>
+    `).join("")}
+
+    ${shown.length===0 ? `<div class="empty">${showArchived ? "الأرشيف فاضي" : q ? "ما فيه منتج بهذا الاسم" : "ما فيه منتجات"}</div>` : ""}
+  `;
+}
+
+function renderProduct(){
+  const p = PRODUCTS.find(x => x.barcode === currentBc);
+  if (!p){ view="list"; render(); return; }
+  const st = statsOf(p);
+  let items = labelsOf(currentBc);
+  if (srcFilter !== "all") items = items.filter(x => x.src === srcFilter);
+  const allItems = labelsOf(currentBc);
+  const sug = suggestionFor(p);
+
+  $("app").innerHTML = `
+    <button class="back noprint" onclick="backToList()">← رجوع للمنتجات</button>
+
+    <div class="card">
+      <label>اسم المنتج (تقدر تغيّره — الباركود يبقى المرجع)</label>
+      <input id="nameInput" value="${esc(nameOf(p))}" onchange="saveName(this.value)">
+      <div style="font-size:11px;color:#555;margin-top:6px;font-family:monospace">${esc(p.barcode)}</div>
+      ${LABELS.names[p.barcode] ? `<div style="font-size:11px;color:#666;margin-top:4px">الاسم الأصلي: ${esc(p.name||"—")}</div>` : ""}
+      ${p._custom ? `<div style="font-size:11px;color:#a78bfa;margin-top:4px">✋ منتج مضاف يدوياً</div>` : ""}
+      <div class="row2 noprint" style="margin-top:10px">
+        <button class="btn sec2" onclick="toggleArchive('${esc(p.barcode)}')">${(LABELS.archived||[]).includes(p.barcode)?"رجّعه للنشط":"أرشفة"}</button>
+        ${p._custom ? `<button class="btn dg" onclick="delCustomProduct('${esc(p.barcode)}')">حذف المنتج</button>` : `<div></div>`}
+      </div>
+    </div>
+
+    <div class="stat">
+      <div class="st"><div class="v">${Math.round(st.sold).toLocaleString()}</div><div class="l">باع</div></div>
+      <div class="st"><div class="v" style="color:#4ade80">${Math.round(st.profit).toLocaleString()}</div><div class="l">ربح ﷼</div></div>
+      <div class="st"><div class="v">${Math.round(st.soldPct)}%</div><div class="l">نسبة البيع</div></div>
+    </div>
+
+    ${sug ? `<div class="tip">${sug.text}</div>` : ""}
+
+    <div class="card noprint">
+      <div style="font-weight:900;color:var(--cream);margin-bottom:14px;font-size:17px">أضف فكرة</div>
+      <label>المصدر</label>
+      <select id="srcInput">
+        <option value="mine">تصميمي الخاص</option>
+        <option value="web">من موقع</option>
+        <option value="competitor">من منافس</option>
+        <option value="ai">من AI</option>
+      </select>
+      <div style="height:10px"></div>
+      <label>ملاحظة (اختياري)</label>
+      <input id="noteInput" placeholder="مثال: مناسب للتغليف الفخم">
+      <div style="height:10px"></div>
+      <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="addLabels(this.files)">
+      <button class="btn pr" onclick="document.getElementById('fileInput').click()">اختر الصور</button>
+    </div>
+
+    <div class="sec">الأفكار (${allItems.length})</div>
+
+    ${allItems.length > 0 ? `
+      <div class="row2 noprint" style="margin-bottom:10px">
+        <button class="btn ok" onclick="exportPDF()">حمّل PDF</button>
+        <button class="btn sec2" onclick="window.print()">اطبع</button>
+      </div>
+      <select class="noprint" onchange="setSrcFilter(this.value)" style="margin-bottom:12px">
+        <option value="all" ${srcFilter==="all"?"selected":""}>كل المصادر (${allItems.length})</option>
+        <option value="mine" ${srcFilter==="mine"?"selected":""}>تصميمي (${allItems.filter(x=>x.src==="mine").length})</option>
+        <option value="web" ${srcFilter==="web"?"selected":""}>من موقع (${allItems.filter(x=>x.src==="web").length})</option>
+        <option value="competitor" ${srcFilter==="competitor"?"selected":""}>من منافس (${allItems.filter(x=>x.src==="competitor").length})</option>
+        <option value="ai" ${srcFilter==="ai"?"selected":""}>من AI (${allItems.filter(x=>x.src==="ai").length})</option>
+      </select>
+    ` : ""}
+
+    <div class="grid">
+      ${items.map(it => `
+        <div class="lab">
+          <div class="no">#${it.no ?? "—"}</div>
+          <button class="del noprint" onclick="delLabel('${it.id}')">✕</button>
+          <img src="${it.url}" onclick="viewImg('${it.url}')" loading="lazy">
+          <div class="meta">
+            <span class="src">${srcName(it.src)}</span>
+            ${it.note ? `<div class="note">${esc(it.note)}</div>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    </div>
+
+    ${items.length===0 ? `<div class="empty">${allItems.length===0 ? "ما أضفت أي فكرة لهذا المنتج بعد.<br>ابدأ بأول وحدة من فوق." : "ما فيه أفكار من هذا المصدر"}</div>` : ""}
+  `;
+}
+
+function srcName(s){
+  return { mine:"تصميمي", web:"من موقع", competitor:"من منافس", ai:"من AI" }[s] || s;
+}
+
+// ─── الإجراءات ───
+let _searchTimer = null;
+window.onSearch = (v) => {
+  search = v;
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(()=>{ renderList(); const el=$("search"); if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);} }, 250);
+};
+window.openProduct = (bc) => { currentBc = bc; view="product"; srcFilter="all"; window.scrollTo(0,0); render(); };
+window.backToList = () => { view="list"; currentBc=null; window.scrollTo(0,0); render(); };
+window.setSrcFilter = (v) => { srcFilter = v; renderProduct(); };
+window.toggleArchived = () => { showArchived = !showArchived; search=""; window.scrollTo(0,0); renderList(); };
+
+// إضافة منتج يدوي (مو موجود بالبارو)
+window.addCustomProduct = async () => {
+  const name = prompt("اسم المنتج الجديد:");
+  if (!name || !name.trim()) return;
+  const bc = prompt("الباركود (أو أي رمز مميز له):");
+  if (!bc || !bc.trim()) return;
+  const barcode = bc.trim();
+  if (PRODUCTS.some(p => p.barcode === barcode)){ toast("هذا الباركود موجود مسبقاً"); return; }
+  const item = { barcode, name: name.trim(), purchases: [], sellPrice: 0, _custom: true };
+  LABELS.custom = LABELS.custom || [];
+  LABELS.custom.push(item);
+  PRODUCTS.push(item);
+  const ok = await saveLabels();
+  toast(ok ? "✓ أُضيف المنتج" : "فشل الحفظ");
+  renderList();
+};
+
+// حذف منتج يدوي (مع أفكاره) — المنتجات من البارو ما تنحذف، تتأرشف بس
+window.delCustomProduct = async (bc) => {
+  const n = labelsOf(bc).length;
+  if (!confirm(`حذف هذا المنتج${n?` و${n} فكرة معه`:""}؟ نهائي.`)) return;
+  LABELS.custom = (LABELS.custom||[]).filter(p => p.barcode !== bc);
+  LABELS.items = LABELS.items.filter(x => x.bc !== bc);
+  delete LABELS.names[bc];
+  LABELS.archived = (LABELS.archived||[]).filter(x => x !== bc);
+  PRODUCTS = PRODUCTS.filter(p => p.barcode !== bc);
+  const ok = await saveLabels();
+  toast(ok ? "✓ حُذف المنتج" : "فشل الحذف");
+  backToList();
+};
+
+// أرشفة / إرجاع — الأفكار تبقى محفوظة بالحالتين
+window.toggleArchive = async (bc) => {
+  LABELS.archived = LABELS.archived || [];
+  const isArchived = LABELS.archived.includes(bc);
+  if (isArchived) LABELS.archived = LABELS.archived.filter(x => x !== bc);
+  else LABELS.archived.push(bc);
+  const ok = await saveLabels();
+  toast(ok ? (isArchived ? "✓ رجع للنشط" : "✓ أُرشف") : "فشل الحفظ");
+  backToList();
+};
+
+window.saveName = async (v) => {
+  const name = String(v||"").trim();
+  const p = PRODUCTS.find(x => x.barcode === currentBc);
+  if (!name || name === p.name) delete LABELS.names[currentBc];
+  else LABELS.names[currentBc] = name;
+  const ok = await saveLabels();
+  toast(ok ? "✓ حُفظ الاسم" : "فشل الحفظ");
+};
+
+window.addLabels = async (files) => {
+  if (!files || files.length === 0) return;
+  const src = $("srcInput").value;
+  const note = $("noteInput").value.trim();
+  toast(`جاري رفع ${files.length} صورة…`);
+  let done = 0, failed = 0;
+
+  for (const f of files){
+    try {
+      const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+      const small = await shrink(dataUrl);
+      if (!small){ failed++; continue; }
+      const blob = dataUrlToBlob(small);
+      const id = "lb_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+      const fileName = `label_${currentBc.replace(/[^A-Za-z0-9]/g,"_")}_${id}.jpg`;
+      const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${fileName}`, {
+        method:"POST",
+        headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"image/jpeg", "x-upsert":"true" },
+        body: blob,
+      });
+      if (!up.ok){ failed++; continue; }
+      LABELS.items.push({
+        id, no: LABELS.nextNo++, bc: currentBc, src, note,
+        url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${fileName}`,
+        date: new Date().toISOString().slice(0,10),
+      });
+      done++;
+    } catch { failed++; }
+  }
+
+  if (done > 0){
+    const ok = await saveLabels();
+    toast(ok ? `✓ أُضيفت ${done} فكرة${failed?` · فشل ${failed}`:""}` : "رُفعت الصور بس فشل الحفظ");
+    $("noteInput").value = "";
+  } else {
+    toast("فشل رفع الصور");
+  }
+  renderProduct();
+};
+
+window.delLabel = async (id) => {
+  if (!confirm("حذف هذي الفكرة؟")) return;
+  const item = LABELS.items.find(x => x.id === id);
+  LABELS.items = LABELS.items.filter(x => x.id !== id);
+  const ok = await saveLabels();
+  // نحذف الملف الفعلي كمان (ما نخلي ملفات يتيمة تاكل مساحة)
+  if (ok && item?.url?.includes("/storage/v1/object/public/")){
+    const path = item.url.split("/storage/v1/object/public/")[1];
+    fetch(`${SUPABASE_URL}/storage/v1/object/${path}`, {
+      method:"DELETE", headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
+    }).catch(()=>{});
+  }
+  toast(ok ? "✓ حُذفت" : "فشل الحذف");
+  renderProduct();
+};
+
+window.viewImg = (url) => {
+  const d = document.createElement("div");
+  d.className = "viewer";
+  d.innerHTML = `<button class="x">✕ إغلاق</button><img src="${url}">`;
+  d.onclick = () => d.remove();
+  document.body.appendChild(d);
+};
+
+// ─── تصدير PDF ───
+window.exportPDF = async () => {
+  const p = PRODUCTS.find(x => x.barcode === currentBc);
+  const items = labelsOf(currentBc);
+  if (items.length === 0){ toast("ما فيه أفكار للتصدير"); return; }
+  toast("جاري إنشاء PDF…");
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const pw = 210, ph = 297, m = 12;
+  const cols = 2, gap = 8;
+  const cw = (pw - m*2 - gap) / cols;
+  const chh = cw * 0.75;
+
+  pdf.setFontSize(16);
+  pdf.text(`Label Ideas - ${p.barcode}`, pw/2, 16, { align:"center" });
+  pdf.setFontSize(9);
+  pdf.text(`${items.length} ideas`, pw/2, 22, { align:"center" });
+
+  let x = m, y = 30, col = 0;
+  for (const it of items){
+    try {
+      const dataUrl = await new Promise((res)=>{
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = img.width; c.height = img.height;
+          c.getContext("2d").drawImage(img,0,0);
+          res(c.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = () => res(null);
+        img.src = it.url;
+      });
+      if (!dataUrl) continue;
+
+      if (y + chh + 12 > ph - m){ pdf.addPage(); y = m + 6; x = m; col = 0; }
+      pdf.addImage(dataUrl, "JPEG", x, y, cw, chh);
+      pdf.setFontSize(8);
+      pdf.text(`#${it.no ?? "-"}  ${srcNameEn(it.src)}`, x, y + chh + 4);
+      col++;
+      if (col >= cols){ col = 0; x = m; y += chh + 12; }
+      else x += cw + gap;
+    } catch {}
+  }
+  pdf.save(`labels_${p.barcode}.pdf`);
+  toast("✓ نزّل PDF");
+};
+function srcNameEn(s){ return { mine:"My design", web:"Website", competitor:"Competitor", ai:"AI" }[s] || s; }
+
+// ─── التحميل ───
+async function init(){
+  try {
+    const [prods, pers, labels] = await Promise.all([
+      sbGet("baro_products_v2"),
+      loadPeriods(),
+      sbGet(LABELS_KEY),
+    ]);
+    PRODUCTS = Array.isArray(prods) ? prods : [];
+    PERIODS = pers || [];
+    LABELS = labels && typeof labels === "object"
+      ? { items: labels.items||[], names: labels.names||{}, nextNo: labels.nextNo||1, custom: labels.custom||[], archived: labels.archived||[] }
+      : { items:[], names:{}, nextNo:1, custom:[], archived:[] };
+    // ترقيم تلقائي لأي فكرة قديمة بدون رقم (توافق مع بيانات سابقة)
+    let changed = false;
+    LABELS.items.forEach(it => { if (!it.no){ it.no = LABELS.nextNo++; changed = true; } });
+    if (changed) saveLabels();
+    // ندمج المنتجات اليدوية مع منتجات البارو
+    PRODUCTS = [...PRODUCTS, ...LABELS.custom];
+    render();
+  } catch(e){
+    $("app").innerHTML = `<div class="empty">تعذّر التحميل — حدّث الصفحة<br><span style="font-size:11px">${esc(e.message)}</span></div>`;
+  }
+}
+// الفترات: الشكل الجديد (كل شهر بمفتاحه) مع رجوع للقديم
+async function loadPeriods(){
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=like.baro_period_v1_*&select=value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows.length > 0){
+      return rows.map(x => { try { return JSON.parse(x.value); } catch { return null; } }).filter(Boolean);
+    }
+  } catch {}
+  const old = await sbGet("baro_periods_v2");
+  return Array.isArray(old) ? old : [];
+}
+init();
+</script>
+</body>
+</html>
