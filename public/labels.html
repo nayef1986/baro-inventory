@@ -242,6 +242,11 @@ function renderList(){
     ${hotCount > 0 && !showArchived ? `<div class="tip">${hotCount} منتج يبيع كويس وأفكاره قليلة. مرتّبين لك بالأعلى.</div>` : ""}
 
     <div class="row2" style="margin-bottom:10px">
+      <a href="mycats.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block">أصنافي</a>
+      <a href="lovisa.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block">تصنيف Lovisa</a>
+    </div>
+
+    <div class="row2" style="margin-bottom:10px">
       <button class="btn ${showArchived?"sec2":"pr"}" onclick="addCustomProduct()">أضف منتج</button>
       <button class="btn ${showArchived?"pr":"sec2"}" onclick="toggleArchived()">${showArchived?"رجوع للنشط":`الأرشيف (${(LABELS.archived||[]).length})`}</button>
     </div>
