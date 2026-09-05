@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>تصنيف Lovisa — مرجع</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;700;900&display=swap');
+:root{--ink:#12100E;--velvet:#1C1815;--velvet-2:#241F1A;--gold:#C9A227;--gold-dim:#8A6F47;--cream:#EFE6D6;--muted:#9A8B75;--line:#2E271F}
+*{font-family:'Tajawal',sans-serif;box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--ink);color:var(--cream);padding-bottom:60px;line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding:16px}
+.hd{padding:34px 0 22px;text-align:center;position:relative}
+.hd::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:52px;height:1px;background:var(--gold);opacity:.55}
+.hd h1{font-size:32px;font-weight:900;letter-spacing:-.8px}
+.hd .sub{font-size:13px;color:var(--muted);margin-top:8px;font-weight:300}
+.note{background:rgba(201,162,39,.07);border:1px solid rgba(201,162,39,.22);border-radius:14px;padding:14px 16px;font-size:13px;color:var(--cream);line-height:1.75;margin:18px 0;font-weight:300}
+.sect{margin-bottom:12px;background:var(--velvet);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.sect-hd{padding:16px 18px;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+.sect-hd .t{font-size:18px;font-weight:900}
+.sect-hd .en{font-size:12px;color:var(--muted);font-weight:300;margin-top:2px}
+.sect-hd .c{color:var(--gold);font-size:14px;font-weight:700}
+.sect-body{border-top:1px solid var(--line);padding:6px}
+.item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:11px;text-decoration:none;color:inherit}
+.item:active{background:var(--velvet-2)}
+.item .ar{font-size:15px;font-weight:400;color:var(--cream)}
+.item .en{font-size:12px;color:var(--muted);font-weight:300;margin-top:1px}
+.item .go{color:var(--gold-dim);font-size:13px}
+.search{width:100%;background:var(--velvet-2);border:1px solid var(--line);color:var(--cream);border-radius:12px;padding:13px;font-family:'Tajawal';font-size:15px;margin-bottom:14px}
+.search:focus{outline:none;border-color:var(--gold-dim)}
+.search::placeholder{color:#6B5E4D}
+.back{color:var(--gold);font-size:15px;font-weight:700;background:none;border:none;cursor:pointer;padding:10px 0;text-decoration:none;display:inline-block}
+.empty{text-align:center;padding:50px 20px;color:var(--muted);font-weight:300}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="labels.html" class="back">رجوع للمكتبة</a>
+  <div class="hd">
+    <h1>تصنيف Lovisa</h1>
+    <div class="sub">مرجع للاطلاع — اضغط أي تصنيف يفتح صفحته عندهم</div>
+  </div>
+
+  <div class="note">
+    هذي تصنيفات Lovisa كما هي على موقعهم، للاطلاع والإلهام. الصور تفتح عندهم مباشرة — ما نخزّن شي هنا.
+  </div>
+
+  <input class="search" id="q" placeholder="ابحث بالعربي أو الإنجليزي" oninput="doSearch(this.value)">
+  <div id="app"></div>
+</div>
+
+<script>
+const CATS = {
+  "earrings": {
+    "ar": "أقراط",
+    "en": "Earrings",
+    "url": "https://www.lovisa.com/collections/earrings",
+    "sub": [
+      {
+        "ar": "حلقات",
+        "en": "Hoops",
+        "url": "https://www.lovisa.com/collections/hoop-earrings"
+      },
+      {
+        "ar": "هاجي (حلقات صغيرة)",
+        "en": "Huggie Hoops",
+        "url": "https://www.lovisa.com/collections/huggie-earrings"
+      },
+      {
+        "ar": "دلايات",
+        "en": "Drops & Dangles",
+        "url": "https://www.lovisa.com/collections/drop-earrings"
+      },
+      {
+        "ar": "ستدز",
+        "en": "Studs",
+        "url": "https://www.lovisa.com/collections/stud-earrings"
+      },
+      {
+        "ar": "طقم أذن",
+        "en": "Ear Stacks",
+        "url": "https://www.lovisa.com/collections/ear-stacks"
+      },
+      {
+        "ar": "ستيتمنت (لافتة)",
+        "en": "Statement Earrings",
+        "url": "https://www.lovisa.com/collections/statement-earrings"
+      },
+      {
+        "ar": "كف أذن",
+        "en": "Ear Cuffs & Climbers",
+        "url": "https://www.lovisa.com/collections/ear-cuffs-climbers"
+      },
+      {
+        "ar": "سلسلة أذن",
+        "en": "Chain Earrings",
+        "url": "https://www.lovisa.com/collections/chain-earrings"
+      },
+      {
+        "ar": "ثريدر",
+        "en": "Threader Earrings",
+        "url": "https://www.lovisa.com/collections/threader-earrings"
+      },
+      {
+        "ar": "مشابك (بدون خرم)",
+        "en": "Clip On Earrings",
+        "url": "https://www.lovisa.com/collections/clip-on-earrings"
+      },
+      {
+        "ar": "ناعمة",
+        "en": "Dainty Earrings",
+        "url": "https://www.lovisa.com/collections/dainty-earrings"
+      },
+      {
+        "ar": "للنوم",
+        "en": "Sleeper Earrings",
+        "url": "https://www.lovisa.com/collections/sleeper-earrings"
+      },
+      {
+        "ar": "للأذن الحساسة",
+        "en": "Sensitive Earrings",
+        "url": "https://www.lovisa.com/collections/sensitive-earrings"
+      },
+      {
+        "ar": "لؤلؤ",
+        "en": "Pearl Earrings",
+        "url": "https://www.lovisa.com/collections/pearl-earrings"
+      },
+      {
+        "ar": "زيركون",
+        "en": "Cubic Zirconia Earrings",
+        "url": "https://www.lovisa.com/collections/cubic-zirconia-earrings"
+      },
+      {
+        "ar": "كريستال",
+        "en": "Crystal Earrings",
+        "url": "https://www.lovisa.com/collections/crystal-earrings"
+      },
+      {
+        "ar": "قلوب",
+        "en": "Heart Earrings",
+        "url": "https://www.lovisa.com/collections/heart-earrings"
+      },
+      {
+        "ar": "ورود",
+        "en": "Flower Earrings",
+        "url": "https://www.lovisa.com/collections/flower-earrings"
+      },
+      {
+        "ar": "نجوم",
+        "en": "Star Earrings",
+        "url": "https://www.lovisa.com/collections/star-earrings"
+      },
+      {
+        "ar": "صليب",
+        "en": "Cross Earrings",
+        "url": "https://www.lovisa.com/collections/cross-earrings"
+      },
+      {
+        "ar": "ظهر مسطح",
+        "en": "Flat Back Studs",
+        "url": "https://www.lovisa.com/collections/flat-backs"
+      }
+    ]
+  },
+  "necklaces": {
+    "ar": "عقود",
+    "en": "Necklaces",
+    "url": "https://www.lovisa.com/collections/necklaces",
+    "sub": [
+      {
+        "ar": "دلاية",
+        "en": "Pendant Necklaces",
+        "url": "https://www.lovisa.com/collections/pendant-necklaces"
+      },
+      {
+        "ar": "ستيتمنت (لافتة)",
+        "en": "Statement Necklaces",
+        "url": "https://www.lovisa.com/collections/statement-necklaces"
+      },
+      {
+        "ar": "طبقات",
+        "en": "Layered Necklaces",
+        "url": "https://www.lovisa.com/collections/layered-necklaces"
+      },
+      {
+        "ar": "تشوكر",
+        "en": "Chokers",
+        "url": "https://www.lovisa.com/collections/choker-necklaces"
+      },
+      {
+        "ar": "سلاسل",
+        "en": "Chains",
+        "url": "https://www.lovisa.com/collections/chains"
+      },
+      {
+        "ar": "سلسلة حلقات",
+        "en": "Link Chain Necklaces",
+        "url": "https://www.lovisa.com/collections/link-chain-necklaces"
+      },
+      {
+        "ar": "سلسلة فيجارو",
+        "en": "Figaro Chain",
+        "url": "https://www.lovisa.com/collections/figaro-chain-necklaces"
+      },
+      {
+        "ar": "سلسلة مارينر",
+        "en": "Mariner Chain",
+        "url": "https://www.lovisa.com/collections/mariner-chain-necklaces"
+      },
+      {
+        "ar": "سلسلة حبل",
+        "en": "Rope Chain",
+        "url": "https://www.lovisa.com/collections/rope-chain-necklaces"
+      },
+      {
+        "ar": "لارية",
+        "en": "Lariat / Y Necklaces",
+        "url": "https://www.lovisa.com/collections/lariat-necklaces"
+      },
+      {
+        "ar": "طويلة",
+        "en": "Long Necklaces",
+        "url": "https://www.lovisa.com/collections/long-necklaces"
+      },
+      {
+        "ar": "خرز",
+        "en": "Beaded Necklaces",
+        "url": "https://www.lovisa.com/collections/beaded-necklaces"
+      },
+      {
+        "ar": "تشارم",
+        "en": "Charm Necklaces",
+        "url": "https://www.lovisa.com/collections/charm-necklaces"
+      },
+      {
+        "ar": "ناعمة",
+        "en": "Dainty Necklaces",
+        "url": "https://www.lovisa.com/collections/dainty-necklaces"
+      },
+      {
+        "ar": "لؤلؤ",
+        "en": "Pearl Necklaces",
+        "url": "https://www.lovisa.com/collections/pearl-necklaces"
+      },
+      {
+        "ar": "قلوب",
+        "en": "Heart Necklaces",
+        "url": "https://www.lovisa.com/collections/heart-necklaces"
+      },
+      {
+        "ar": "فراشات",
+        "en": "Butterfly Necklaces",
+        "url": "https://www.lovisa.com/collections/butterfly-necklaces"
+      },
+      {
+        "ar": "صليب",
+        "en": "Cross Necklaces",
+        "url": "https://www.lovisa.com/collections/cross-necklaces"
+      },
+      {
+        "ar": "تنس",
+        "en": "Tennis Necklaces",
+        "url": "https://www.lovisa.com/collections/tennis-bracelets-necklaces"
+      },
+      {
+        "ar": "حروف",
+        "en": "Initial Jewelry",
+        "url": "https://www.lovisa.com/collections/initial-jewelry"
+      }
+    ]
+  },
+  "rings": {
+    "ar": "خواتم",
+    "en": "Rings",
+    "url": "https://www.lovisa.com/collections/rings",
+    "sub": [
+      {
+        "ar": "تكديس",
+        "en": "Stacking Rings",
+        "url": "https://www.lovisa.com/collections/stacking-rings"
+      },
+      {
+        "ar": "خطوبة",
+        "en": "Engagement Rings",
+        "url": "https://www.lovisa.com/collections/engagement-rings"
+      },
+      {
+        "ar": "فاشن",
+        "en": "Fashion Rings",
+        "url": "https://www.lovisa.com/collections/fashion-rings"
+      },
+      {
+        "ar": "كوكتيل",
+        "en": "Cocktail Rings",
+        "url": "https://www.lovisa.com/collections/cocktail-rings"
+      },
+      {
+        "ar": "سيجنت",
+        "en": "Signet Rings",
+        "url": "https://www.lovisa.com/collections/signet-rings"
+      },
+      {
+        "ar": "بانْد (حلقة بسيطة)",
+        "en": "Bands",
+        "url": "https://www.lovisa.com/collections/bands"
+      },
+      {
+        "ar": "مفتوحة",
+        "en": "Open End Rings",
+        "url": "https://www.lovisa.com/collections/open-end-rings"
+      },
+      {
+        "ar": "ناعمة",
+        "en": "Dainty Rings",
+        "url": "https://www.lovisa.com/collections/dainty-rings"
+      },
+      {
+        "ar": "وعد",
+        "en": "Promise Rings",
+        "url": "https://www.lovisa.com/collections/promise-rings"
+      },
+      {
+        "ar": "طرف الإصبع",
+        "en": "Fingertip Rings",
+        "url": "https://www.lovisa.com/collections/fingertip-rings"
+      },
+      {
+        "ar": "أصابع القدم",
+        "en": "Toe Rings",
+        "url": "https://www.lovisa.com/collections/toe-rings"
+      },
+      {
+        "ar": "فينتج",
+        "en": "Vintage Style Rings",
+        "url": "https://www.lovisa.com/collections/vintage-rings"
+      },
+      {
+        "ar": "زيركون",
+        "en": "Cubic Zirconia Rings",
+        "url": "https://www.lovisa.com/collections/cubic-zirconia-rings"
+      }
+    ]
+  },
+  "wristwear": {
+    "ar": "أساور ومعاصم",
+    "en": "Wristwear",
+    "url": "https://www.lovisa.com/collections/wristwear",
+    "sub": [
+      {
+        "ar": "أساور",
+        "en": "Bracelets",
+        "url": "https://www.lovisa.com/collections/bracelets"
+      },
+      {
+        "ar": "بانجل (صلبة)",
+        "en": "Bangles",
+        "url": "https://www.lovisa.com/collections/bangles"
+      },
+      {
+        "ar": "كف يد",
+        "en": "Arm & Wrist Cuffs",
+        "url": "https://www.lovisa.com/collections/cuffs"
+      },
+      {
+        "ar": "ساعات",
+        "en": "Watches & Straps",
+        "url": "https://www.lovisa.com/collections/watches"
+      },
+      {
+        "ar": "خرز",
+        "en": "Beaded Bracelets",
+        "url": "https://www.lovisa.com/collections/beaded-bracelets"
+      },
+      {
+        "ar": "تشارم",
+        "en": "Charm Bracelets",
+        "url": "https://www.lovisa.com/collections/charm-bracelets"
+      },
+      {
+        "ar": "صداقة",
+        "en": "Friendship Bracelets",
+        "url": "https://www.lovisa.com/collections/friendship-bracelets"
+      },
+      {
+        "ar": "تنس",
+        "en": "Tennis Bracelets",
+        "url": "https://www.lovisa.com/collections/tennis-bracelets"
+      },
+      {
+        "ar": "سلسلة يد",
+        "en": "Hand Chains",
+        "url": "https://www.lovisa.com/collections/hand-chains"
+      }
+    ]
+  },
+  "piercing": {
+    "ar": "بيرسنق",
+    "en": "Body & Piercings",
+    "url": "https://www.lovisa.com/collections/body-jewelry",
+    "sub": [
+      {
+        "ar": "أنف",
+        "en": "Nose",
+        "url": "https://www.lovisa.com/collections/nose-piercings"
+      },
+      {
+        "ar": "سبتم",
+        "en": "Septum",
+        "url": "https://www.lovisa.com/collections/septum-piercings"
+      },
+      {
+        "ar": "سرة",
+        "en": "Belly",
+        "url": "https://www.lovisa.com/collections/belly-button-piercings"
+      },
+      {
+        "ar": "هيلكس",
+        "en": "Helix",
+        "url": "https://www.lovisa.com/collections/helix-piercings"
+      },
+      {
+        "ar": "غضروف",
+        "en": "Cartilage",
+        "url": "https://www.lovisa.com/collections/cartilage-piercings"
+      },
+      {
+        "ar": "صناعي (إندستريال)",
+        "en": "Industrial",
+        "url": "https://www.lovisa.com/collections/industrial-piercings"
+      },
+      {
+        "ar": "شفاه",
+        "en": "Lip",
+        "url": "https://www.lovisa.com/collections/lip-piercings"
+      },
+      {
+        "ar": "حلقات كليكر",
+        "en": "Clicker Rings",
+        "url": "https://www.lovisa.com/collections/clickers-hinged-rings"
+      },
+      {
+        "ar": "باربل",
+        "en": "Barbells",
+        "url": "https://www.lovisa.com/collections/barbells"
+      },
+      {
+        "ar": "بيرسنق وهمي",
+        "en": "Fake Piercings",
+        "url": "https://www.lovisa.com/collections/fake-piercings"
+      },
+      {
+        "ar": "ستيل جراحي",
+        "en": "Surgical Steel",
+        "url": "https://www.lovisa.com/collections/surgical-steel-earrings"
+      },
+      {
+        "ar": "تيتانيوم",
+        "en": "Titanium",
+        "url": "https://www.lovisa.com/collections/titanium-earrings"
+      }
+    ]
+  },
+  "hair": {
+    "ar": "إكسسوارات شعر",
+    "en": "Hair Accessories",
+    "url": "https://www.lovisa.com/collections/hair-accessories",
+    "sub": [
+      {
+        "ar": "مشابك",
+        "en": "Hair Clips",
+        "url": "https://www.lovisa.com/collections/hair-clips"
+      },
+      {
+        "ar": "كلابات",
+        "en": "Hair Claws",
+        "url": "https://www.lovisa.com/collections/hair-claws"
+      },
+      {
+        "ar": "ربطات (سكرانشي)",
+        "en": "Scrunchies",
+        "url": "https://www.lovisa.com/collections/scrunchies"
+      },
+      {
+        "ar": "أستك شعر",
+        "en": "Hair Ties",
+        "url": "https://www.lovisa.com/collections/hair-ties"
+      },
+      {
+        "ar": "طوق (هيدباند)",
+        "en": "Headbands",
+        "url": "https://www.lovisa.com/collections/headbands"
+      },
+      {
+        "ar": "فيونكات وشرائط",
+        "en": "Hair Bows & Ribbons",
+        "url": "https://www.lovisa.com/collections/hair-bows"
+      },
+      {
+        "ar": "باريت",
+        "en": "Barrettes",
+        "url": "https://www.lovisa.com/collections/barrettes"
+      },
+      {
+        "ar": "أمشاط",
+        "en": "Hair Combs",
+        "url": "https://www.lovisa.com/collections/hair-combs"
+      },
+      {
+        "ar": "دبابيس",
+        "en": "Hair Pins & Slides",
+        "url": "https://www.lovisa.com/collections/hair-pins-slides"
+      },
+      {
+        "ar": "سلسلة شعر",
+        "en": "Hair Vines",
+        "url": "https://www.lovisa.com/collections/hair-vines"
+      },
+      {
+        "ar": "تيجان",
+        "en": "Tiaras",
+        "url": "https://www.lovisa.com/collections/tiaras"
+      },
+      {
+        "ar": "تاج ورد",
+        "en": "Flower Crowns",
+        "url": "https://www.lovisa.com/collections/flower-crowns"
+      },
+      {
+        "ar": "بندانات",
+        "en": "Bandanas & Scarves",
+        "url": "https://www.lovisa.com/collections/bandanas-hair-scarves"
+      }
+    ]
+  },
+  "accessories": {
+    "ar": "إكسسوارات",
+    "en": "Accessories",
+    "url": "https://www.lovisa.com/collections/accessories",
+    "sub": [
+      {
+        "ar": "خلاخيل",
+        "en": "Anklets",
+        "url": "https://www.lovisa.com/collections/anklets"
+      },
+      {
+        "ar": "سلاسل خصر وأحزمة",
+        "en": "Waist Chains & Belts",
+        "url": "https://www.lovisa.com/collections/belts"
+      },
+      {
+        "ar": "سلاسل جسم",
+        "en": "Body & Waist Chains",
+        "url": "https://www.lovisa.com/collections/body-chains"
+      },
+      {
+        "ar": "سلسلة رأس",
+        "en": "Head Chains",
+        "url": "https://www.lovisa.com/collections/head-chains"
+      },
+      {
+        "ar": "بروشات ودبابيس",
+        "en": "Brooches & Pins",
+        "url": "https://www.lovisa.com/collections/brooches-pins"
+      },
+      {
+        "ar": "تعليقات شنط",
+        "en": "Bag Charms",
+        "url": "https://www.lovisa.com/collections/bag-charms-keychains"
+      },
+      {
+        "ar": "علب مجوهرات",
+        "en": "Jewelry Boxes",
+        "url": "https://www.lovisa.com/collections/jewelry-boxes"
+      },
+      {
+        "ar": "أوشحة",
+        "en": "Scarves",
+        "url": "https://www.lovisa.com/collections/scarves"
+      },
+      {
+        "ar": "نظارات شمسية",
+        "en": "Sunglasses",
+        "url": "https://www.lovisa.com/collections/sunglasses"
+      },
+      {
+        "ar": "تعليقات جوال",
+        "en": "Phone Charms",
+        "url": "https://www.lovisa.com/collections/phone-charms-straps"
+      },
+      {
+        "ar": "أظافر لاصقة",
+        "en": "Press On Nails",
+        "url": "https://www.lovisa.com/collections/press-on-nails"
+      },
+      {
+        "ar": "جواهر وجه",
+        "en": "Face Jewels",
+        "url": "https://www.lovisa.com/collections/face-jewels"
+      },
+      {
+        "ar": "رموش",
+        "en": "Fake Eyelashes",
+        "url": "https://www.lovisa.com/collections/fake-eyelashes"
+      },
+      {
+        "ar": "تشارمز",
+        "en": "Charms",
+        "url": "https://www.lovisa.com/collections/charms"
+      }
+    ]
+  },
+  "sets": {
+    "ar": "أطقم ومجموعات",
+    "en": "Sets & Bundles",
+    "url": "https://www.lovisa.com/collections/jewelry-sets",
+    "sub": [
+      {
+        "ar": "أطقم مجوهرات",
+        "en": "Jewelry Sets",
+        "url": "https://www.lovisa.com/collections/jewelry-sets"
+      },
+      {
+        "ar": "طقم أذن منسّق",
+        "en": "Curated Ear Stacks",
+        "url": "https://www.lovisa.com/collections/ear-stacks"
+      },
+      {
+        "ar": "ستاكس آند باكس",
+        "en": "Stacks & Packs",
+        "url": "https://www.lovisa.com/collections/stacks-packs"
+      },
+      {
+        "ar": "بوكس مفاجأة",
+        "en": "Mystery Box",
+        "url": "https://www.lovisa.com/collections/blind-box"
+      },
+      {
+        "ar": "علب هدايا",
+        "en": "Gift Packages",
+        "url": "https://www.lovisa.com/collections/gift-packages"
+      },
+      {
+        "ar": "مكس آند ماتش",
+        "en": "Mix & Match Bundle",
+        "url": "https://www.lovisa.com/collections/mix-and-match-bundle"
+      }
+    ]
+  },
+  "themes": {
+    "ar": "ثيمات وتصاميم",
+    "en": "Themes & Styles",
+    "url": "https://www.lovisa.com/collections/trending-now",
+    "sub": [
+      {
+        "ar": "فلكي (نجوم وأقمار)",
+        "en": "Celestial",
+        "url": "https://www.lovisa.com/collections/celestial"
+      },
+      {
+        "ar": "عين زرقاء",
+        "en": "Evil Eye",
+        "url": "https://www.lovisa.com/collections/evil-eye"
+      },
+      {
+        "ar": "أبراج",
+        "en": "Zodiac Star Signs",
+        "url": "https://www.lovisa.com/collections/zodiac-star-signs"
+      },
+      {
+        "ar": "بوهو",
+        "en": "Boho",
+        "url": "https://www.lovisa.com/collections/boho-jewelry"
+      },
+      {
+        "ar": "مينيمال",
+        "en": "Minimalist",
+        "url": "https://www.lovisa.com/collections/minimalist-jewelry"
+      },
+      {
+        "ar": "واي تو كي",
+        "en": "Y2K",
+        "url": "https://www.lovisa.com/collections/y2k"
+      },
+      {
+        "ar": "غربي (ويسترن)",
+        "en": "Western",
+        "url": "https://www.lovisa.com/collections/western-jewelry-accessories"
+      },
+      {
+        "ar": "ساحلي",
+        "en": "Coastal Edit",
+        "url": "https://www.lovisa.com/collections/coastal-edit"
+      },
+      {
+        "ar": "ثمانينات",
+        "en": "80s",
+        "url": "https://www.lovisa.com/collections/80s"
+      },
+      {
+        "ar": "تسعينات",
+        "en": "90s",
+        "url": "https://www.lovisa.com/collections/90s"
+      },
+      {
+        "ar": "غاتسبي",
+        "en": "Gatsby Glam",
+        "url": "https://www.lovisa.com/collections/gatsby-glam"
+      },
+      {
+        "ar": "ثعابين",
+        "en": "Snake",
+        "url": "https://www.lovisa.com/collections/snake"
+      },
+      {
+        "ar": "شراشيب",
+        "en": "Tassels",
+        "url": "https://www.lovisa.com/collections/tassels"
+      },
+      {
+        "ar": "عملات",
+        "en": "Coin",
+        "url": "https://www.lovisa.com/collections/coin"
+      },
+      {
+        "ar": "رمزي",
+        "en": "Symbolic",
+        "url": "https://www.lovisa.com/collections/symbolic-jewelry"
+      },
+      {
+        "ar": "مخصص بالاسم",
+        "en": "Personalized",
+        "url": "https://www.lovisa.com/collections/personalized"
+      }
+    ]
+  },
+  "occasions": {
+    "ar": "مناسبات",
+    "en": "Occasions",
+    "url": "https://www.lovisa.com/collections/gifts",
+    "sub": [
+      {
+        "ar": "عرائس",
+        "en": "Bridal",
+        "url": "https://www.lovisa.com/collections/bridal"
+      },
+      {
+        "ar": "وصيفات",
+        "en": "Bridesmaid",
+        "url": "https://www.lovisa.com/collections/bridesmaid"
+      },
+      {
+        "ar": "أعياد ميلاد",
+        "en": "Birthday",
+        "url": "https://www.lovisa.com/collections/birthday-accessories"
+      },
+      {
+        "ar": "تخرج",
+        "en": "Graduation",
+        "url": "https://www.lovisa.com/collections/graduation-jewelry"
+      },
+      {
+        "ar": "سهرات",
+        "en": "Night Out",
+        "url": "https://www.lovisa.com/collections/night-out-edit"
+      },
+      {
+        "ar": "يومي",
+        "en": "Everyday",
+        "url": "https://www.lovisa.com/collections/everyday-jewelry"
+      },
+      {
+        "ar": "عمل",
+        "en": "Work Outfit",
+        "url": "https://www.lovisa.com/collections/work-outfit-accessories"
+      },
+      {
+        "ar": "مهرجانات",
+        "en": "Festival & Events",
+        "url": "https://www.lovisa.com/collections/festival-accessories"
+      },
+      {
+        "ar": "صداقة",
+        "en": "Friendship",
+        "url": "https://www.lovisa.com/collections/friendship"
+      },
+      {
+        "ar": "أم وبنت",
+        "en": "Mother & Daughter",
+        "url": "https://www.lovisa.com/collections/mother-daughter-jewelry"
+      }
+    ]
+  },
+  "materials": {
+    "ar": "خامات وتشطيبات",
+    "en": "Materials & Finishes",
+    "url": "https://www.lovisa.com/collections/premium-jewelry",
+    "sub": [
+      {
+        "ar": "مطلي ذهب",
+        "en": "Gold Plated",
+        "url": "https://www.lovisa.com/collections/gold-plated"
+      },
+      {
+        "ar": "فضة إسترليني",
+        "en": "Sterling Silver",
+        "url": "https://www.lovisa.com/collections/sterling-silver"
+      },
+      {
+        "ar": "ذهب وردي",
+        "en": "Rose Gold",
+        "url": "https://www.lovisa.com/collections/rose-gold"
+      },
+      {
+        "ar": "ستيل ستينلس",
+        "en": "Stainless Steel",
+        "url": "https://www.lovisa.com/collections/stainless-steel"
+      },
+      {
+        "ar": "مقاوم للماء",
+        "en": "Waterproof",
+        "url": "https://www.lovisa.com/collections/waterproof-jewelry"
+      },
+      {
+        "ar": "لؤلؤ",
+        "en": "Pearl",
+        "url": "https://www.lovisa.com/collections/pearl"
+      },
+      {
+        "ar": "لؤلؤ طبيعي",
+        "en": "Freshwater Pearl",
+        "url": "https://www.lovisa.com/collections/freshwater-pearl"
+      },
+      {
+        "ar": "زيركون",
+        "en": "Cubic Zirconia",
+        "url": "https://www.lovisa.com/collections/cubic-zirconia"
+      },
+      {
+        "ar": "كريستال",
+        "en": "Crystal",
+        "url": "https://www.lovisa.com/collections/crystal"
+      },
+      {
+        "ar": "أحجار شبه كريمة",
+        "en": "Semi Precious Stones",
+        "url": "https://www.lovisa.com/collections/semi-precious-stone-jewelry"
+      },
+      {
+        "ar": "أكريليك",
+        "en": "Acrylic",
+        "url": "https://www.lovisa.com/collections/acrylic-jewelry"
+      },
+      {
+        "ar": "معادن مختلطة",
+        "en": "Mixed Metals",
+        "url": "https://www.lovisa.com/collections/mixed-metals"
+      },
+      {
+        "ar": "معادن ثمينة",
+        "en": "Precious Metals",
+        "url": "https://www.lovisa.com/collections/precious-metals"
+      }
+    ]
+  },
+  "segments": {
+    "ar": "فئات العملاء",
+    "en": "Customer Segments",
+    "url": "https://www.lovisa.com/collections/shop-all-items",
+    "sub": [
+      {
+        "ar": "رجالي",
+        "en": "Men's Jewelry",
+        "url": "https://www.lovisa.com/collections/mens"
+      },
+      {
+        "ar": "أطفال",
+        "en": "Kids",
+        "url": "https://www.lovisa.com/collections/kids"
+      },
+      {
+        "ar": "مراهقات",
+        "en": "Tweens",
+        "url": "https://www.lovisa.com/collections/tweens"
+      },
+      {
+        "ar": "أساور أطفال",
+        "en": "Kids Bracelets",
+        "url": "https://www.lovisa.com/collections/kids-bracelets"
+      },
+      {
+        "ar": "أقراط أطفال",
+        "en": "Kids Earrings",
+        "url": "https://www.lovisa.com/collections/kids-earrings"
+      },
+      {
+        "ar": "عقود أطفال",
+        "en": "Kids Necklaces",
+        "url": "https://www.lovisa.com/collections/kids-necklaces"
+      },
+      {
+        "ar": "شعر أطفال",
+        "en": "Kids Hair",
+        "url": "https://www.lovisa.com/collections/kids-hair-accessories"
+      },
+      {
+        "ar": "ساعات أطفال",
+        "en": "Kids Watches",
+        "url": "https://www.lovisa.com/collections/kids-watches"
+      }
+    ]
+  }
+};
+let openSection = null, query = "";
+
+function esc(s){ return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function render(){
+  const q = query.trim().toLowerCase();
+  const app = document.getElementById("app");
+
+  if (q){
+    // نتائج البحث — كل التصنيفات المطابقة من كل الأقسام
+    const hits = [];
+    Object.entries(CATS).forEach(([key, sec]) => {
+      sec.sub.forEach(s => {
+        if (s.ar.toLowerCase().includes(q) || s.en.toLowerCase().includes(q))
+          hits.push({ ...s, parent: sec.ar });
+      });
+      if (sec.ar.toLowerCase().includes(q) || sec.en.toLowerCase().includes(q))
+        hits.push({ ar: sec.ar, en: sec.en, url: sec.url, parent: "قسم رئيسي" });
+    });
+    app.innerHTML = hits.length ? `<div class="sect"><div class="sect-body">` + hits.map(h => `
+      <a class="item" href="${h.url}" target="_blank" rel="noopener noreferrer">
+        <div><div class="ar">${esc(h.ar)}</div><div class="en">${esc(h.en)} · ${esc(h.parent)}</div></div>
+        <span class="go">افتح</span>
+      </a>`).join("") + `</div></div>`
+      : `<div class="empty">ما فيه تصنيف بهذا الاسم</div>`;
+    return;
+  }
+
+  app.innerHTML = Object.entries(CATS).map(([key, sec]) => {
+    const open = openSection === key;
+    return `
+      <div class="sect">
+        <div class="sect-hd" onclick="toggle('${key}')">
+          <div>
+            <div class="t">${esc(sec.ar)}</div>
+            <div class="en">${esc(sec.en)}</div>
+          </div>
+          <span class="c">${sec.sub.length}</span>
+        </div>
+        ${open ? `<div class="sect-body">
+          <a class="item" href="${sec.url}" target="_blank" rel="noopener noreferrer">
+            <div><div class="ar">الكل — ${esc(sec.ar)}</div><div class="en">Shop All ${esc(sec.en)}</div></div>
+            <span class="go">افتح</span>
+          </a>
+          ${sec.sub.map(s => `
+            <a class="item" href="${s.url}" target="_blank" rel="noopener noreferrer">
+              <div><div class="ar">${esc(s.ar)}</div><div class="en">${esc(s.en)}</div></div>
+              <span class="go">افتح</span>
+            </a>`).join("")}
+        </div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+window.toggle = (k) => { openSection = openSection === k ? null : k; render(); };
+let t = null;
+window.doSearch = (v) => { query = v; clearTimeout(t); t = setTimeout(render, 200); };
+render();
+</script>
+</body>
+</html>
