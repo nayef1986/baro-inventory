@@ -450,6 +450,18 @@ export default function SettingsScreen({ products, periods, settings, onSaveSett
         </a>
       </Card>
 
+      {/* مكتبة أفكار الليبل */}
+      <Card>
+        <SectionHeader icon="🏷️" title="مكتبة أفكار الليبل" subtitle="ذاكرتك البصرية لأفكار التصميم" />
+        <div className="text-xs text-slate-500 bg-slate-700/50 rounded-xl p-3 mb-3 leading-relaxed">
+          احفظ أفكار الليبل لكل منتج (من مواقع، منافسين، AI، أو تصميمك)، والنظام يقترح لك المنتجات القوية اللي تحتاج أفكار جديدة
+        </div>
+        <a href="https://baro-inventory-qmpp.vercel.app/labels.html" target="_blank" rel="noopener noreferrer"
+          className="block w-full text-center bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white py-3 rounded-xl font-bold text-sm">
+          🏷️ افتح مكتبة أفكار الليبل
+        </a>
+      </Card>
+
       {/* ربط أودو — مقفول برقم سري */}
       <Card>
         <SectionHeader icon="🔗" title="ربط أودو" subtitle="مقفول برقم سري · تحديث المبيعات تلقائياً" />
