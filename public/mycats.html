@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>أصنافي</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;700;900&display=swap');
 :root{--ink:#12100E;--velvet:#1C1815;--velvet-2:#241F1A;--gold:#C9A227;--gold-dim:#8A6F47;--cream:#EFE6D6;--muted:#9A8B75;--line:#2E271F;--alert:#C86B4A}
@@ -32,6 +33,19 @@ body{background:var(--ink);color:var(--cream);padding-bottom:70px;line-height:1.
 .empty{text-align:center;padding:50px 20px;color:var(--muted);font-weight:300;line-height:1.9}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);padding:14px 26px;border-radius:13px;font-size:14px;font-weight:700;opacity:0;transition:opacity .3s;z-index:999;pointer-events:none}
 .toast.show{opacity:1}
+.itemBox{border-radius:11px;margin-bottom:4px}
+.badge{background:rgba(201,162,39,.16);color:var(--gold);border-radius:7px;padding:2px 8px;font-size:12px;font-weight:700;margin-right:6px}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;padding:4px 14px 10px}
+.th{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--velvet-2)}
+.th img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;cursor:pointer}
+.thx{position:absolute;top:4px;left:4px;background:rgba(18,16,14,.85);color:var(--alert);border:1px solid rgba(200,107,74,.35);border-radius:7px;width:22px;height:22px;font-size:11px;cursor:pointer;line-height:1}
+.mini{background:transparent;border:1px solid var(--line);color:var(--gold-dim);border-radius:10px;padding:9px;font-family:'Tajawal';font-size:13px;font-weight:700;cursor:pointer;margin:0 14px 10px;width:calc(100% - 28px)}
+.mini.wide{margin:6px 6px 4px;width:calc(100% - 12px);color:var(--gold);border-color:rgba(201,162,39,.3)}
+.ok{background:#2F6B4F;color:#EAF6EF}
+.viewer{position:fixed;inset:0;background:rgba(10,9,8,.97);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;flex-direction:column;gap:14px}
+.viewer img{max-width:100%;max-height:74vh;border-radius:14px}
+.viewer .x{position:absolute;top:22px;left:22px;background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);border-radius:12px;padding:11px 19px;font-family:'Tajawal';font-weight:700;cursor:pointer}
+.viewer .dl{background:var(--gold);color:#1A1509;border:none;border-radius:12px;padding:13px 26px;font-family:'Tajawal';font-weight:700;text-decoration:none;font-size:15px}
 .back{color:var(--gold);font-size:15px;font-weight:700;background:none;border:none;cursor:pointer;padding:10px 0;text-decoration:none;display:inline-block}
 .note{background:rgba(201,162,39,.07);border:1px solid rgba(201,162,39,.22);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.75;margin-bottom:16px;font-weight:300}
 </style>
@@ -52,6 +66,7 @@ const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
 const TABLE = "baro_store";
 const KEY = "baro_my_categories_v1";
+const BUCKET = "product-images";
 
 const SEED = {
   "earrings": {
@@ -295,6 +310,90 @@ async function save(){
   return r.ok;
 }
 
+
+// ─── الصور ───
+function shrink(dataUrl, max=1000, q=0.86){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = () => {
+      let {width:w, height:h} = img;
+      if (w>max || h>max){ if(w>h){h=Math.round(h*max/w);w=max;} else {w=Math.round(w*max/h);h=max;} }
+      const cv = document.createElement("canvas"); cv.width=w; cv.height=h;
+      cv.getContext("2d").drawImage(img,0,0,w,h);
+      res(cv.toDataURL("image/jpeg", q));
+    };
+    img.onerror = () => res(null);
+    img.src = dataUrl;
+  });
+}
+function dataUrlToBlob(d){
+  const [meta, b64] = d.split(",");
+  const mime = meta.match(/:(.*?);/)[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type:mime });
+}
+
+window.pickImages = (k, i) => {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*"; inp.multiple = true;
+  inp.onchange = () => uploadImages(k, i, inp.files);
+  inp.click();
+};
+
+async function uploadImages(k, i, files){
+  if (!files || !files.length) return;
+  toast(`جاري رفع ${files.length} صورة…`);
+  let done = 0, failed = 0;
+  for (const f of files){
+    try {
+      const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+      const small = await shrink(dataUrl);
+      if (!small){ failed++; continue; }
+      const blob = dataUrlToBlob(small);
+      const id = "cat_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+      const fileName = `${id}.jpg`;
+      const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${fileName}`, {
+        method:"POST",
+        headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"image/jpeg", "x-upsert":"true" },
+        body: blob,
+      });
+      if (!up.ok){ failed++; continue; }
+      CATS[k].sub[i].imgs.push(`${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${fileName}`);
+      done++;
+    } catch { failed++; }
+  }
+  if (done){ const ok = await save(); toast(ok ? `أُضيفت ${done} صورة${failed?` · فشل ${failed}`:""}` : "فشل الحفظ"); }
+  else toast("فشل رفع الصور");
+  render();
+}
+
+window.delImage = async (k, i, idx) => {
+  if (!confirm("حذف هذي الصورة؟")) return;
+  const url = CATS[k].sub[i].imgs[idx];
+  CATS[k].sub[i].imgs.splice(idx,1);
+  const ok = await save();
+  if (ok && url?.includes("/storage/v1/object/public/")){
+    const path = url.split("/storage/v1/object/public/")[1];
+    fetch(`${SUPABASE_URL}/storage/v1/object/${path}`, { method:"DELETE", headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } }).catch(()=>{});
+  }
+  toast(ok ? "حُذفت" : "فشل الحذف");
+  render();
+};
+
+// عارض الصورة — فتح كامل + حفظ
+window.viewImg = (url, name) => {
+  const d = document.createElement("div");
+  d.className = "viewer";
+  d.innerHTML = `
+    <button class="x">إغلاق</button>
+    <a class="dl" href="${url}" download="${(name||"image").replace(/[^\u0600-\u06FFA-Za-z0-9]/g,"_")}.jpg" target="_blank" rel="noopener">حفظ الصورة</a>
+    <img src="${url}">`;
+  d.onclick = (e) => { if (e.target.tagName !== "A") d.remove(); };
+  document.body.appendChild(d);
+};
+
 function render(){
   const keys = Object.keys(CATS);
   $("app").innerHTML = `
@@ -307,6 +406,7 @@ function render(){
       <button class="btn pr" onclick="addSection()">أضف قسم</button>
       <button class="btn sec2" onclick="resetAll()">رجّع الأصل</button>
     </div>
+    ${Object.values(CATS).some(sec => sec.sub.some(s=>s.imgs.length)) ? `<button class="btn ok" style="margin-bottom:14px" onclick="exportPDF('all')">حمّل PDF لكل الأصناف</button>` : ""}
 
     ${keys.map(k => {
       const sec = CATS[k];
@@ -321,12 +421,24 @@ function render(){
           </div>
           ${open ? `<div class="sect-body">
             ${sec.sub.map((s,i) => `
-              <div class="item">
-                <div class="ar">${esc(s)}</div>
-                <button class="x" onclick="renameItem('${k}',${i})">✎</button>
-                <button class="x" onclick="delItem('${k}',${i})">✕</button>
+              <div class="itemBox">
+                <div class="item">
+                  <div class="ar">${esc(s.n)}${s.imgs.length?` <span class="badge">${s.imgs.length}</span>`:""}</div>
+                  <button class="x" onclick="pickImages('${k}',${i})" title="أضف صور">📷</button>
+                  <button class="x" onclick="renameItem('${k}',${i})">✎</button>
+                  <button class="x" onclick="delItem('${k}',${i})">✕</button>
+                </div>
+                ${s.imgs.length ? `<div class="thumbs">
+                  ${s.imgs.map((u,ix) => `
+                    <div class="th">
+                      <img src="${u}" loading="lazy" onclick="viewImg('${u}','${esc(s.n)}')">
+                      <button class="thx" onclick="delImage('${k}',${i},${ix})">✕</button>
+                    </div>`).join("")}
+                </div>` : ""}
+                ${s.imgs.length ? `<button class="mini" onclick="exportPDF('item','${k}',${i})">PDF لهذا الصنف</button>` : ""}
               </div>`).join("")}
             <button class="add" onclick="addItem('${k}')">أضف صنف لـ${esc(sec.ar)}</button>
+            ${sec.sub.some(s=>s.imgs.length) ? `<button class="mini wide" onclick="exportPDF('section','${k}')">PDF لكل ${esc(sec.ar)}</button>` : ""}
           </div>` : ""}
         </div>`;
     }).join("")}
@@ -362,14 +474,14 @@ window.delSection = async (k) => {
 window.addItem = async (k) => {
   const name = prompt(`أضف صنف لـ${CATS[k].ar}:`);
   if (!name || !name.trim()) return;
-  CATS[k].sub.push(name.trim());
+  CATS[k].sub.push({ n: name.trim(), imgs: [] });
   const ok = await save(); toast(ok ? "أُضيف" : "فشل الحفظ"); render();
 };
 
 window.renameItem = async (k, i) => {
-  const name = prompt("الاسم الجديد:", CATS[k].sub[i]);
+  const name = prompt("الاسم الجديد:", CATS[k].sub[i].n);
   if (!name || !name.trim()) return;
-  CATS[k].sub[i] = name.trim();
+  CATS[k].sub[i].n = name.trim();
   const ok = await save(); toast(ok ? "تم" : "فشل الحفظ"); render();
 };
 
@@ -380,14 +492,90 @@ window.delItem = async (k, i) => {
 
 window.resetAll = async () => {
   if (!confirm("ترجع لتصنيف Lovisa الأصلي؟ كل تعديلاتك بتنمسح.")) return;
-  CATS = JSON.parse(JSON.stringify(SEED));
+  CATS = normalize(JSON.parse(JSON.stringify(SEED)));
   const ok = await save(); toast(ok ? "رجعت للأصل" : "فشل"); render();
+};
+
+// نحوّل الأصناف النصية القديمة لكائنات فيها اسم وصور (توافق مع بياناتك السابقة)
+function normalize(cats){
+  Object.values(cats).forEach(sec => {
+    sec.sub = (sec.sub||[]).map(s =>
+      typeof s === "string" ? { n: s, imgs: [] } : { n: s.n || "", imgs: s.imgs || [] }
+    );
+  });
+  return cats;
+}
+
+
+// ─── تصدير PDF: للكل / لقسم / لصنف ───
+window.exportPDF = async (scope, k, i) => {
+  const { jsPDF } = window.jspdf;
+  let groups = [];
+  let fileName = "categories";
+
+  if (scope === "item"){
+    const s = CATS[k].sub[i];
+    groups = [{ title: `${CATS[k].ar} - ${s.n}`, imgs: s.imgs }];
+    fileName = s.n;
+  } else if (scope === "section"){
+    groups = CATS[k].sub.filter(s=>s.imgs.length).map(s => ({ title: `${CATS[k].ar} - ${s.n}`, imgs: s.imgs }));
+    fileName = CATS[k].ar;
+  } else {
+    Object.values(CATS).forEach(sec => sec.sub.filter(s=>s.imgs.length).forEach(s => {
+      groups.push({ title: `${sec.ar} - ${s.n}`, imgs: s.imgs });
+    }));
+    fileName = "كل_الأصناف";
+  }
+
+  const total = groups.reduce((n,g)=>n+g.imgs.length,0);
+  if (!total){ toast("ما فيه صور للتصدير"); return; }
+  toast(`جاري إنشاء PDF (${total} صورة)…`);
+
+  const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const pw = 210, ph = 297, m = 12, gap = 8, cols = 2;
+  const cw = (pw - m*2 - gap) / cols;
+  const chh = cw * 4/3;   // نسبة 3:4 زي العرض
+  let first = true;
+
+  for (const g of groups){
+    if (!first) pdf.addPage();
+    first = false;
+    pdf.setFontSize(13);
+    pdf.text(g.title, pw/2, 15, { align:"center" });
+
+    let x = m, y = 24, col = 0;
+    for (const url of g.imgs){
+      try {
+        const dataUrl = await new Promise(res=>{
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const cv = document.createElement("canvas");
+            cv.width = img.width; cv.height = img.height;
+            cv.getContext("2d").drawImage(img,0,0);
+            res(cv.toDataURL("image/jpeg", 0.82));
+          };
+          img.onerror = () => res(null);
+          img.src = url;
+        });
+        if (!dataUrl) continue;
+        if (y + chh > ph - m){ pdf.addPage(); y = m + 6; x = m; col = 0; }
+        pdf.addImage(dataUrl, "JPEG", x, y, cw, chh);
+        col++;
+        if (col >= cols){ col = 0; x = m; y += chh + gap; }
+        else x += cw + gap;
+      } catch {}
+    }
+  }
+  pdf.save(`${String(fileName).replace(/[^\u0600-\u06FFA-Za-z0-9]/g,"_")}.pdf`);
+  toast("نزّل PDF");
 };
 
 async function init(){
   try {
     const saved = await sbGet(KEY);
-    CATS = (saved && typeof saved === "object" && Object.keys(saved).length) ? saved : JSON.parse(JSON.stringify(SEED));
+    const base = (saved && typeof saved === "object" && Object.keys(saved).length) ? saved : JSON.parse(JSON.stringify(SEED));
+    CATS = normalize(base);
     render();
   } catch(e){
     $("app").innerHTML = `<div class="empty">تعذّر التحميل — حدّث الصفحة</div>`;
