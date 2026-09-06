@@ -2,6 +2,7 @@
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>أصنافي</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -44,8 +45,13 @@ body{background:var(--ink);color:var(--cream);padding-bottom:70px;line-height:1.
 .ok{background:#2F6B4F;color:#EAF6EF}
 .viewer{position:fixed;inset:0;background:rgba(10,9,8,.97);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;flex-direction:column;gap:14px}
 .viewer img{max-width:100%;max-height:74vh;border-radius:14px}
-.viewer .x{position:absolute;top:22px;left:22px;background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);border-radius:12px;padding:11px 19px;font-family:'Tajawal';font-weight:700;cursor:pointer}
+.viewer .x{position:absolute;top:22px;left:22px;background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);border-radius:12px;padding:12px 20px;font-family:'Tajawal';font-weight:700;font-size:15px;cursor:pointer;z-index:2}
+.viewer .tapHint{color:var(--muted);font-size:12px;font-weight:300}
 .viewer .dl{background:var(--gold);color:#1A1509;border:none;border-radius:12px;padding:13px 26px;font-family:'Tajawal';font-weight:700;text-decoration:none;font-size:15px}
+.search{width:100%;background:var(--velvet-2);border:1px solid var(--line);color:var(--cream);border-radius:12px;padding:13px;font-family:'Tajawal';font-size:15px;margin-bottom:14px}
+.search:focus{outline:none;border-color:var(--gold-dim)}
+.search::placeholder{color:#6B5E4D}
+.hint{font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:300}
 .back{color:var(--gold);font-size:15px;font-weight:700;background:none;border:none;cursor:pointer;padding:10px 0;text-decoration:none;display:inline-block}
 .note{background:rgba(201,162,39,.07);border:1px solid rgba(201,162,39,.22);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.75;margin-bottom:16px;font-weight:300}
 </style>
@@ -288,6 +294,7 @@ const SEED = {
 
 let CATS = {};
 let openSection = null;
+let query = "";
 
 const $ = id => document.getElementById(id);
 function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
@@ -387,20 +394,36 @@ window.viewImg = (url, name) => {
   const d = document.createElement("div");
   d.className = "viewer";
   d.innerHTML = `
-    <button class="x">إغلاق</button>
+    <button class="x" aria-label="إغلاق">✕ إغلاق</button>
+    <img src="${url}">
     <a class="dl" href="${url}" download="${(name||"image").replace(/[^\u0600-\u06FFA-Za-z0-9]/g,"_")}.jpg" target="_blank" rel="noopener">حفظ الصورة</a>
-    <img src="${url}">`;
-  d.onclick = (e) => { if (e.target.tagName !== "A") d.remove(); };
+    <div class="tapHint">اضغط بأي مكان للإغلاق</div>`;
+
+  const close = () => { d.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  // الإغلاق بأي ضغطة، عدا رابط الحفظ نفسه
+  d.onclick = (e) => { if (e.target.tagName !== "A") close(); };
   document.body.appendChild(d);
 };
 
 function render(){
-  const keys = Object.keys(CATS);
+  const q = query.trim().toLowerCase();
+  // البحث: نعرض الأقسام اللي اسمها مطابق، أو فيها صنف مطابق (ونفتحها تلقائياً)
+  let keys = Object.keys(CATS);
+  if (q){
+    keys = keys.filter(k =>
+      CATS[k].ar.toLowerCase().includes(q) ||
+      CATS[k].sub.some(s => s.n.toLowerCase().includes(q))
+    );
+  }
   $("app").innerHTML = `
     <div class="note">
       هذي أصنافك أنت. عدّل الأسماء، احذف اللي ما يناسبك، وأضف أصنافك الخاصة.
       البداية نسخة من تصنيف Lovisa عشان توفّر وقتك.
     </div>
+
+    <input class="search" id="q" placeholder="ابحث بأي شي — قسم أو صنف" value="${esc(query)}" oninput="doSearch(this.value)">
 
     <div class="row2">
       <button class="btn pr" onclick="addSection()">أضف قسم</button>
@@ -410,7 +433,10 @@ function render(){
 
     ${keys.map(k => {
       const sec = CATS[k];
-      const open = openSection === k;
+      const secMatches = q && sec.ar.toLowerCase().includes(q);
+      // لو القسم نفسه مطابق نعرض كل أصنافه، وإلا نعرض المطابق منها فقط
+      const subs = q && !secMatches ? sec.sub.filter(s => s.n.toLowerCase().includes(q)) : sec.sub;
+      const open = q ? true : openSection === k;
       return `
         <div class="sect">
           <div class="sect-hd">
@@ -420,7 +446,7 @@ function render(){
             <button class="x" onclick="delSection('${k}')">✕</button>
           </div>
           ${open ? `<div class="sect-body">
-            ${sec.sub.map((s,i) => `
+            ${subs.map((s) => { const i = sec.sub.indexOf(s); return `
               <div class="itemBox">
                 <div class="item">
                   <div class="ar">${esc(s.n)}${s.imgs.length?` <span class="badge">${s.imgs.length}</span>`:""}</div>
@@ -436,17 +462,23 @@ function render(){
                     </div>`).join("")}
                 </div>` : ""}
                 ${s.imgs.length ? `<button class="mini" onclick="exportPDF('item','${k}',${i})">PDF لهذا الصنف</button>` : ""}
-              </div>`).join("")}
+              </div>`; }).join("")}
             <button class="add" onclick="addItem('${k}')">أضف صنف لـ${esc(sec.ar)}</button>
             ${sec.sub.some(s=>s.imgs.length) ? `<button class="mini wide" onclick="exportPDF('section','${k}')">PDF لكل ${esc(sec.ar)}</button>` : ""}
           </div>` : ""}
         </div>`;
     }).join("")}
 
-    ${keys.length===0 ? `<div class="empty">ما فيه أقسام.<br>ابدأ بإضافة قسم، أو ارجع للأصل.</div>` : ""}
+    ${keys.length===0 ? `<div class="empty">${q ? "ما فيه نتيجة لهذا البحث" : "ما فيه أقسام.<br>ابدأ بإضافة قسم، أو ارجع للأصل."}</div>` : ""}
   `;
 }
 
+let _t = null;
+window.doSearch = (v) => {
+  query = v;
+  clearTimeout(_t);
+  _t = setTimeout(()=>{ render(); const el=$("q"); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 220);
+};
 window.toggle = (k) => { openSection = openSection === k ? null : k; render(); };
 
 window.addSection = async () => {
@@ -507,6 +539,22 @@ function normalize(cats){
 }
 
 
+
+// jsPDF ما يدعم العربي مباشرة — نرسم العنوان كصورة عشان يطلع صحيح
+function arabicTitleImage(text, widthPx=1200, fontPx=46){
+  const cv = document.createElement("canvas");
+  const h = Math.round(fontPx * 1.9);
+  cv.width = widthPx; cv.height = h;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,widthPx,h);
+  ctx.fillStyle = "#111111";
+  ctx.font = `700 ${fontPx}px Tajawal, Arial, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.direction = "rtl";
+  ctx.fillText(text, widthPx/2, h/2);
+  return { dataUrl: cv.toDataURL("image/jpeg", 0.92), ratio: h/widthPx };
+}
+
 // ─── تصدير PDF: للكل / لقسم / لصنف ───
 window.exportPDF = async (scope, k, i) => {
   const { jsPDF } = window.jspdf;
@@ -540,10 +588,16 @@ window.exportPDF = async (scope, k, i) => {
   for (const g of groups){
     if (!first) pdf.addPage();
     first = false;
-    pdf.setFontSize(13);
-    pdf.text(g.title, pw/2, 15, { align:"center" });
+    // العنوان بالعربي — كصورة عشان الحروف تطلع صح
+    try {
+      const t = arabicTitleImage(g.title);
+      const tw = pw - m*2;
+      const th = tw * t.ratio;
+      pdf.addImage(t.dataUrl, "JPEG", m, 8, tw, th);
+      var headBottom = 8 + th + 4;
+    } catch { var headBottom = 20; }
 
-    let x = m, y = 24, col = 0;
+    let x = m, y = headBottom, col = 0;
     for (const url of g.imgs){
       try {
         const dataUrl = await new Promise(res=>{
