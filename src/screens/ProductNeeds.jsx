@@ -1582,6 +1582,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [showBad, setShowBad] = useState(false);
   const [showCats, setShowCats] = useState(false);
   const [openCatCode, setOpenCatCode] = useState(null);
+  const [catSearch, setCatSearch] = useState("");   // بحث داخل شاشة الفئات
   const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
   const [yearBad, setYearBad] = useState(null);           // سنة السيئين المختارة
   const [openHeroCont, setOpenHeroCont] = useState(null);
@@ -1837,6 +1838,27 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     const best = catList[0];
     const worst = catList[catList.length - 1];
 
+    // الاسم المقترح لكل فئة (يُحسب مرة وحدة، ونستخدمه بالبحث والعرض)
+    const nameOfCat = (c) => {
+      const saved = settings?.categories?.[c.code];
+      if (saved) return saved;
+      const freq = {};
+      c.items.forEach(it => {
+        const w = (it.p.name || "").trim().split(/\s+/)[0];
+        if (w && w.length > 1) freq[w] = (freq[w] || 0) + 1;
+      });
+      const top = Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+      return top ? top[0] : "";
+    };
+
+    // البحث: بكود الفئة، اسمها، أو اسم أي منتج داخلها
+    const cq = catSearch.trim().toLowerCase();
+    const shownCats = cq ? catList.filter(c =>
+      String(c.code).toLowerCase().includes(cq) ||
+      nameOfCat(c).toLowerCase().includes(cq) ||
+      c.items.some(it => (it.p.name || "").toLowerCase().includes(cq) || String(it.p.barcode).toLowerCase().includes(cq))
+    ) : catList;
+
     return (
       <div className="space-y-3">
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
@@ -1844,7 +1866,18 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         <div className="font-black text-slate-100 text-lg">🏷️ تحليل الفئات ({catList.length})</div>
         <div className="text-xs text-slate-500">الفئة = 3 أرقام قبل حرف B · الباركود 69 = ميكب · مرتّبة من الأقوى للأضعف</div>
 
-        {best && worst && catList.length > 1 && (
+        <input value={catSearch} onChange={e=>setCatSearch(e.target.value)}
+          placeholder="🔍 ابحث بكود الفئة أو اسمها أو اسم منتج"
+          className="w-full bg-slate-700 border border-slate-600 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500" />
+
+        {catSearch && (
+          <div className="text-xs text-slate-400">
+            {shownCats.length} فئة مطابقة
+            {shownCats.length === 0 && " — جرّب كلمة ثانية"}
+          </div>
+        )}
+
+        {!catSearch && best && worst && catList.length > 1 && (
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-emerald-950/40 border border-emerald-700/40 rounded-xl p-3">
               <div className="text-[11px] text-emerald-400 font-bold mb-1">🏆 أقوى فئة</div>
@@ -1860,7 +1893,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         )}
 
         <div className="space-y-2">
-          {catList.map((c, i) => {
+          {shownCats.map((c) => { const i = catList.indexOf(c);
             const catName = settings?.categories?.[c.code];
             // الاسم المقترح = أكثر أول كلمة تكرارًا في أسماء منتجات الفئة
             const suggestName = (() => {
