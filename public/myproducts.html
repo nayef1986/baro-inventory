@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>أسماء منتجاتي</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;700;900&display=swap');
+:root{--ink:#12100E;--velvet:#1C1815;--velvet-2:#241F1A;--gold:#C9A227;--gold-dim:#8A6F47;--cream:#EFE6D6;--muted:#9A8B75;--line:#2E271F;--alert:#C86B4A}
+*{font-family:'Tajawal',sans-serif;box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--ink);color:var(--cream);padding-bottom:70px;line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding:16px}
+.hd{padding:34px 0 22px;text-align:center;position:relative}
+.hd::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:52px;height:1px;background:var(--gold);opacity:.55}
+.hd h1{font-size:32px;font-weight:900;letter-spacing:-.8px}
+.hd .sub{font-size:13px;color:var(--muted);margin-top:8px;font-weight:300}
+.btn{border:none;border-radius:13px;padding:14px;font-family:'Tajawal';font-size:15px;font-weight:700;cursor:pointer;width:100%}
+.pr{background:var(--gold);color:#1A1509}
+.ok{background:#2F6B4F;color:#EAF6EF}
+.sec2{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.search{width:100%;background:var(--velvet-2);border:1px solid var(--line);color:var(--cream);border-radius:12px;padding:13px;font-family:'Tajawal';font-size:15px;margin-bottom:14px}
+.search:focus{outline:none;border-color:var(--gold-dim)}
+.search::placeholder{color:#6B5E4D}
+.sect{margin-bottom:12px;background:var(--velvet);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.sect-hd{padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+.sect-hd .t{font-size:18px;font-weight:900;flex:1}
+.sect-hd .code{font-size:12px;color:var(--muted);font-weight:300;margin-top:2px}
+.sect-hd .c{color:var(--gold);font-size:14px;font-weight:700}
+.sect-body{border-top:1px solid var(--line);padding:6px}
+.item{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px}
+.item .thumb{width:52px;height:68px;border-radius:9px;object-fit:cover;background:var(--velvet-2);border:1px solid var(--line);cursor:pointer;flex-shrink:0}
+.item .noimg{width:52px;height:68px;border-radius:9px;background:var(--velvet-2);border:1px dashed var(--line);flex-shrink:0}
+.item .info{flex:1;min-width:0}
+.item .nm{font-size:15px;font-weight:400;line-height:1.4}
+.item .bc{font-size:12px;color:#6B5E4D;margin-top:3px}
+.mini{background:transparent;border:1px solid var(--line);color:var(--gold-dim);border-radius:10px;padding:9px;font-family:'Tajawal';font-size:13px;font-weight:700;cursor:pointer;margin:4px 6px 6px;width:calc(100% - 12px)}
+.empty{text-align:center;padding:50px 20px;color:var(--muted);font-weight:300;line-height:1.9}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);padding:14px 26px;border-radius:13px;font-size:14px;font-weight:700;opacity:0;transition:opacity .3s;z-index:999;pointer-events:none}
+.toast.show{opacity:1}
+.back{color:var(--gold);font-size:15px;font-weight:700;background:none;border:none;cursor:pointer;padding:10px 0;text-decoration:none;display:inline-block}
+.note{background:rgba(201,162,39,.07);border:1px solid rgba(201,162,39,.22);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.75;margin-bottom:16px;font-weight:300}
+.viewer{position:fixed;inset:0;background:rgba(10,9,8,.97);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;flex-direction:column;gap:14px}
+.viewer img{max-width:100%;max-height:74vh;border-radius:14px}
+.viewer .x{position:absolute;top:22px;left:22px;background:var(--velvet-2);color:var(--cream);border:1px solid var(--line);border-radius:12px;padding:12px 20px;font-family:'Tajawal';font-weight:700;font-size:15px;cursor:pointer;z-index:2}
+.viewer .tapHint{color:var(--muted);font-size:12px;font-weight:300}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="labels.html" class="back">رجوع للمكتبة</a>
+  <div class="hd">
+    <h1>أسماء منتجاتي</h1>
+    <div class="sub">فئات أصنافك الحقيقية من نظام البارو</div>
+  </div>
+  <div id="app"><div class="empty">جاري التحميل</div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://tvxxprynqeufzlgleurm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2eHhwcnlucWV1ZnpsZ2xldXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNjk4NTAsImV4cCI6MjA5NDY0NTg1MH0.FfHtUehBX0yjZsuMiE8Z8UP7bE1Ii_RFB5FKT4EJuXk";
+const TABLE = "baro_store";
+
+let PRODUCTS = [], IMAGES = {}, SETTINGS = {}, CATS = [];
+let openCode = null, query = "";
+
+const $ = id => document.getElementById(id);
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+const esc = s => String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+async function sbGet(key){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${key}&select=value`,
+    { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+  const j = await r.json();
+  const raw = j?.[0]?.value;
+  if (raw == null) return null;
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+// نفس منطق البارو بالضبط لاستخراج كود الفئة
+function getCategoryCode(barcode){
+  const str = String(barcode ?? "").trim();
+  if (!str) return "غير مصنّف";
+  if (str.startsWith("69")) return "ميكب";
+  const up = str.toUpperCase();
+  const bIdx = up.indexOf("B");
+  if (bIdx >= 3) return str.slice(bIdx - 3, bIdx);
+  return "غير مصنّف";
+}
+
+// اسم الفئة: المحفوظ بالإعدادات، وإلا أكثر كلمة أولى تكراراً بأسماء منتجاتها
+function catName(c){
+  const saved = SETTINGS?.categories?.[c.code];
+  if (saved) return saved;
+  const freq = {};
+  c.items.forEach(p => {
+    const w = (p.name || "").trim().split(/\s+/)[0];
+    if (w && w.length > 1) freq[w] = (freq[w] || 0) + 1;
+  });
+  const top = Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+  return top ? top[0] : "";
+}
+
+function buildCats(){
+  const map = {};
+  PRODUCTS.forEach(p => {
+    const code = getCategoryCode(p.barcode);
+    if (!map[code]) map[code] = { code, items: [] };
+    map[code].items.push(p);
+  });
+  CATS = Object.values(map)
+    .map(c => ({ ...c, name: catName(c) }))
+    .sort((a,b) => b.items.length - a.items.length);
+}
+
+function render(){
+  const q = query.trim().toLowerCase();
+  let list = CATS;
+  if (q) list = CATS.filter(c =>
+    String(c.code).toLowerCase().includes(q) ||
+    (c.name||"").toLowerCase().includes(q) ||
+    c.items.some(p => (p.name||"").toLowerCase().includes(q) || String(p.barcode).toLowerCase().includes(q))
+  );
+
+  const totalProducts = CATS.reduce((n,c)=>n+c.items.length,0);
+
+  $("app").innerHTML = `
+    <div class="note">
+      ${CATS.length} فئة · ${totalProducts.toLocaleString()} منتج — من نظام البارو مباشرة.
+      اضغط أي فئة تشوف منتجاتها بصورها.
+    </div>
+
+    <button class="btn ok" style="margin-bottom:12px" onclick="exportPDF('all')">حمّل PDF لكل الفئات</button>
+
+    <input class="search" id="q" placeholder="ابحث بكود الفئة أو اسمها أو اسم منتج" value="${esc(query)}" oninput="doSearch(this.value)">
+
+    ${q ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">${list.length} فئة مطابقة</div>` : ""}
+
+    ${list.map(c => {
+      const open = q ? true : openCode === c.code;
+      const shownItems = q && !(String(c.code).toLowerCase().includes(q) || (c.name||"").toLowerCase().includes(q))
+        ? c.items.filter(p => (p.name||"").toLowerCase().includes(q) || String(p.barcode).toLowerCase().includes(q))
+        : c.items;
+      return `
+        <div class="sect">
+          <div class="sect-hd" onclick="toggle('${esc(c.code)}')">
+            <div style="flex:1">
+              <div class="t">${esc(c.name || c.code)}</div>
+              <div class="code">${esc(c.code)}</div>
+            </div>
+            <span class="c">${c.items.length}</span>
+          </div>
+          ${open ? `<div class="sect-body">
+            ${shownItems.slice(0,200).map(p => {
+              const img = IMAGES[p.barcode];
+              return `<div class="item">
+                ${img ? `<img class="thumb" src="${img}" loading="lazy" onclick="viewImg('${img}','${esc(p.name||p.barcode)}')">` : `<div class="noimg"></div>`}
+                <div class="info">
+                  <div class="nm">${esc(p.name || "بدون اسم")}</div>
+                  <div class="bc">${esc(p.barcode)}</div>
+                </div>
+              </div>`;
+            }).join("")}
+            ${shownItems.length > 200 ? `<div style="padding:10px 14px;font-size:12px;color:var(--muted)">+ ${shownItems.length-200} منتج آخر</div>` : ""}
+            <button class="mini" onclick="event.stopPropagation(); exportPDF('cat','${esc(c.code)}')">PDF لهذي الفئة</button>
+          </div>` : ""}
+        </div>`;
+    }).join("")}
+
+    ${list.length===0 ? `<div class="empty">${q ? "ما فيه نتيجة" : "ما فيه فئات"}</div>` : ""}
+  `;
+}
+
+window.toggle = (code) => { openCode = openCode === code ? null : code; render(); };
+
+let _t = null;
+window.doSearch = (v) => {
+  query = v;
+  clearTimeout(_t);
+  _t = setTimeout(()=>{ render(); const el=$("q"); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 220);
+};
+
+window.viewImg = (url, name) => {
+  const d = document.createElement("div");
+  d.className = "viewer";
+  d.innerHTML = `
+    <button class="x">✕ إغلاق</button>
+    <img src="${url}">
+    <div class="tapHint">${esc(name)} — اضغط بأي مكان للإغلاق</div>`;
+  const close = () => { d.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  d.onclick = close;
+  document.body.appendChild(d);
+};
+
+// العربي كصورة (jsPDF ما يدعمه مباشرة)
+function arabicTitleImage(text, widthPx=1200, fontPx=44){
+  const cv = document.createElement("canvas");
+  const h = Math.round(fontPx * 1.9);
+  cv.width = widthPx; cv.height = h;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,widthPx,h);
+  ctx.fillStyle = "#111111";
+  ctx.font = `700 ${fontPx}px Tajawal, Arial, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.direction = "rtl";
+  ctx.fillText(text, widthPx/2, h/2);
+  return { dataUrl: cv.toDataURL("image/jpeg", 0.92), ratio: h/widthPx };
+}
+// اسم المنتج تحت صورته — كصورة كمان عشان العربي يطلع صح
+function arabicLabelImage(text, widthPx=560, fontPx=26){
+  const cv = document.createElement("canvas");
+  const h = Math.round(fontPx * 1.7);
+  cv.width = widthPx; cv.height = h;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,widthPx,h);
+  ctx.fillStyle = "#333333";
+  ctx.font = `400 ${fontPx}px Tajawal, Arial, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.direction = "rtl";
+  let t = text;
+  while (ctx.measureText(t).width > widthPx - 20 && t.length > 4) t = t.slice(0, -2);
+  if (t !== text) t += "…";
+  ctx.fillText(t, widthPx/2, h/2);
+  return { dataUrl: cv.toDataURL("image/jpeg", 0.9), ratio: h/widthPx };
+}
+
+window.exportPDF = async (scope, code) => {
+  const { jsPDF } = window.jspdf;
+  const groups = scope === "cat"
+    ? CATS.filter(c => c.code === code)
+    : CATS;
+  if (!groups.length){ toast("ما فيه فئات"); return; }
+
+  const totalWithImg = groups.reduce((n,c)=>n + c.items.filter(p=>IMAGES[p.barcode]).length, 0);
+  toast(`جاري إنشاء PDF (${totalWithImg} صورة)…`);
+
+  const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const pw = 210, ph = 297, m = 12, gap = 9, cols = 2;
+  const cw = (pw - m*2 - gap) / cols;    // عرض الصورة
+  const ih = cw * 4/3;                    // ارتفاع الصورة (نسبة 3:4 كاملة وواضحة)
+  const lh = 8;                           // مساحة اسم المنتج تحتها
+  let first = true;
+
+  for (const c of groups){
+    const withImg = c.items.filter(p => IMAGES[p.barcode]);
+    if (!first) pdf.addPage();
+    first = false;
+
+    const t = arabicTitleImage(`${c.name || c.code} · ${c.code} · ${c.items.length} منتج`);
+    const tw = pw - m*2;
+    const th = tw * t.ratio;
+    pdf.addImage(t.dataUrl, "JPEG", m, 8, tw, th);
+    let y = 8 + th + 5, x = m, col = 0;
+
+    if (!withImg.length){
+      const none = arabicLabelImage("ما فيه صور بهذي الفئة", 900, 34);
+      pdf.addImage(none.dataUrl, "JPEG", m, y, tw, tw * none.ratio);
+      continue;
+    }
+
+    for (const p of withImg){
+      try {
+        const dataUrl = await new Promise(res=>{
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const cv = document.createElement("canvas");
+            cv.width = img.width; cv.height = img.height;
+            cv.getContext("2d").drawImage(img,0,0);
+            res(cv.toDataURL("image/jpeg", 0.88));
+          };
+          img.onerror = () => res(null);
+          img.src = IMAGES[p.barcode];
+        });
+        if (!dataUrl) continue;
+
+        if (y + ih + lh > ph - m){ pdf.addPage(); y = m + 4; x = m; col = 0; }
+        pdf.addImage(dataUrl, "JPEG", x, y, cw, ih);
+        const lbl = arabicLabelImage(p.name || p.barcode);
+        pdf.addImage(lbl.dataUrl, "JPEG", x, y + ih + 1, cw, cw * lbl.ratio);
+
+        col++;
+        if (col >= cols){ col = 0; x = m; y += ih + lh + gap; }
+        else x += cw + gap;
+      } catch {}
+    }
+  }
+
+  const fname = scope === "cat" ? (groups[0].name || groups[0].code) : "كل_الفئات";
+  pdf.save(`${String(fname).replace(/[^\u0600-\u06FFA-Za-z0-9]/g,"_")}.pdf`);
+  toast("نزّل PDF");
+};
+
+async function init(){
+  try {
+    const [prods, imgs, sett] = await Promise.all([
+      sbGet("baro_products_v2"),
+      sbGet("baro_images_v2"),
+      sbGet("baro_settings_v2"),
+    ]);
+    PRODUCTS = Array.isArray(prods) ? prods : [];
+    IMAGES = imgs || {};
+    SETTINGS = sett || {};
+    buildCats();
+    render();
+  } catch(e){
+    $("app").innerHTML = `<div class="empty">تعذّر التحميل — حدّث الصفحة</div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>
