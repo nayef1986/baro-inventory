@@ -41,6 +41,7 @@ body{background:var(--ink);color:var(--cream);padding-bottom:90px;line-height:1.
 .dg{background:var(--alert);color:#fff}
 .sec2{background:transparent;color:var(--muted);border:1px solid var(--line)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 
 input,select,textarea{width:100%;background:var(--velvet-2);border:1px solid var(--line);color:var(--cream);border-radius:12px;padding:13px;font-family:'Tajawal';font-size:15px;font-weight:400}
 input::placeholder{color:#6B5E4D}
@@ -242,9 +243,10 @@ function renderList(){
 
     ${hotCount > 0 && !showArchived ? `<div class="tip">${hotCount} منتج يبيع كويس وأفكاره قليلة. مرتّبين لك بالأعلى.</div>` : ""}
 
-    <div class="row2" style="margin-bottom:10px">
-      <a href="mycats.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block">أصنافي</a>
-      <a href="lovisa.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block">تصنيف Lovisa</a>
+    <div class="row3" style="margin-bottom:10px">
+      <a href="myproducts.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block;font-size:13px;padding:12px 6px">أسماء منتجاتي</a>
+      <a href="mycats.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block;font-size:13px;padding:12px 6px">أصنافي</a>
+      <a href="lovisa.html" class="btn sec2" style="text-decoration:none;text-align:center;display:block;font-size:13px;padding:12px 6px">Lovisa</a>
     </div>
 
     <div class="row2" style="margin-bottom:10px">
