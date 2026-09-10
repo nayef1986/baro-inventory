@@ -2007,7 +2007,13 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     );
   }
   if (showBad) {
-    const isBad = (soldPct, margin) => soldPct < 30 || margin < 5;
+    // السيئ: بيع ضعيف أو هامش ضعيف — لكن نستثني الأبطال الحقيقيين نهائياً
+    // (منتج يبيع بقوة وهامشه محترم ما يصير "سيئاً" لمجرد نقص بسيط بأحد المعيارين)
+    const isWinnerCheck = (soldPct, margin) => soldPct > 70 && margin > 20;
+    const isBad = (soldPct, margin) => {
+      if (isWinnerCheck(soldPct, margin)) return false;   // بطل حقيقي — ما يدخل السيئين أبداً
+      return soldPct < 30 || margin < 5;
+    };
     const bads = products.map(p => {
       const x = calcItem(p);
       const buyPrice = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
@@ -2051,9 +2057,9 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         )}
 
         {bads.length > 0 && (
-          <button onClick={()=>printBadReport(groups, contNames, images, settings?.brandName ?? "ALBAROO")}
+          <button onClick={()=>printBadReport(groups, shownContNames, images, settings?.brandName ?? "ALBAROO")}
             className="w-full bg-gradient-to-r from-rose-700 to-red-700 text-white py-3 rounded-xl font-bold text-sm">
-            🖨️ تقرير السيئين المتكامل (بالصور)
+            🖨️ تقرير السيئين — سنة {effBadYear ?? "الكل"} ({shownContNames.length} كونتينر)
           </button>
         )}
 
@@ -2145,7 +2151,14 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
         <button onClick={()=>setShowHeroes(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="font-black text-slate-100 text-lg">⭐ الأبطال ({heroes.length})</div>
-        <div className="text-xs text-slate-500">المنتجات الرابحة 🎉 والمفضّلة ⭐ — مقسّمة بالكونتينر</div>
+        <div className="text-xs text-slate-500">
+          🎉 رابح فعلاً (بيع فوق 70% وهامش فوق 20%) · ⭐ مفضّل عندك (نجّمته يدوياً) — مقسّمة بالكونتينر
+        </div>
+        {heroes.some(h => h.star && !h.winner) && (
+          <div className="text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+            ملاحظة: {heroes.filter(h => h.star && !h.winner).length} منتج هنا مفضّل ⭐ بس ما حقق شرط البطل — ممكن يظهر بالسيئين لو أرقامه ضعيفة فعلاً
+          </div>
+        )}
 
         {heroYears.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
@@ -2160,9 +2173,9 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         )}
 
         {heroes.length > 0 && (
-          <button onClick={()=>printHeroesReport(groups, contNames, images, settings?.brandName ?? "ALBAROO")}
+          <button onClick={()=>printHeroesReport(groups, shownHeroContNames, images, settings?.brandName ?? "ALBAROO")}
             className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 text-white py-3 rounded-xl font-bold text-sm">
-            🖨️ تقرير الأبطال المتكامل (بالصور)
+            🖨️ تقرير الأبطال — سنة {effHeroYear ?? "الكل"} ({shownHeroContNames.length} كونتينر)
           </button>
         )}
 
