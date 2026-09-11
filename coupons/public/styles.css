@@ -171,24 +171,39 @@ button { font-family: inherit; }
   .install-btn { margin-inline-start: auto; }
 }
 
-/* ===== الواجهة ===== */
-.hero {
-  padding: 42px 0 26px; text-align: center;
-  background: radial-gradient(720px 300px at 50% -70px, var(--brand-50), transparent 70%);
+/* ===== الشريط العلوي: قصير عمدًا — الكود يبدأ فوق الطيّة ===== */
+.topline {
+  padding: 22px 0 16px;
+  background: linear-gradient(180deg, var(--brand-50), transparent);
 }
-.pill {
-  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 18px;
-  font-size: 13.5px; font-weight: 600; color: var(--brand-600);
-  background: var(--brand-50); border: 1px solid var(--brand-100);
-  padding: 6px 15px; border-radius: 999px;
+.topline h1 {
+  margin: 0; font-size: clamp(23px, 4.4vw, 32px); line-height: 1.35;
 }
-.pill__dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--brand);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 22%, transparent);
+.topline h1 em { font-style: normal; color: var(--brand); }
+.topline__meta {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin: 6px 0 0; font-size: 13.5px; color: var(--muted); font-weight: 500;
 }
-.hero h1 { margin: 0 0 14px; font-size: clamp(29px, 6vw, 50px); }
-.hero h1 em { font-style: normal; color: var(--brand); }
-.hero .lede { margin: 0 auto; max-width: 620px; color: var(--muted); font-size: 16.5px; }
+.topline__meta .sep { opacity: .5; }
+
+/* نبضة خضراء صغيرة: إشارة «حيّ ومحدَّث» دون جملة تشرحها */
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.lander {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 0 20px;
+}
+.lander h1 { margin: 0; font-size: clamp(23px, 4.4vw, 33px); line-height: 1.35; }
+.lander__meta {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin: 6px 0 0; font-size: 13.5px; color: var(--muted); font-weight: 500;
+}
+.lander__meta .sep { opacity: .5; }
+.lander--plain { padding-top: 10px; }
 
 .searchbar { position: relative; margin: 26px auto 0; max-width: 540px; }
 .searchbar svg {
@@ -206,10 +221,13 @@ button { font-family: inherit; }
 .searchbar input::placeholder { color: var(--muted); }
 .searchbar input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px var(--brand-50); }
 .searchbar--page { margin: 18px 0 0; max-width: 100%; }
+.searchbar--slim { margin: 14px 0 0; max-width: 420px; }
+.searchbar--slim input { padding: 12px 46px 12px 16px; font-size: 15.5px; }
+.searchbar--slim svg { inset-inline-start: 16px; }
 
 /* ===== شرائح التصنيف ===== */
 .chips {
-  display: flex; gap: 8px; margin: 22px 0 6px;
+  display: flex; gap: 8px; margin: 16px 0 18px;
   overflow-x: auto; scrollbar-width: none; padding-bottom: 4px;
   scroll-snap-type: x proximity;
 }
@@ -719,4 +737,80 @@ button { font-family: inherit; }
   .live-codes { padding: 16px; border-radius: var(--r); }
   .live-codes .code-grid { grid-template-columns: 1fr; }
   .post__body { font-size: 16.5px; }
+}
+
+/* ============================================================
+   صفحة الهبوط: الكود أولًا، وكل ما عداه في الذيل
+   ============================================================ */
+
+/*
+ * صفحة المتجر: عمود واحد. كل كود يأخذ العرض كاملًا — النص يمينًا والكود يسارًا —
+ * فلا تتشتّت العين بين أعمدة، والأول أكبر لأنه الأعلى قيمة.
+ */
+.code-grid--lander { grid-template-columns: 1fr; gap: 12px; }
+
+.code-card.is-hero {
+  position: relative;
+  padding: 24px;
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+  background: linear-gradient(180deg, var(--brand-50), var(--surface) 55%);
+  box-shadow: 0 10px 30px -16px color-mix(in srgb, var(--brand) 60%, transparent);
+}
+.code-card.is-hero .code-card__title { font-size: clamp(20px, 3.2vw, 25px); }
+.code-card.is-hero .copy-btn { padding: 17px 20px; font-size: 21px; border-radius: 15px; }
+.code-card.is-hero .copy-btn__label { font-size: 13.5px; }
+
+@media (min-width: 701px) {
+  .code-grid--lander .code-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr minmax(264px, 322px);
+    column-gap: 30px; row-gap: 8px;
+    align-items: center;
+    padding: 22px 26px;
+  }
+  .code-grid--lander .code-card.is-hero { padding: 26px 28px; }
+
+  /* صفّ الأعلى لا يحمل إلا زر الحفظ هنا — نُخرجه من الشبكة كي لا يزيح النص لأعلى */
+  .code-grid--lander .code-card__top {
+    position: absolute; top: 18px; inset-inline-start: 20px; margin: 0;
+  }
+  .code-grid--lander .code-card > :not(.code-card__action):not(.code-card__top) { grid-column: 1; }
+  /* صفّ الوسوم يبدأ من حيث ينتهي زر الحفظ المطلق فلا يتراكبان */
+  .code-grid--lander .code-card__tags { padding-inline-start: 46px; }
+  .code-grid--lander .code-card__action {
+    grid-column: 2; grid-row: 1 / -1;
+    align-self: center; margin: 0; padding: 0;
+  }
+}
+
+/* الذيل: كل ما ليس كودًا — يبدأ بفاصل بصري واضح */
+.tail {
+  margin-top: 44px; padding-top: 30px;
+  border-top: 1px solid var(--border);
+}
+.tail .sec-title { font-size: 19px; margin: 26px 0 14px; }
+.tail .sec-title::before { height: .8em; width: 4px; }
+
+.about {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.about p { margin: 0; flex: 1 1 260px; font-size: 15px; color: var(--muted); }
+
+.faq--mini details { padding: 12px 16px; margin-bottom: 8px; }
+.faq--mini summary { font-size: 15.5px; }
+.faq--mini p { font-size: 14.5px; }
+
+.ad--shell { max-width: var(--max); margin-inline: auto; }
+
+/* الأسئلة العامة في أسفل الرئيسية — مطويّة ومنزوية */
+.faq.shell { margin-top: 36px; padding-top: 26px; border-top: 1px solid var(--border); }
+.faq.shell .sec-title { font-size: 19px; }
+
+@media (max-width: 700px) {
+  .lander { gap: 12px; }
+  .lander .store-logo--lg { width: 56px; height: 56px; flex-basis: 56px; border-radius: 15px; font-size: 24px; }
+  .code-card.is-hero { padding: 20px; }
+  .tail { margin-top: 34px; padding-top: 24px; }
 }

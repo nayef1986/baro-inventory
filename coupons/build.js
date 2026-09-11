@@ -207,14 +207,23 @@ const FONT_SOURCES = {
 
 const FONT_MODE = FONT_SOURCES[site.font] ? site.font : 'plex';
 
+/*
+ * ملفّات الخطوط خارجية، ووسم stylesheet عادي يعطّل رسم الصفحة حتى تصل.
+ * الحيلة القياسية: تحميلها بوسط "print" ثم تحويلها إلى "all" عند الاكتمال —
+ * فيظهر النص فورًا بالخط الاحتياطي ثم يُستبدل. ونسخة noscript للمتصفحات بلا JS.
+ */
+const asyncSheet = (href) =>
+  `<link rel="stylesheet" href="${href}" media="print" onload="this.media='all';this.onload=null">`;
+
+const FONT_URLS = [...new Set([...FONT_SOURCES[FONT_MODE], ...FONT_SOURCES.plex])];
+
 const FONT_LINKS = [
   '<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>',
   '<link rel="preconnect" href="https://fonts.googleapis.com">',
   '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
-  ...new Set([...FONT_SOURCES[FONT_MODE], ...FONT_SOURCES.plex]),
-]
-  .map((v) => (v.startsWith('<') ? v : `<link rel="stylesheet" href="${v}">`))
-  .join('\n');
+  ...FONT_URLS.map(asyncSheet),
+  `<noscript>${FONT_URLS.map((h) => `<link rel="stylesheet" href="${h}">`).join('')}</noscript>`,
+].join('\n');
 
 /* ======================= مكوّنات ======================= */
 
@@ -229,7 +238,7 @@ function logoHtml(store, cls = '') {
 }
 
 /** بطاقة الكود — الكود ظاهر بنصّه، قابل للنسخ، وقابل للفهرسة. */
-function codeCard(code, { heading = 'h3', showStore = true } = {}) {
+function codeCard(code, { heading = 'h3', showStore = true, hero = false } = {}) {
   const s = code.store;
   const badges = [
     code.discount ? `<span class="tag tag--discount">${esc(code.discount)}</span>` : '',
@@ -253,7 +262,7 @@ function codeCard(code, { heading = 'h3', showStore = true } = {}) {
     .filter(Boolean)
     .join('<span class="sep" aria-hidden="true">·</span>');
 
-  return `<article class="code-card${code.featured ? ' is-featured' : ''}" id="${esc(code.id)}"
+  return `<article class="code-card${code.featured ? ' is-featured' : ''}${hero ? ' is-hero' : ''}" id="${esc(code.id)}"
          data-code-card data-store="${esc(s.slug)}" data-category="${esc(s.categorySlug)}"
          data-search="${esc([s.name, s.category, code.title, code.code, code.discount].filter(Boolean).join(' '))}">
   <div class="code-card__top">
@@ -634,32 +643,28 @@ function pageHome() {
     .join('\n');
 
   const body = `
-<section class="hero">
+<section class="topline">
   <div class="shell">
-    <p class="pill"><span class="pill__dot" aria-hidden="true"></span>${esc(codesLabel(TOTAL_CODES))} · محدَّث ${esc(fmtDate(BUILT_AT))}</p>
     <h1>أكواد خصم <em>جاهزة للنسخ</em></h1>
-    <p class="lede">${esc(site.description)}</p>
-    <form class="searchbar" action="/search/" method="get" role="search">
-      <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-3.6-3.6"/></svg>
-      <input type="search" name="q" id="home-search" placeholder="ابحث عن متجر أو كود…" aria-label="ابحث عن متجر أو كود" autocomplete="off">
+    <p class="topline__meta"><span class="live-dot" aria-hidden="true"></span>${esc(codesLabel(TOTAL_CODES))} · ${esc(storesLabel(stores.length))} · حُدِّث ${esc(fmtDate(BUILT_AT))}</p>
+    <form class="searchbar searchbar--slim" action="/search/" method="get" role="search">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-3.6-3.6"/></svg>
+      <input type="search" name="q" id="home-search" placeholder="اكتب اسم المتجر…" aria-label="ابحث عن متجر" autocomplete="off">
     </form>
   </div>
 </section>
 
 <div class="shell">
   <div class="chips" role="group" aria-label="تصفية حسب التصنيف">${chips}</div>
-  ${adSlot('hero', { className: 'ad--wide' })}
 </div>
 
 ${featured.length ? `<section class="shell" data-section>
-  <h2 class="sec-title">الأفضل الآن <span>${esc(arCount(featured.length, 'عرض واحد', 'عرضان', 'عروض', 'عرضًا'))}</span></h2>
   <div class="code-grid">
 ${featured.map((c) => codeCard(c)).join('\n')}
   </div>
 </section>` : ''}
 
 <section class="shell" data-section>
-  <h2 class="sec-title">كل الأكواد <span>${esc(codesLabel(TOTAL_CODES))} من ${esc(storesLabel(stores.length))}</span></h2>
   <div class="code-grid">
 ${feedWithAds}
   </div>
@@ -668,26 +673,18 @@ ${feedWithAds}
 <p class="empty shell" id="no-results" hidden>ما فيه أكواد في هذا التصنيف حاليًا.</p>
 
 <section class="shell strip" data-section>
-  <h2 class="sec-title">تصفّح حسب المتجر <span>${esc(storesLabel(stores.length))}</span></h2>
+  <h2 class="sec-title">المتاجر</h2>
   <div class="store-strip">
 ${stores.map((s) => storeCard(s)).join('\n')}
   </div>
 </section>
 
-<section class="shell howto" id="كيف-يعمل">
-  <h2 class="sec-title">كيف تستخدم الكود؟</h2>
-  <ol class="steps">
-    <li><strong>انسخ</strong><span>اضغط على الكود — يُنسخ ويفتح المتجر في تبويب جديد.</span></li>
-    <li><strong>تسوّق</strong><span>أضف منتجاتك إلى السلة وانتقل إلى صفحة الدفع.</span></li>
-    <li><strong>الصق</strong><span>ضع الكود في خانة «كود الخصم» واضغط تطبيق.</span></li>
-    <li><strong>تأكّد</strong><span>راجع ظهور قيمة الخصم في الإجمالي قبل إتمام الطلب.</span></li>
-  </ol>
-</section>
+${adSlot('hero', { className: 'ad--wide ad--shell' })}
 
-${posts.length ? `<section class="shell strip">
-  <h2 class="sec-title">من المدونة <span>أدلّة التوفير</span></h2>
+${posts.length ? `<section class="shell strip tail">
+  <h2 class="sec-title">أدلّة التوفير</h2>
   <div class="post-grid">
-${posts.slice(0, 3).map((x) => postCard(x)).join('\n')}
+${posts.slice(0, 3).map((x) => postCard(x, { compact: true })).join('\n')}
   </div>
   <p class="strip__more"><a href="/blog/">كل المقالات ←</a></p>
 </section>` : ''}
@@ -722,8 +719,15 @@ function pageStores() {
   const body = `
 <div class="shell">
   <nav class="crumbs" aria-label="مسار التصفح"><a href="/">الأكواد</a> <span aria-hidden="true">←</span> <span>المتاجر</span></nav>
-  <h1 class="page-title">كل المتاجر</h1>
-  <p class="page-lede">${esc(storesLabel(stores.length))} · ${esc(codesLabel(TOTAL_CODES))} — اختر متجرًا لعرض أكواده كاملة.</p>
+  <header class="lander lander--plain">
+    <div>
+      <h1>كل المتاجر</h1>
+      <p class="lander__meta">
+        <span class="live-dot" aria-hidden="true"></span>${esc(storesLabel(stores.length))}
+        <span class="sep" aria-hidden="true">·</span>${esc(codesLabel(TOTAL_CODES))}
+      </p>
+    </div>
+  </header>
 </div>
 
 ${categories
@@ -770,62 +774,65 @@ function pageStore(s) {
   const others = stores.filter((x) => x.slug !== s.slug && x.categorySlug === s.categorySlug).slice(0, 6);
   const guide = postByStore.get(s.slug);
 
+  /*
+   * صفحة المتجر هي صفحة الهبوط الحقيقية: زائرٌ كتب «كود نمشي» في قوقل ووصل هنا.
+   * لا مقدّمة ولا شرح قبل الكود — أول ما يراه هو أعلى كود، ثم البقية.
+   * كل ما عدا ذلك (وصف المتجر، الشروط، المشابه) أسفل الأكواد.
+   */
   const body = `
-<div class="shell">
+<div class="shell page-narrow">
   <nav class="crumbs" aria-label="مسار التصفح">
     <a href="/">الأكواد</a> <span aria-hidden="true">←</span>
     <a href="/category/${esc(s.categorySlug)}/">${esc(s.category)}</a> <span aria-hidden="true">←</span>
     <span>${esc(s.name)}</span>
   </nav>
 
-  <header class="store-head">
+  <header class="lander">
     ${logoHtml(s, 'store-logo--lg')}
-    <div class="store-head__info">
+    <div>
       <h1>أكواد خصم ${esc(s.name)}</h1>
-      <p>${esc(s.description || '')}</p>
-      <p class="store-head__stat">${esc(codesLabel(s.codes.length))}${best && best.discount ? ` · أعلى خصم ${esc(best.discount)}` : ''}</p>
+      <p class="lander__meta">
+        <span class="live-dot" aria-hidden="true"></span>${esc(codesLabel(s.codes.length))}
+        ${best && best.discount ? `<span class="sep" aria-hidden="true">·</span>أعلى خصم ${esc(best.discount)}` : ''}
+        <span class="sep" aria-hidden="true">·</span>حُدِّث ${esc(fmtDate(BUILT_AT))}
+      </p>
     </div>
-    <a class="btn btn-primary" href="${esc(s.url)}" target="_blank" rel="nofollow sponsored noopener">زيارة ${esc(s.name)}<span aria-hidden="true"> ↗</span></a>
   </header>
 
-  ${guide ? `<a class="post-tie post-tie--store" href="${esc(guide.url)}">
-    <span><strong>${esc(guide.title)}</strong>دليل مكتوب عن أكواد ${esc(s.name)} وشروطها</span>
-    <span class="post-tie__go" aria-hidden="true">←</span>
-  </a>` : ''}
-
-  <h2 class="sec-title">الأكواد المتاحة <span>${esc(codesLabel(s.codes.length))}</span></h2>
-  <div class="code-grid">
-${s.codes.map((c) => codeCard(c, { heading: 'h3', showStore: false })).join('\n')}
+  <div class="code-grid code-grid--lander">
+${s.codes.map((c, i) => codeCard(c, { heading: 'h2', showStore: false, hero: i === 0 })).join('\n')}
   </div>
 
   ${adSlot('store', { category: s.category, className: 'ad--wide' })}
 
-  <section class="prose">
-    <h2>طريقة استخدام كود خصم ${esc(s.name)}</h2>
-    <ol>
-      <li>اضغط على الكود أعلاه — يُنسخ تلقائيًا ويفتح موقع ${esc(s.name)} في تبويب جديد.</li>
-      <li>اختر منتجاتك وأضفها إلى سلة التسوق.</li>
-      <li>في صفحة الدفع، الصق الكود في خانة «كود الخصم» واضغط تطبيق.</li>
-      <li>تأكد من ظهور قيمة الخصم في الإجمالي قبل تأكيد الطلب.</li>
-    </ol>
-    <h3>ملاحظات على أكواد ${esc(s.name)}</h3>
-    <ul>
-      <li>كل كود له شروطه الخاصة، وهي مكتوبة تحته مباشرة.</li>
-      <li>في الغالب لا يمكن دمج أكثر من كود في الطلب الواحد.</li>
-      <li>إذا لم يعمل الكود، جرّب غيره من القائمة — بعض الأكواد تنتهي قبل تاريخها المعلن.</li>
-    </ul>
-  </section>
-
-  ${others.length ? `<section class="strip" data-section>
-    <h2 class="sec-title">متاجر مشابهة <span>${esc(s.category)}</span></h2>
-    <div class="store-strip">
-${others.map((x) => storeCard(x)).join('\n')}
+  <section class="tail">
+    <div class="about">
+      <p>${esc(s.description || '')}</p>
+      <a class="btn btn-ghost" href="${esc(s.url)}" target="_blank" rel="nofollow sponsored noopener">فتح ${esc(s.name)}<span aria-hidden="true"> ↗</span></a>
     </div>
-  </section>` : ''}
+
+    ${guide ? `<a class="post-tie post-tie--store" href="${esc(guide.url)}">
+      <span><strong>${esc(guide.title)}</strong>دليل مكتوب عن أكواد ${esc(s.name)}</span>
+      <span class="post-tie__go" aria-hidden="true">←</span>
+    </a>` : ''}
+
+    <div class="faq faq--mini">
+      <details><summary>ما اشتغل الكود، ليه؟</summary><p>غالبًا لم تبلغ الحد الأدنى للطلب، أو أن المنتج من قسمٍ مستثنى. جرّب كودًا آخر من القائمة أعلاه.</p></details>
+      <details><summary>كم يتحدّث الأكواد؟</summary><p>نراجعها دوريًا، والمنتهي يُحذف تلقائيًا. آخر تحديث: ${esc(fmtDate(BUILT_AT))}.</p></details>
+      <details><summary>أقدر أستخدم كودين؟</summary><p>لا — ${esc(s.name)} يقبل كودًا واحدًا لكل طلب. اختر الأعلى قيمة.</p></details>
+    </div>
+
+    ${others.length ? `<div class="strip" data-section>
+      <h2 class="sec-title">متاجر ${esc(s.category)}</h2>
+      <div class="store-strip">
+${others.map((x) => storeCard(x)).join('\n')}
+      </div>
+    </div>` : ''}
+  </section>
 </div>`;
 
-  const title = `أكواد خصم ${s.name} ${YEAR} — ${s.codes.length} كوبون فعّال`;
-  const description = `أحدث أكواد وكوبونات خصم ${s.name}${best && best.discount ? ` تصل إلى ${best.discount}` : ''} — انسخ الكود بضغطة واحدة وادخل المتجر مباشرة. ${s.description || ''}`.slice(0, 300);
+  const title = `أكواد خصم ${s.name} ${YEAR}${best && best.discount ? ` — خصم ${best.discount}` : ''} | ${site.shortName || site.name}`;
+  const description = `${codesLabel(s.codes.length)} لمتجر ${s.name}${best && best.discount ? ` تصل إلى ${best.discount}` : ''}. انسخ الكود بضغطة وادخل المتجر. محدَّث ${fmtDate(BUILT_AT)}.`;
 
   return {
     url,
@@ -872,8 +879,17 @@ function pageCategory(cat) {
   <nav class="crumbs" aria-label="مسار التصفح">
     <a href="/">الأكواد</a> <span aria-hidden="true">←</span> <span>${esc(cat.name)}</span>
   </nav>
-  <h1 class="page-title">أكواد خصم ${esc(cat.name)}</h1>
-  <p class="page-lede">${esc(codesLabel(codes.length))} من ${esc(storesLabel(cat.stores.length))} في قسم ${esc(cat.name)} — جاهزة للنسخ.</p>
+
+  <header class="lander lander--plain">
+    <div>
+      <h1>أكواد خصم ${esc(cat.name)}</h1>
+      <p class="lander__meta">
+        <span class="live-dot" aria-hidden="true"></span>${esc(codesLabel(codes.length))}
+        <span class="sep" aria-hidden="true">·</span>${esc(storesLabel(cat.stores.length))}
+        <span class="sep" aria-hidden="true">·</span>حُدِّث ${esc(fmtDate(BUILT_AT))}
+      </p>
+    </div>
+  </header>
 
   <div class="code-grid">
 ${codes.map((c) => codeCard(c)).join('\n')}
@@ -881,26 +897,28 @@ ${codes.map((c) => codeCard(c)).join('\n')}
 
   ${adSlot('store', { category: cat.name, className: 'ad--wide' })}
 
-  <section class="strip" data-section>
-    <h2 class="sec-title">متاجر ${esc(cat.name)}</h2>
-    <div class="store-strip">
+  <section class="tail">
+    <div class="strip" data-section>
+      <h2 class="sec-title">متاجر ${esc(cat.name)}</h2>
+      <div class="store-strip">
 ${cat.stores.map((s) => storeCard(s)).join('\n')}
+      </div>
     </div>
-  </section>
 
-  ${catPosts.length ? `<section class="strip">
-    <h2 class="sec-title">أدلّة ${esc(cat.name)}</h2>
-    <div class="post-grid">
+    ${catPosts.length ? `<div class="strip">
+      <h2 class="sec-title">أدلّة ${esc(cat.name)}</h2>
+      <div class="post-grid">
 ${catPosts.map((x) => postCard(x, { compact: true })).join('\n')}
-    </div>
-  </section>` : ''}
+      </div>
+    </div>` : ''}
+  </section>
 </div>`;
 
   return {
     url,
     html: layout({
       title: `أكواد خصم ${cat.name} ${YEAR} — ${codes.length} كوبون فعّال | ${site.name}`,
-      description: `أحدث أكواد وكوبونات خصم ${cat.name} من ${storesLabel(cat.stores.length)} — انسخ الكود بضغطة واحدة وادخل المتجر مباشرة.`,
+      description: `${codesLabel(codes.length)} في قسم ${cat.name} من ${storesLabel(cat.stores.length)}. انسخ الكود بضغطة وادخل المتجر. محدَّث ${fmtDate(BUILT_AT)}.`,
       canonical: abs(url),
       path: url,
       body,
