@@ -37,6 +37,17 @@ const isExpired = (code) => {
 
 const activeCodes = (store) => (store.codes || []).filter((c) => c.code && !isExpired(c));
 
+/** صيغة العدد بالعربية: مفرد، مثنّى، جمع قلّة (٣-١٠)، ثم تمييز منصوب مفرد (١١+). */
+function arCount(n, one, two, few, many) {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+const codesLabel = (n) => arCount(n, 'كود فعّال', 'كودان فعّالان', 'أكواد فعّالة', 'كودًا فعّالًا');
+const storesLabel = (n) => arCount(n, 'متجر واحد', 'متجران', 'متاجر', 'متجرًا');
+
 const fmtDate = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -73,6 +84,35 @@ function jsonLd(obj) {
   return `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`;
 }
 
+/* ------------------------- الخطوط ------------------------- */
+
+/**
+ * وضعان:
+ *  "thmanyah" → خط ثمانية (Thmanyah Sans + Serif Display) عبر حزمة الويب المجتمعية.
+ *  "plex"     → IBM Plex Sans Arabic + Noto Naskh Arabic (رخصة OFL، تجاري مسموح) —
+ *               وهما الخطان المنصوص عليهما في نظام تصميم ثمانية الرسمي.
+ * ملفات styles.css تُرتّب العائلتين في نفس المكدّس، فالتبديل لا يحتاج أي تعديل آخر.
+ */
+const FONT_SOURCES = {
+  thmanyah: [
+    'https://cdn.jsdelivr.net/npm/@dawod/thmanyah-font-web@1.2.0/sans.css',
+    'https://cdn.jsdelivr.net/npm/@dawod/thmanyah-font-web@1.2.0/serif-display.css',
+  ],
+  plex: [
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Noto+Naskh+Arabic:wght@500;600;700&display=swap',
+  ],
+};
+
+const FONT_MODE = FONT_SOURCES[site.font] ? site.font : 'plex';
+
+const FONT_LINKS = [
+  '<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>',
+  '<link rel="preconnect" href="https://fonts.googleapis.com">',
+  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+  // الاحتياطي المرخّص تجاريًا يُحمَّل دائمًا: يظهر فورًا ريثما يصل خط ثمانية، وإن تعذّر بقي الموقع بهويته.
+  ...new Set([...FONT_SOURCES[FONT_MODE], ...FONT_SOURCES.plex]),
+].map((v) => (v.startsWith('<') ? v : `<link rel="stylesheet" href="${v}">`)).join('\n');
+
 /* ------------------------- القالب العام ------------------------- */
 
 function layout({ title, description, canonical, bodyClass = '', head = '', body, schema = [] }) {
@@ -98,9 +138,7 @@ function layout({ title, description, canonical, bodyClass = '', head = '', body
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${esc(abs('/og.png'))}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+${FONT_LINKS}
 <link rel="stylesheet" href="/styles.css">
 ${head}
 ${schema.map(jsonLd).join('\n')}
@@ -110,7 +148,7 @@ ${schema.map(jsonLd).join('\n')}
   <div class="wrap">
     <a class="logo" href="/">
       <span class="logo-mark" aria-hidden="true">%</span>
-      <span>${esc(site.name)}</span>
+      <span class="logo-text">${esc(site.name)}</span>
     </a>
     <nav aria-label="التنقل الرئيسي">
       <a href="/">المتاجر</a>
@@ -176,6 +214,8 @@ function buildIndex() {
       .map((c) => `<button type="button" class="chip" data-category="${esc(c)}" aria-pressed="false">${esc(c)}</button>`)
       .join('');
 
+  const totalCodes = withCodes.reduce((n, s) => n + s.active.length, 0);
+
   const cards = withCodes
     .map((s) => {
       const haystack = [s.name, s.category, s.description, ...s.active.map((c) => c.title)].join(' ');
@@ -189,20 +229,19 @@ function buildIndex() {
   </div>
   <p class="desc">${esc(s.description || '')}</p>
   <div class="cta">
-    <span class="count-badge">${s.active.length} كود فعّال</span>
+    <span class="count-badge">${codesLabel(s.active.length)}</span>
     <a class="btn btn-primary" href="/store/${esc(s.slug)}/">عرض الأكواد</a>
   </div>
 </article>`;
     })
     .join('\n');
 
-  const totalCodes = withCodes.reduce((n, s) => n + s.active.length, 0);
-
   const body = `
 <section class="hero">
   <div class="wrap">
-    <h1>${esc(site.tagline)}</h1>
-    <p>${esc(site.description)}</p>
+    <p class="eyebrow"><span class="dot" aria-hidden="true"></span> ${codesLabel(totalCodes)} · محدَّث ${esc(fmtDate(BUILT_AT))}</p>
+    <h1>${esc(site.tagline).replace('جاهزة للنسخ', '<em>جاهزة للنسخ</em>')}</h1>
+    <p class="lede">${esc(site.description)}</p>
     <div class="search-box">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
@@ -216,7 +255,7 @@ function buildIndex() {
   <div class="filters">${chips}</div>
 
   <section data-section>
-    <h2 class="section-title">المتاجر <span>${withCodes.length} متجر · ${totalCodes} كود فعّال</span></h2>
+    <h2 class="section-title">المتاجر <span>${storesLabel(withCodes.length)} · ${codesLabel(totalCodes)}</span></h2>
     <div class="grid">
 ${cards}
     </div>
@@ -312,7 +351,7 @@ function buildStore(store) {
     : `<p class="empty">ما فيه أكواد فعّالة لهذا المتجر حاليًا — نحدّث الصفحة أول ما يتوفر كود جديد.</p>`;
 
   const body = `
-<div class="wrap">
+<div class="wrap page-narrow">
   <nav class="crumbs" aria-label="مسار التصفح">
     <a href="/">الرئيسية</a> ← <span>${esc(store.name)}</span>
   </nav>
@@ -330,7 +369,7 @@ function buildStore(store) {
     </div>
   </section>
 
-  <h2 class="section-title">الأكواد المتاحة <span>${codes.length} كود</span></h2>
+  <h2 class="section-title">الأكواد المتاحة <span>${codesLabel(codes.length)}</span></h2>
   ${codesHtml}
 
   <div class="prose">
