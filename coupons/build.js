@@ -227,14 +227,21 @@ const FONT_LINKS = [
 
 /* ======================= مكوّنات ======================= */
 
+/**
+ * شعار المتجر: صورة إن وُجدت، وإلا حرفٌ على لون العلامة.
+ * الصور توضع على بلاطة فاتحة دائمًا (لا تنقلب في الوضع الداكن) لأن أغلب شعارات
+ * المتاجر داكنة على خلفية شفافة، فتختفي لو وُضعت على سطحٍ داكن.
+ */
 function logoHtml(store, cls = '') {
   const classes = ('store-logo ' + cls).trim();
+
   if (store.logo) {
-    return `<img class="${classes}" src="${esc(store.logo)}" alt="شعار ${esc(store.name)}" width="56" height="56" loading="lazy" decoding="async">`;
+    return `<img class="${classes} store-logo--img" src="${esc(store.logo)}" alt="شعار ${esc(store.name)}" width="56" height="56" loading="lazy" decoding="async">`;
   }
+
   const letter = esc((store.name || '؟').trim().charAt(0));
   const bg = store.brandColor || '#FF9500';
-  return `<span class="${classes} store-logo--text" style="background:${esc(bg)};color:${esc(readableInk(bg))}" role="img" aria-label="شعار ${esc(store.name)}">${letter}</span>`;
+  return `<span class="${classes} store-logo--text" style="--logo-bg:${esc(bg)};color:${esc(readableInk(bg))}" role="img" aria-label="شعار ${esc(store.name)}">${letter}</span>`;
 }
 
 /** بطاقة الكود — الكود ظاهر بنصّه، قابل للنسخ، وقابل للفهرسة. */
