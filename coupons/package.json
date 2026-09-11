@@ -1,0 +1,12 @@
+{
+  "name": "baro-coupons",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "موقع أكواد الخصم — صفحات ثابتة مُحسّنة لمحركات البحث، بدون أي اعتماديات.",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js && node serve.js",
+    "serve": "node serve.js"
+  }
+}
