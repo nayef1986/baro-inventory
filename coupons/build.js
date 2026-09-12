@@ -27,7 +27,36 @@ function readJsonOr(rel, fallback) {
   }
 }
 
-const ORIGIN = (process.env.SITE_URL || site.domain || '').replace(/\/+$/, '');
+/**
+ * الدومين الذي تُبنى منه الروابط المطلقة (canonical و sitemap و og:url).
+ *
+ * الترتيب مقصود: متغيّر البيئة أولًا، ثم ما في site.json، ثم دومين النشر الذي
+ * توفّره المنصّة تلقائيًا. و«example.com» يُعامَل كأنه غير موجود — فنشر الموقع
+ * وفيه canonical يشير إلى دومينٍ آخر أسوأ من غياب canonical تمامًا: قوقل يفهمها
+ * أن الصفحة الأصلية هناك لا هنا، فلا يفهرس الموقع أصلًا.
+ */
+const PLACEHOLDER_DOMAINS = ['example.com', 'example.org', 'localhost'];
+
+function resolveOrigin() {
+  const candidates = [
+    process.env.SITE_URL,
+    site.domain,
+    // تضبطهما Vercel تلقائيًا عند كل نشر
+    process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  ];
+
+  for (const c of candidates) {
+    if (!c) continue;
+    const url = c.startsWith('http') ? c : `https://${c}`;
+    const host = url.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+    if (PLACEHOLDER_DOMAINS.some((d) => host === d || host.endsWith('.' + d))) continue;
+    return url.replace(/\/+$/, '');
+  }
+  return '';
+}
+
+const ORIGIN = resolveOrigin();
 const NOW = new Date();
 const BUILT_AT = NOW.toISOString().slice(0, 10);
 const YEAR = NOW.getFullYear();
@@ -49,10 +78,12 @@ const esc = (s) =>
  * الأقواس المعقوفة تُستثنى لأن قالب SearchAction يحتاجها كما هي.
  */
 const abs = (p) =>
-  ORIGIN +
-  encodeURI(p.startsWith('/') ? p : '/' + p)
-    .replace(/%7B/g, '{')
-    .replace(/%7D/g, '}');
+  ORIGIN
+    ? ORIGIN +
+      encodeURI(p.startsWith('/') ? p : '/' + p)
+        .replace(/%7B/g, '{')
+        .replace(/%7D/g, '}')
+    : '';
 
 /** تحويل نصٍّ عربي أو لاتيني إلى معرّف صالح للروابط. */
 const slugify = (s) =>
@@ -548,11 +579,11 @@ ${robots}
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 ${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
-<meta property="og:image" content="${esc(abs('/og.jpg'))}">
+${ORIGIN ? `<meta property="og:image" content="${esc(abs('/og.jpg'))}">` : ''}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
-<meta name="twitter:image" content="${esc(abs('/og.jpg'))}">
+${ORIGIN ? `<meta name="twitter:image" content="${esc(abs('/og.jpg'))}">` : ''}
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -1357,9 +1388,7 @@ Disallow: /search/
 Disallow: /favorites/
 Disallow: /offline/
 Disallow: /admin/
-
-Sitemap: ${abs('/sitemap.xml')}
-`;
+${ORIGIN ? `\nSitemap: ${abs('/sitemap.xml')}\n` : ''}`;
 
 const buildManifest = () =>
   JSON.stringify(
@@ -1497,7 +1526,11 @@ function write(rel, content) {
 
 function main() {
   if (!ORIGIN) {
-    console.warn('⚠️  لا يوجد دومين في data/site.json — الروابط المطلقة (canonical / sitemap) ستكون ناقصة.');
+    console.warn(
+      '⚠️  لا دومين معروف. لن تُكتب خريطة الموقع ولا وسوم canonical — وهذا مقصود:\n' +
+        '   canonical خاطئ يمنع فهرسة الموقع كليًّا، والغياب لا يمنعها.\n' +
+        '   اضبط "domain" في data/site.json أو متغيّر البيئة SITE_URL.'
+    );
   }
   if (!stores.length) {
     console.warn('⚠️  لا يوجد أي كود فعّال — سيُبنى الموقع فارغًا.');
@@ -1571,7 +1604,7 @@ function main() {
     )
   );
 
-  write('sitemap.xml', buildSitemap(urls));
+  if (ORIGIN) write('sitemap.xml', buildSitemap(urls));
   write('robots.txt', buildRobots());
   write('manifest.webmanifest', buildManifest());
 
