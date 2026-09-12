@@ -257,6 +257,14 @@ const FONT_LINKS = [
   `<noscript>${FONT_URLS.map((h) => `<link rel="stylesheet" href="${h}">`).join('')}</noscript>`,
 ].join('\n');
 
+/**
+ * اسم الموقع وصفيٌّ («أكواد خصم»)، فإلحاقه بعنوانٍ يبدأ به يُنتج تكرارًا
+ * يقتطعه قوقل ويُضعف العنوان. نُلحقه فقط حين لا يكون مذكورًا.
+ */
+function pageTitle(t) {
+  return t.includes(site.name) ? t : `${t} | ${site.name}`;
+}
+
 /* ======================= مكوّنات ======================= */
 
 /**
@@ -540,7 +548,12 @@ ${schema.map((o) => `<script type="application/ld+json">${JSON.stringify(o).repl
 <header class="appbar">
   <div class="appbar__inner">
     <a class="brand" href="/">
-      <span class="brand__mark" aria-hidden="true">%</span>
+      <svg class="brand__mark" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true">
+        <rect width="64" height="64" rx="15" fill="currentColor"/>
+        <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round">
+          <path d="M44 20 20 44"/><circle cx="24" cy="24" r="5.5"/><circle cx="40" cy="40" r="5.5"/>
+        </g>
+      </svg>
       <span class="brand__name">${esc(site.name)}</span>
     </a>
     <nav class="appbar__nav" aria-label="التنقل الرئيسي">
@@ -728,7 +741,7 @@ ${posts.slice(0, 3).map((x) => postCard(x, { compact: true })).join('\n')}
 ${faqHtml}`;
 
   return layout({
-    title: `${site.name} — ${site.tagline} ${YEAR}`,
+    title: `${site.name} ${YEAR} — كوبونات فعّالة لأشهر المتاجر`,
     description: site.description,
     canonical: abs('/'),
     path: '/',
@@ -778,7 +791,7 @@ ${cat.stores.map((s) => storeCard(s)).join('\n')}
   .join('\n')}`;
 
   return layout({
-    title: `كل المتاجر — ${esc(storesLabel(stores.length))} بأكواد خصم فعّالة | ${site.name}`,
+    title: pageTitle(`كل المتاجر — ${storesLabel(stores.length)} بأكواد خصم فعّالة`),
     description: `تصفّح ${storesLabel(stores.length)} لديها ${codesLabel(TOTAL_CODES)} — أزياء وإلكترونيات وتسوق عام وسفر. كود جاهز للنسخ مع رابط المتجر مباشرة.`,
     canonical: abs('/stores/'),
     path: '/stores/',
@@ -867,7 +880,7 @@ ${others.map((x) => storeCard(x)).join('\n')}
   </section>
 </div>`;
 
-  const title = `أكواد خصم ${s.name} ${YEAR}${best && best.discount ? ` — خصم ${best.discount}` : ''} | ${site.shortName || site.name}`;
+  const title = pageTitle(`أكواد خصم ${s.name} ${YEAR}${best && best.discount ? ` — خصم ${best.discount}` : ''}`);
   const description = `${codesLabel(s.codes.length)} لمتجر ${s.name}${best && best.discount ? ` تصل إلى ${best.discount}` : ''}. انسخ الكود بضغطة وادخل المتجر. محدَّث ${fmtDate(BUILT_AT)}.`;
 
   return {
@@ -953,7 +966,7 @@ ${catPosts.map((x) => postCard(x, { compact: true })).join('\n')}
   return {
     url,
     html: layout({
-      title: `أكواد خصم ${cat.name} ${YEAR} — ${codes.length} كوبون فعّال | ${site.name}`,
+      title: pageTitle(`أكواد خصم ${cat.name} ${YEAR} — ${codes.length} كوبون فعّال`),
       description: `${codesLabel(codes.length)} في قسم ${cat.name} من ${storesLabel(cat.stores.length)}. انسخ الكود بضغطة وادخل المتجر. محدَّث ${fmtDate(BUILT_AT)}.`,
       canonical: abs(url),
       path: url,
@@ -1002,7 +1015,7 @@ ${rest.map((x) => postCard(x)).join('\n')}
 </div>`;
 
   return layout({
-    title: `المدونة — أدلّة التوفير والتسوق الإلكتروني | ${site.name}`,
+    title: pageTitle('المدونة — أدلّة التوفير والتسوق الإلكتروني'),
     description: 'أدلّة عملية في أكواد الخصم ومواسم التخفيضات والتسوق الإلكتروني، مربوطة بالأكواد الفعّالة في الموقع.',
     canonical: abs('/blog/'),
     path: '/blog/',
@@ -1097,7 +1110,7 @@ ${related.map((x) => postCard(x, { compact: true })).join('\n')}
   return {
     url: post.url,
     html: layout({
-      title: `${post.title} | ${site.name}`,
+      title: pageTitle(post.title),
       description: post.excerpt || postPlainText(post).slice(0, 180),
       canonical: abs(post.url),
       path: post.url,
@@ -1207,7 +1220,7 @@ function pageAdvertise() {
 </div>`;
 
   return layout({
-    title: `أعلن معنا — مساحات إعلانية | ${site.name}`,
+    title: pageTitle('أعلن معنا — مساحات إعلانية'),
     description: 'مساحات إعلانية داخل قوائم أكواد الخصم وصفحات المتاجر والمدونة. استهداف بالتصنيف، ووسم إعلاني واضح، وتقرير نقرات في نهاية كل حملة.',
     canonical: abs('/advertise/'),
     path: '/advertise/',
@@ -1234,7 +1247,7 @@ function pageSearch() {
 </div>`;
 
   return layout({
-    title: `بحث في الأكواد | ${site.name}`,
+    title: pageTitle('بحث في الأكواد'),
     description: 'ابحث في أكواد الخصم حسب اسم المتجر أو التصنيف أو الكود نفسه.',
     canonical: abs('/search/'),
     path: '/search/',
@@ -1256,7 +1269,7 @@ function pageFavorites() {
 </div>`;
 
   return layout({
-    title: `المفضلة | ${site.name}`,
+    title: pageTitle('المفضلة'),
     description: 'الأكواد التي حفظتها.',
     canonical: abs('/favorites/'),
     path: '/favorites/',
@@ -1267,7 +1280,7 @@ function pageFavorites() {
 
 function pageOffline() {
   return layout({
-    title: `لا يوجد اتصال | ${site.name}`,
+    title: pageTitle('لا يوجد اتصال'),
     description: 'لا يوجد اتصال بالإنترنت.',
     path: '/offline/',
     noindex: true,
@@ -1283,7 +1296,7 @@ function pageOffline() {
 
 function page404() {
   return layout({
-    title: `الصفحة غير موجودة | ${site.name}`,
+    title: pageTitle('الصفحة غير موجودة'),
     description: 'الصفحة غير موجودة.',
     path: '/404',
     noindex: true,
@@ -1417,9 +1430,14 @@ self.addEventListener('fetch', (e) => {
 });
 `;
 
-const faviconSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+/* الأيقونة المتجهة — تُرسم بمسارٍ لا بخط، فلا تعتمد على خطٍّ مثبَّت على جهاز الزائر. */
+const faviconSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="أكواد خصم">
   <rect width="64" height="64" rx="15" fill="#FF9500"/>
-  <text x="32" y="45" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="bold" fill="#fff">%</text>
+  <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round">
+    <path d="M44 20 20 44"/>
+    <circle cx="24" cy="24" r="5.5"/>
+    <circle cx="40" cy="40" r="5.5"/>
+  </g>
 </svg>
 `;
 
