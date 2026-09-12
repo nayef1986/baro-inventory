@@ -116,6 +116,38 @@ function codeRank(c) {
   return [c.featured ? 0 : 1, -value, daysUntil(c.expires)];
 }
 
+/* ----------- شعارات مرفوعة من صفحة الإدارة ----------- */
+
+/**
+ * صفحة الإدارة تحفظ الشعار داخل stores.json كـ data:URI — ملفٌّ واحد يديره صاحب
+ * الموقع بلا مرفقات. هنا نفكّه إلى صورة حقيقية في المخرجات: المتصفح يحمّلها مرّة
+ * ويخزّنها، بدل تكرار عشرات الكيلوبايتات في كل صفحة تعرض المتجر.
+ */
+const pendingImages = [];
+
+const DATA_URI_EXT = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/svg+xml': '.svg',
+};
+
+function materializeLogo(store) {
+  const raw = store.logo || '';
+  if (!raw.startsWith('data:')) return raw;
+
+  const m = /^data:([a-z]+\/[a-z0-9+.-]+);base64,([\s\S]+)$/i.exec(raw);
+  if (!m) return '';
+
+  const ext = DATA_URI_EXT[m[1].toLowerCase()];
+  if (!ext) return '';
+
+  const file = `images/${slugify(store.slug || store.name)}${ext}`;
+  pendingImages.push({ file, buf: Buffer.from(m[2], 'base64') });
+  return '/' + file;
+}
+
 const stores = rawStores
   .map((s) => {
     const codes = (s.codes || [])
@@ -130,7 +162,7 @@ const stores = rawStores
         const [ra, rb] = [codeRank(a), codeRank(b)];
         return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
       });
-    return { ...s, codes, categorySlug: slugify(s.category) };
+    return { ...s, codes, categorySlug: slugify(s.category), logo: materializeLogo(s) };
   })
   .filter((s) => s.codes.length > 0);
 
@@ -244,55 +276,46 @@ function logoHtml(store, cls = '') {
   return `<span class="${classes} store-logo--text" style="--logo-bg:${esc(bg)};color:${esc(readableInk(bg))}" role="img" aria-label="شعار ${esc(store.name)}">${letter}</span>`;
 }
 
-/** بطاقة الكود — الكود ظاهر بنصّه، قابل للنسخ، وقابل للفهرسة. */
-function codeCard(code, { heading = 'h3', showStore = true, hero = false } = {}) {
+/**
+ * بلاطة الكود: شعار البراند، وتحته الكود وزر النسخ بجانبه. لا شيء غير ذلك —
+ * النسبة وتاريخ الانتهاء لا يظهران إلا إذا كُتبا في البيانات.
+ * الكود نصٌّ في HTML قبل أي جافاسكربت، فمحرك البحث يقرأه كما يقرؤه الزائر.
+ */
+function codeTile(code, { heading = 'h3', showBrand = true } = {}) {
   const s = code.store;
-  const badges = [
-    code.discount ? `<span class="tag tag--discount">${esc(code.discount)}</span>` : '',
-    code.featured ? '<span class="tag tag--featured">الأفضل</span>' : '',
-    code.isNew ? '<span class="tag tag--new">جديد</span>' : '',
-    code.endingSoon ? `<span class="tag tag--soon">${esc(soonLabel(daysUntil(code.expires)))}</span>` : '',
-  ].join('');
 
-  const storeLine = showStore
-    ? `<a class="code-store" href="/store/${esc(s.slug)}/">
-         ${logoHtml(s, 'store-logo--sm')}
-         <span class="code-store__name">${esc(s.name)}</span>
-         <span class="code-store__cat">${esc(s.category || '')}</span>
+  const brand = showBrand
+    ? `<a class="tile__brand" href="/store/${esc(s.slug)}/">
+         ${logoHtml(s, 'tile__logo')}
+         <span class="tile__name">${esc(s.name)}</span>
        </a>`
-    : '';
+    : `<div class="tile__brand tile__brand--plain">
+         ${logoHtml(s, 'tile__logo')}
+         <span class="tile__name">${esc(s.name)}</span>
+       </div>`;
 
-  const meta = [
-    code.expires ? `<span>صالح حتى ${esc(fmtDate(code.expires))}</span>` : '',
-    code.terms ? `<span>${esc(code.terms)}</span>` : '',
-  ]
-    .filter(Boolean)
-    .join('<span class="sep" aria-hidden="true">·</span>');
+  // العنوان مطلوب للفهرسة، ومخفيٌّ بصريًا كي لا تمتلئ البلاطة كتابةً.
+  const title = `<${heading} class="sr-only">${esc(code.title || `كود خصم ${s.name}`)}</${heading}>`;
 
-  return `<article class="code-card${code.featured ? ' is-featured' : ''}${hero ? ' is-hero' : ''}" id="${esc(code.id)}"
+  return `<article class="tile${code.featured ? ' is-featured' : ''}" id="${esc(code.id)}"
          data-code-card data-store="${esc(s.slug)}" data-category="${esc(s.categorySlug)}"
          data-search="${esc([s.name, s.category, code.title, code.code, code.discount].filter(Boolean).join(' '))}">
-  <div class="code-card__top">
-    ${storeLine}
-    <button type="button" class="fav-btn" data-fav="${esc(code.id)}" aria-pressed="false" aria-label="حفظ في المفضلة">
-      <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M12 20.5 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 1 1 19.2 13Z"/></svg>
-    </button>
+  ${title}
+  ${code.discount ? `<span class="tile__off">${esc(code.discount)}</span>` : ''}
+  <button type="button" class="tile__fav" data-fav="${esc(code.id)}" aria-pressed="false" aria-label="حفظ ${esc(code.code)} في المفضلة">
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 20.5 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 1 1 19.2 13Z"/></svg>
+  </button>
+
+  ${brand}
+
+  <div class="tile__row">
+    <span class="tile__code" data-copy="${esc(code.code)}" data-url="${esc(s.url)}" data-id="${esc(code.id)}"
+          role="button" tabindex="0" aria-label="انسخ الكود ${esc(code.code)}">${esc(code.code)}</span>
+    <button type="button" class="tile__copy" data-copy="${esc(code.code)}" data-url="${esc(s.url)}" data-id="${esc(code.id)}"
+            aria-label="انسخ الكود ${esc(code.code)} وافتح ${esc(s.name)}">نسخ</button>
   </div>
 
-  <div class="code-card__tags">${badges}</div>
-  <${heading} class="code-card__title">${esc(code.title || `كود خصم ${s.name}`)}</${heading}>
-  ${meta ? `<p class="code-card__meta">${meta}</p>` : ''}
-
-  <div class="code-card__action">
-    <button type="button" class="copy-btn" data-code="${esc(code.code)}" data-url="${esc(s.url)}" data-id="${esc(code.id)}"
-            aria-label="انسخ كود ${esc(code.code)} وافتح متجر ${esc(s.name)}">
-      <span class="copy-btn__code">${esc(code.code)}</span>
-      <span class="copy-btn__label">نسخ<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 5.5h-9a2 2 0 0 0-2 2v9"/></svg></span>
-    </button>
-    <a class="btn btn-ghost code-card__visit" href="${esc(s.url)}" target="_blank" rel="nofollow sponsored noopener">
-      المتجر<span aria-hidden="true"> ↗</span>
-    </a>
-  </div>
+  ${code.expires ? `<p class="tile__exp">ينتهي ${esc(fmtDate(code.expires))}</p>` : ''}
 </article>`;
 }
 
@@ -320,11 +343,14 @@ function adSlot(slot, { category = '', className = '' } = {}) {
   const list = adsFor(slot, category);
 
   if (!list.length) {
+    const stage = className.includes('ad--stage');
     return `<aside class="ad ad--house ${className}" aria-label="مساحة إعلانية متاحة">
   <span class="ad__label">مساحة إعلانية</span>
   <div class="ad__body">
-    <p class="ad__title">مساحتك الإعلانية هنا</p>
-    <p class="ad__text">اعرض متجرك أمام متسوّقين يبحثون عن عرضٍ ليشتروا الآن.</p>
+    <p class="ad__title">${stage ? 'اعرض علامتك هنا' : 'مساحتك الإعلانية هنا'}</p>
+    <p class="ad__text">${stage
+      ? 'أول ما تقع عليه العين قبل الأكواد — أمام متسوّقٍ يبحث عن عرضٍ ليشتري الآن.'
+      : 'اعرض متجرك أمام متسوّقين يبحثون عن عرضٍ ليشتروا الآن.'}</p>
   </div>
   <a class="btn btn-primary ad__cta" href="/advertise/">احجز المساحة</a>
 </aside>`;
@@ -416,8 +442,8 @@ function renderBlock(b) {
       return `<section class="live-codes" aria-label="${esc(b.title || 'أكواد فعّالة')}">
   <h2 class="live-codes__title">${esc(b.title || 'أكواد فعّالة الآن')}</h2>
   ${b.note ? `<p class="live-codes__note">${esc(b.note)}</p>` : ''}
-  <div class="code-grid">
-${list.map((c) => codeCard(c, { heading: 'h3' })).join('\n')}
+  <div class="tile-grid">
+${list.map((c) => codeTile(c)).join('\n')}
   </div>
 </section>`;
     }
@@ -641,7 +667,7 @@ function pageHome() {
   const FIRST_AD_AFTER = 4;
   const AD_INTERVAL = 8;
   const feedWithAds = rest
-    .map((c) => codeCard(c))
+    .map((c) => codeTile(c))
     .flatMap((card, i) => {
       const n = i + 1;
       const place = n === FIRST_AD_AFTER || (n > FIRST_AD_AFTER && (n - FIRST_AD_AFTER) % AD_INTERVAL === 0);
@@ -650,6 +676,10 @@ function pageHome() {
     .join('\n');
 
   const body = `
+<div class="shell">
+  ${adSlot('hero', { className: 'ad--stage' })}
+</div>
+
 <section class="topline">
   <div class="shell">
     <h1>أكواد خصم <em>جاهزة للنسخ</em></h1>
@@ -666,13 +696,13 @@ function pageHome() {
 </div>
 
 ${featured.length ? `<section class="shell" data-section>
-  <div class="code-grid">
-${featured.map((c) => codeCard(c)).join('\n')}
+  <div class="tile-grid">
+${featured.map((c) => codeTile(c)).join('\n')}
   </div>
 </section>` : ''}
 
 <section class="shell" data-section>
-  <div class="code-grid">
+  <div class="tile-grid">
 ${feedWithAds}
   </div>
 </section>
@@ -686,7 +716,6 @@ ${stores.map((s) => storeCard(s)).join('\n')}
   </div>
 </section>
 
-${adSlot('hero', { className: 'ad--wide ad--shell' })}
 
 ${posts.length ? `<section class="shell strip tail">
   <h2 class="sec-title">أدلّة التوفير</h2>
@@ -806,8 +835,8 @@ function pageStore(s) {
     </div>
   </header>
 
-  <div class="code-grid code-grid--lander">
-${s.codes.map((c, i) => codeCard(c, { heading: 'h2', showStore: false, hero: i === 0 })).join('\n')}
+  <div class="tile-grid tile-grid--lander">
+${s.codes.map((c) => codeTile(c, { heading: 'h2', showBrand: false })).join('\n')}
   </div>
 
   ${adSlot('store', { category: s.category, className: 'ad--wide' })}
@@ -898,8 +927,8 @@ function pageCategory(cat) {
     </div>
   </header>
 
-  <div class="code-grid">
-${codes.map((c) => codeCard(c)).join('\n')}
+  <div class="tile-grid">
+${codes.map((c) => codeTile(c)).join('\n')}
   </div>
 
   ${adSlot('store', { category: cat.name, className: 'ad--wide' })}
@@ -1201,7 +1230,7 @@ function pageSearch() {
     <input type="search" name="q" id="live-search" placeholder="اسم متجر، أو تصنيف، أو كود…" aria-label="ابحث" autocomplete="off" autofocus>
   </form>
   <p class="page-lede" id="search-status">اكتب حرفين على الأقل للبحث في ${esc(codesLabel(TOTAL_CODES))}.</p>
-  <div class="code-grid" id="search-results"></div>
+  <div class="tile-grid" id="search-results"></div>
 </div>`;
 
   return layout({
@@ -1219,7 +1248,7 @@ function pageFavorites() {
 <div class="shell">
   <h1 class="page-title">المفضلة</h1>
   <p class="page-lede" id="fav-status">الأكواد التي حفظتها محفوظة على جهازك فقط.</p>
-  <div class="code-grid" id="fav-results"></div>
+  <div class="tile-grid" id="fav-results"></div>
   <p class="empty" id="fav-empty" hidden>
     ما حفظت أي كود بعد. اضغط على ♥ في أي بطاقة كود ليظهر هنا.
     <br><a class="btn btn-primary" href="/" style="margin-top:16px">تصفّح الأكواد</a>
@@ -1294,6 +1323,7 @@ Allow: /
 Disallow: /search/
 Disallow: /favorites/
 Disallow: /offline/
+Disallow: /admin/
 
 Sitemap: ${abs('/sitemap.xml')}
 `;
@@ -1421,6 +1451,8 @@ function main() {
 
   fs.rmSync(DIST, { recursive: true, force: true });
   copyDir(path.join(ROOT, 'public'), DIST);
+
+  for (const img of pendingImages) write(img.file, img.buf);
 
   const urls = [
     { loc: '/', freq: 'daily', priority: '1.0' },

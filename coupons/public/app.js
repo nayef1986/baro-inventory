@@ -64,51 +64,48 @@
     return ok;
   }
 
-  function markCopied(btn) {
-    var label = btn.querySelector('.copy-btn__label');
-    if (label && !btn.dataset.idle) btn.dataset.idle = label.innerHTML;
-    btn.classList.add('is-copied');
-    if (label) label.textContent = 'تم النسخ ✓';
-    clearTimeout(btn._t);
-    btn._t = setTimeout(function () {
-      btn.classList.remove('is-copied');
-      if (label && btn.dataset.idle) label.innerHTML = btn.dataset.idle;
+  /** الكود وزر النسخ عنصران منفصلان — الحالة تُوضع على البلاطة فتظهر على الاثنين. */
+  function markCopied(el) {
+    const tile = el.closest('.tile');
+    const target = tile || el;
+    target.classList.add('is-copied');
+    clearTimeout(target._t);
+    target._t = setTimeout(function () {
+      target.classList.remove('is-copied');
     }, 2200);
 
-    var id = btn.dataset.id;
+    var id = el.dataset.id;
     if (id) {
       var copied = readSet(COPIED_KEY).filter(function (x) {
         return x !== id;
       });
       copied.unshift(id);
       writeSet(COPIED_KEY, copied);
-      var card = btn.closest('[data-code-card]');
-      if (card) card.classList.add('was-copied');
     }
   }
 
-  function copyCode(btn) {
-    var code = btn.dataset.code || '';
+  function copyCode(el) {
+    var code = el.dataset.copy || '';
     if (!code) return;
 
     var done = function () {
-      markCopied(btn);
-      toast('نُسخ الكود ' + code + ' — الصقه في صفحة الدفع');
+      markCopied(el);
+      toast('نُسخ الكود ' + code);
     };
 
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(code).then(done, function () {
         if (fallbackCopy(code)) done();
-        else toast('تعذّر النسخ تلقائيًا — انسخ الكود يدويًا: ' + code);
+        else toast('انسخ الكود يدويًا: ' + code);
       });
     } else if (fallbackCopy(code)) {
       done();
     } else {
-      toast('تعذّر النسخ تلقائيًا — انسخ الكود يدويًا: ' + code);
+      toast('انسخ الكود يدويًا: ' + code);
     }
 
-    /* فتح المتجر مباشرة بعد النسخ: النقرة نفسها، فلا يحجبها المتصفح. */
-    if (btn.dataset.url) window.open(btn.dataset.url, '_blank', 'noopener');
+    /* فتح المتجر في النقرة نفسها، فلا يحجبه المتصفح */
+    if (el.dataset.url) window.open(el.dataset.url, '_blank', 'noopener');
   }
 
   /* ---------------- المفضلة ---------------- */
@@ -139,14 +136,12 @@
       b.classList.toggle('is-on', on);
     });
 
-    (root || document).querySelectorAll('[data-code-card]').forEach(function (c) {
-      if (copied.indexOf(c.id) !== -1) c.classList.add('was-copied');
-    });
+    if (!copied.length) return;
   }
 
   /* ---------------- نقرة واحدة تخدم الزرّين ---------------- */
   document.addEventListener('click', function (e) {
-    var copy = e.target.closest('.copy-btn');
+    var copy = e.target.closest('[data-copy]');
     if (copy) {
       copyCode(copy);
       return;
@@ -161,6 +156,15 @@
       toast(on ? 'أُضيف إلى المفضلة' : 'أُزيل من المفضلة');
       if (document.getElementById('fav-results')) renderFavorites();
     }
+  });
+
+  /* عنصر الكود span بدور زر — نمنحه سلوك المفاتيح الذي يمنحه المتصفح للأزرار */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var el = e.target.closest('[data-copy][role="button"]');
+    if (!el) return;
+    e.preventDefault();
+    copyCode(el);
   });
 
   /* ---------------- تطبيع النص العربي للبحث ---------------- */
@@ -233,50 +237,36 @@
 
   function logoMarkup(store) {
     if (store.logo) {
-      return '<img class="store-logo store-logo--sm" src="' + esc(store.logo) + '" alt="" width="36" height="36" loading="lazy">';
+      return '<img class="store-logo tile__logo store-logo--img" src="' + esc(store.logo) + '" alt="" width="78" height="78" loading="lazy">';
     }
     return (
-      '<span class="store-logo store-logo--sm store-logo--text" style="background:' +
+      '<span class="store-logo tile__logo store-logo--text" style="--logo-bg:' +
       esc(store.brandColor) + ';color:' + esc(store.ink) + '" aria-hidden="true">' +
       esc(store.name.trim().charAt(0)) + '</span>'
     );
   }
 
-  /** نفس بنية البطاقة المولَّدة في build.js حتى تتطابق الأنماط. */
+  /** نفس بنية البلاطة المولَّدة في build.js حتى تتطابق الأنماط تمامًا. */
   function cardMarkup(c) {
     var favOn = isFav(c.id);
-    var tags = '';
-    if (c.discount) tags += '<span class="tag tag--discount">' + esc(c.discount) + '</span>';
-    if (c.featured) tags += '<span class="tag tag--featured">الأفضل</span>';
-
-    var meta = [];
-    if (c.expires) meta.push('صالح حتى ' + esc(c.expires));
-    if (c.terms) meta.push(esc(c.terms));
-
     return (
-      '<article class="code-card' + (c.featured ? ' is-featured' : '') + '" id="' + esc(c.id) + '" data-code-card>' +
-        '<div class="code-card__top">' +
-          '<a class="code-store" href="/store/' + esc(c.store.slug) + '/">' +
-            logoMarkup(c.store) +
-            '<span class="code-store__name">' + esc(c.store.name) + '</span>' +
-            '<span class="code-store__cat">' + esc(c.store.category) + '</span>' +
-          '</a>' +
-          '<button type="button" class="fav-btn' + (favOn ? ' is-on' : '') + '" data-fav="' + esc(c.id) + '"' +
-            ' aria-pressed="' + favOn + '" aria-label="حفظ في المفضلة">' +
-            '<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M12 20.5 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 1 1 19.2 13Z"/></svg>' +
-          '</button>' +
+      '<article class="tile' + (c.featured ? ' is-featured' : '') + '" id="' + esc(c.id) + '" data-code-card>' +
+        (c.discount ? '<span class="tile__off">' + esc(c.discount) + '</span>' : '') +
+        '<button type="button" class="tile__fav' + (favOn ? ' is-on' : '') + '" data-fav="' + esc(c.id) + '"' +
+          ' aria-pressed="' + favOn + '" aria-label="حفظ في المفضلة">' +
+          '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 20.5 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 1 1 19.2 13Z"/></svg>' +
+        '</button>' +
+        '<a class="tile__brand" href="/store/' + esc(c.store.slug) + '/">' +
+          logoMarkup(c.store) +
+          '<span class="tile__name">' + esc(c.store.name) + '</span>' +
+        '</a>' +
+        '<div class="tile__row">' +
+          '<span class="tile__code" data-copy="' + esc(c.code) + '" data-url="' + esc(c.store.url) + '"' +
+            ' data-id="' + esc(c.id) + '" role="button" tabindex="0" aria-label="انسخ ' + esc(c.code) + '">' + esc(c.code) + '</span>' +
+          '<button type="button" class="tile__copy" data-copy="' + esc(c.code) + '" data-url="' + esc(c.store.url) + '"' +
+            ' data-id="' + esc(c.id) + '" aria-label="انسخ ' + esc(c.code) + '">نسخ</button>' +
         '</div>' +
-        '<div class="code-card__tags">' + tags + '</div>' +
-        '<h3 class="code-card__title">' + esc(c.title) + '</h3>' +
-        (meta.length ? '<p class="code-card__meta">' + meta.join('<span class="sep" aria-hidden="true">·</span>') + '</p>' : '') +
-        '<div class="code-card__action">' +
-          '<button type="button" class="copy-btn" data-code="' + esc(c.code) + '" data-url="' + esc(c.store.url) + '"' +
-            ' data-id="' + esc(c.id) + '" aria-label="انسخ كود ' + esc(c.code) + '">' +
-            '<span class="copy-btn__code">' + esc(c.code) + '</span>' +
-            '<span class="copy-btn__label">نسخ</span>' +
-          '</button>' +
-          '<a class="btn btn-ghost code-card__visit" href="' + esc(c.store.url) + '" target="_blank" rel="nofollow sponsored noopener">المتجر<span aria-hidden="true"> ↗</span></a>' +
-        '</div>' +
+        (c.expires ? '<p class="tile__exp">ينتهي ' + esc(c.expires) + '</p>' : '') +
       '</article>'
     );
   }

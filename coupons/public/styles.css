@@ -91,6 +91,12 @@ button { font-family: inherit; }
 
 .shell { max-width: var(--max); margin: 0 auto; padding-inline: 18px; }
 
+/* مخفيٌّ بصريًا ومقروءٌ لقارئ الشاشة ومحرك البحث */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
 .skip {
   position: absolute; inset-inline-start: -9999px; top: 8px; z-index: 200;
   background: var(--brand); color: #fff; padding: 10px 18px; border-radius: 10px; font-weight: 600;
@@ -267,100 +273,119 @@ button { font-family: inherit; }
 .crumbs a { color: var(--muted); }
 .crumbs a:hover { color: var(--brand); }
 
-/* ===== شبكة الأكواد ===== */
-.code-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(316px, 1fr)); }
-@media (max-width: 700px) { .code-grid { grid-template-columns: 1fr; } }
+/* ============================================================
+   بلاطة الكود: شعار البراند، وتحته الكود وزر النسخ. لا شيء غيره.
+   ============================================================ */
 
-.code-card {
-  position: relative; display: flex; flex-direction: column; gap: 11px;
+.tile-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 1020px; margin-inline: auto;
+}
+@media (min-width: 700px) {
+  .tile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+}
+
+.tile {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; padding: 20px 16px 16px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 18px;
-  transition: border-color .18s, box-shadow .18s, transform .18s;
+  border-radius: var(--r-lg);
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
 }
-.code-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-2px); }
-.code-card.is-featured {
-  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
-  background: linear-gradient(180deg, var(--brand-50), var(--surface) 58%);
+.tile:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--border));
 }
-.code-card.was-copied::after {
-  content: "نسختَه سابقًا"; position: absolute; top: 0; inset-inline-end: 18px;
-  transform: translateY(-50%);
-  font-size: 11.5px; font-weight: 600; color: var(--muted);
-  background: var(--surface-2); border: 1px solid var(--border);
-  padding: 2px 10px; border-radius: 999px;
-}
+.tile.is-featured { border-color: color-mix(in srgb, var(--brand) 48%, var(--border)); }
 
-.code-card__top { display: flex; align-items: center; gap: 10px; }
-
-.code-store { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
-.code-store:hover { color: inherit; }
-.code-store__name { font-weight: 600; color: var(--heading); font-size: 15px; white-space: nowrap; }
-.code-store__cat {
-  font-size: 12.5px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+/* زاويتا البلاطة: النسبة والمفضلة — أيقونتان لا جملتان */
+.tile__off {
+  position: absolute; top: 12px; inset-inline-end: 12px;
+  font-size: 12.5px; font-weight: 700; line-height: 1;
+  color: #fff; background: var(--brand);
+  padding: 6px 10px; border-radius: 999px;
+  box-shadow: var(--shadow-brand);
 }
-.code-store__cat::before { content: "· "; }
-
-.fav-btn {
-  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+.tile__fav {
+  position: absolute; top: 10px; inset-inline-start: 10px;
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
   display: grid; place-items: center;
-  background: transparent; border: 1px solid var(--border);
-  color: var(--muted); transition: .16s;
+  background: transparent; border: 0; color: var(--muted);
+  opacity: .55; transition: .16s;
 }
-.fav-btn svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
-.fav-btn:hover { border-color: var(--error); color: var(--error); }
-.fav-btn:active { transform: scale(.9); }
-.fav-btn.is-on { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, transparent); }
-.fav-btn.is-on svg { fill: currentColor; }
+.tile__fav svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.tile__fav:hover { opacity: 1; color: var(--error); }
+.tile__fav:active { transform: scale(.88); }
+.tile__fav.is-on { opacity: 1; color: var(--error); }
+.tile__fav.is-on svg { fill: currentColor; }
 
-.code-card__tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.tag {
-  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
-  background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
+/* الشعار: مربّع موزون، وبلاطة بيضاء دائمًا حتى في الوضع الداكن */
+.tile__brand {
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  margin-top: 8px; text-align: center; min-width: 0; width: 100%;
 }
-.tag--discount { background: var(--brand); color: #fff; border-color: transparent; }
-.tag--featured { background: var(--brand-50); color: var(--brand-700); border-color: var(--brand-100); }
-.tag--new { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); border-color: transparent; }
-.tag--soon { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); border-color: transparent; }
+.tile__brand:hover { color: inherit; }
+.tile__brand:hover .tile__name { color: var(--brand-600); }
 
-.code-card__title { margin: 0; font-size: 18px; line-height: 1.5; }
-.code-card__meta { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
-.code-card__meta .sep { margin: 0 7px; opacity: .55; }
+.tile__logo {
+  width: 78px; height: 78px; flex: 0 0 78px;
+  border-radius: 20px; font-size: 30px;
+}
+@media (max-width: 460px) {
+  .tile__logo { width: 62px; height: 62px; flex-basis: 62px; border-radius: 17px; font-size: 25px; }
+}
 
-.code-card__action { margin-top: auto; padding-top: 4px; display: flex; gap: 9px; align-items: stretch; }
+.tile__name {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 16.5px; color: var(--heading); line-height: 1.4;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
-.copy-btn {
-  flex: 1; min-width: 0; position: relative; overflow: hidden; cursor: pointer;
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 12px 15px;
-  font-size: 17px; font-weight: 700; letter-spacing: .8px;
+/* صف الكود: الكود ثم زر النسخ بجانبه */
+.tile__row {
+  display: flex; align-items: stretch; gap: 7px;
+  width: 100%; margin-top: auto;
+}
+
+.tile__code {
+  flex: 1; min-width: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 11px 10px;
+  font-size: 16px; font-weight: 700; letter-spacing: .9px;
   color: var(--heading); background: var(--surface-2);
-  border: 2px dashed var(--border-strong); border-radius: 13px;
+  border: 2px dashed var(--border-strong); border-radius: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   transition: .16s;
 }
-.copy-btn__code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.copy-btn__label {
-  display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
-  font-family: var(--font-sans); font-size: 12.5px; font-weight: 600;
-  letter-spacing: 0; color: var(--muted);
-}
-.copy-btn__label svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.copy-btn::after {
-  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0;
-  width: 4px; background: var(--brand); opacity: 0; transition: opacity .16s;
-}
-.copy-btn:hover { border-style: solid; border-color: var(--brand); background: var(--brand-50); color: var(--brand-700); }
-.copy-btn:hover::after { opacity: 1; }
-.copy-btn:hover .copy-btn__label { color: var(--brand-600); }
-.copy-btn:active { transform: scale(.985); }
-.copy-btn.is-copied {
-  border-style: solid; border-color: var(--success); color: var(--success);
-  background: color-mix(in srgb, var(--success) 12%, var(--surface));
-}
-.copy-btn.is-copied .copy-btn__label { color: var(--success); }
-.copy-btn.is-copied::after { background: var(--success); opacity: 1; }
+.tile__code:hover { border-color: var(--brand); border-style: solid; color: var(--brand-700); background: var(--brand-50); }
 
-.code-card__visit { flex: 0 0 auto; padding-inline: 15px; }
+.tile__copy {
+  flex: 0 0 auto; cursor: pointer;
+  padding: 0 17px; border: 0; border-radius: 12px;
+  font-family: var(--font-sans); font-size: 15px; font-weight: 700;
+  color: var(--on-brand); background: var(--brand);
+  box-shadow: var(--shadow-brand); transition: .16s;
+}
+.tile__copy:hover { background: var(--brand-600); }
+.tile__copy:active { transform: scale(.96); }
+
+/* حالة «نُسخ»: البلاطة كلها تتغيّر، فالإشارة واضحة أيًّا كان ما ضُغط */
+.tile.is-copied .tile__code {
+  border-style: solid; border-color: var(--success);
+  color: var(--success); background: color-mix(in srgb, var(--success) 12%, var(--surface));
+}
+.tile.is-copied .tile__copy { background: var(--success); box-shadow: none; }
+
+.tile__exp { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* صفحة المتجر: الشعار نفسه يتكرّر، فنصغّره ونُبقي التركيز على الكود */
+.tile-grid--lander .tile__brand { margin-top: 4px; }
+.tile-grid--lander .tile__logo { width: 58px; height: 58px; flex-basis: 58px; border-radius: 16px; font-size: 23px; }
+
+.tile__brand--plain { cursor: default; }
 
 /* ===== الأزرار ===== */
 .btn {
@@ -703,8 +728,8 @@ button { font-family: inherit; }
   width: 4px; height: .84em; border-radius: 3px; background: var(--brand);
 }
 .live-codes__note { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); }
-.live-codes .code-grid { grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); }
-.live-codes .code-card { background: var(--surface); }
+.live-codes .tile-grid { max-width: none; }
+.live-codes .tile { background: var(--surface); }
 
 /* ============================================================
    صفحة «أعلن معنا»
@@ -749,54 +774,13 @@ button { font-family: inherit; }
   .ad__cta { width: 100%; }
   .post-lead { padding: 22px 18px; }
   .live-codes { padding: 16px; border-radius: var(--r); }
-  .live-codes .code-grid { grid-template-columns: 1fr; }
+  .live-codes .tile-grid { gap: 10px; }
   .post__body { font-size: 16.5px; }
 }
 
 /* ============================================================
    صفحة الهبوط: الكود أولًا، وكل ما عداه في الذيل
    ============================================================ */
-
-/*
- * صفحة المتجر: عمود واحد. كل كود يأخذ العرض كاملًا — النص يمينًا والكود يسارًا —
- * فلا تتشتّت العين بين أعمدة، والأول أكبر لأنه الأعلى قيمة.
- */
-.code-grid--lander { grid-template-columns: 1fr; gap: 12px; }
-
-.code-card.is-hero {
-  position: relative;
-  padding: 24px;
-  border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
-  background: linear-gradient(180deg, var(--brand-50), var(--surface) 55%);
-  box-shadow: 0 10px 30px -16px color-mix(in srgb, var(--brand) 60%, transparent);
-}
-.code-card.is-hero .code-card__title { font-size: clamp(20px, 3.2vw, 25px); }
-.code-card.is-hero .copy-btn { padding: 17px 20px; font-size: 21px; border-radius: 15px; }
-.code-card.is-hero .copy-btn__label { font-size: 13.5px; }
-
-@media (min-width: 701px) {
-  .code-grid--lander .code-card {
-    position: relative;
-    display: grid;
-    grid-template-columns: 1fr minmax(264px, 322px);
-    column-gap: 30px; row-gap: 8px;
-    align-items: center;
-    padding: 22px 26px;
-  }
-  .code-grid--lander .code-card.is-hero { padding: 26px 28px; }
-
-  /* صفّ الأعلى لا يحمل إلا زر الحفظ هنا — نُخرجه من الشبكة كي لا يزيح النص لأعلى */
-  .code-grid--lander .code-card__top {
-    position: absolute; top: 18px; inset-inline-start: 20px; margin: 0;
-  }
-  .code-grid--lander .code-card > :not(.code-card__action):not(.code-card__top) { grid-column: 1; }
-  /* صفّ الوسوم يبدأ من حيث ينتهي زر الحفظ المطلق فلا يتراكبان */
-  .code-grid--lander .code-card__tags { padding-inline-start: 46px; }
-  .code-grid--lander .code-card__action {
-    grid-column: 2; grid-row: 1 / -1;
-    align-self: center; margin: 0; padding: 0;
-  }
-}
 
 /* الذيل: كل ما ليس كودًا — يبدأ بفاصل بصري واضح */
 .tail {
@@ -827,4 +811,25 @@ button { font-family: inherit; }
   .lander .store-logo--lg { width: 56px; height: 56px; flex-basis: 56px; border-radius: 15px; font-size: 24px; }
   .code-card.is-hero { padding: 20px; }
   .tail { margin-top: 34px; padding-top: 24px; }
+}
+
+/* ============================================================
+   الشاشة الإعلانية العلوية — أول ما تقع عليه العين
+   ============================================================ */
+
+.ad--stage {
+  margin: 18px 0 0;
+  padding: 26px 28px;
+  border-radius: var(--r-lg);
+  gap: 20px;
+}
+.ad--stage .ad__title { font-size: clamp(19px, 3vw, 24px); }
+.ad--stage .ad__text { font-size: 15.5px; max-width: 46ch; }
+.ad--stage .ad__img { width: 76px; height: 76px; flex-basis: 76px; border-radius: 18px; }
+.ad--stage .ad__cta { padding: 13px 24px; font-size: 16px; }
+.ad--stage::before { top: 22px; bottom: 22px; width: 5px; }
+
+@media (max-width: 600px) {
+  .ad--stage { padding: 22px 18px; gap: 14px; text-align: start; }
+  .ad--stage .ad__cta { width: 100%; }
 }
