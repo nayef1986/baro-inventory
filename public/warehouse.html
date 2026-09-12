@@ -91,6 +91,7 @@
     #printOverlay .tb { display: none !important; }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="app"><div class="loading"><span class="spin">⏳</span></div></div>
@@ -127,6 +128,7 @@ const num = v => { const n = parseFloat(v); return isNaN(n)?0:n; };
 const fmtN = n => Math.round(num(n)).toLocaleString("en-US");
 
 let PRODUCTS = [], PERIODS = [], SETTINGS = {}, IMAGES = {}, TRANSFERS = [], COUNTS = {}, WH_COUNTS = {};
+let UNKNOWN_ALL = {};   // باركودات جردتها الفروع ومو موجودة بالنظام
 const isWh = f => !f || f==="المستودع" || f==="المستودع الرئيسي";
 
 // ═══ حارس الأداء: يقيس العمليات الثقيلة ويحذّر لو تجاوزت الحد ═══
@@ -225,27 +227,33 @@ async function fetchPeriodsSmart(){
   return Array.isArray(old) ? old : [];
 }
 
+// ✅ الصور: الشكل الجديد أولاً (كل صورة بمفتاحها الخاص)، والقديم احتياطاً
+async function fetchImagesSmart(){
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=like.baro_image_v1_*&select=key,value`,
+      { headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` } });
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows.length > 0){
+      const out = {};
+      rows.forEach(row => { try { out[row.key.slice("baro_image_v1_".length)] = JSON.parse(row.value); } catch {} });
+      return out;
+    }
+  } catch(e){ /* نكمل للشكل القديم */ }
+  const old2 = await fetchRemote("baro_images_v2");
+  return (old2 && typeof old2 === "object" && !Array.isArray(old2)) ? old2 : {};
+}
+
 // load: يرجع الكاش فوراً لو موجود، ويحدّثه من Supabase بالخلفية
 async function load(key) {
-  // الصور خاصة: فحص خفيف لآخر تحديث قبل أي تحميل كامل (يوفّر Egress)
+  // الصور خاصة: كاش فوري + تحديث بالخلفية بالشكل الجديد (كل صورة بمفتاحها)
   if (key === "baro_images_v2") {
     const cached = await idbGet(key);
-    const cachedAt = await idbGet(key+"_updated_at");
     if (cached != null){
-      fetchUpdatedAt(key).then(remoteAt => {
-        if (remoteAt && remoteAt !== cachedAt){
-          fetchRemote(key).then(fresh => {
-            if (fresh != null) { idbSet(key, fresh); idbSet(key+"_updated_at", remoteAt); }
-          }).catch(()=>{});
-        }
-      }).catch(()=>{});
+      fetchImagesSmart().then(fresh => { if (fresh) idbSet(key, fresh); }).catch(()=>{});
       return cached;
     }
-    const fresh = await fetchRemote(key);
-    if (fresh != null) {
-      idbSet(key, fresh);
-      fetchUpdatedAt(key).then(at => { if (at) idbSet(key+"_updated_at", at); }).catch(()=>{});
-    }
+    const fresh = await fetchImagesSmart();
+    idbSet(key, fresh);
     return fresh;
   }
   const cached = await idbGet(key);
@@ -824,13 +832,14 @@ async function refreshAll(){
       return;
     }
     PRODUCTS = prods ?? []; PERIODS = pers ?? []; TRANSFERS = trans ?? []; COUNTS = counts ?? {}; WH_COUNTS = whc ?? {};
+    try { UNKNOWN_ALL = (await load("baro_unknown_counts_v1")) ?? {}; } catch(e){ UNKNOWN_ALL = {}; }
     // الصور والإعدادات: من الكاش فوراً (ما ننتظرها)
     if (Object.keys(IMAGES||{}).length === 0) { idbGet("baro_images_v2").then(v=>{ if(v) IMAGES = v; }).catch(()=>{}); }
     if (Object.keys(SETTINGS||{}).length === 0) { idbGet("baro_settings_v2").then(v=>{ if(v) SETTINGS = v; }).catch(()=>{}); }
     // نحدّث الكاش بالطازج
     try { idbSet("baro_products_v2",prods); idbSet("baro_periods_v2",pers); idbSet("baro_transfers_v2",trans); idbSet("baro_branch_counts_v2",counts); idbSet("baro_wh_counts_v2",whc); } catch {}
-    // الصور والإعدادات تُحدّث بالخلفية (ما توقف التحديث)
-    fetchRemote("baro_images_v2").then(v=>{ if(v){ IMAGES = v; idbSet("baro_images_v2",v); } }).catch(()=>{});
+    // الصور تُحدّث بالخلفية بالشكل الجديد (ما توقف التحديث)
+    fetchImagesSmart().then(v=>{ if(v){ IMAGES = v; idbSet("baro_images_v2",v); } }).catch(()=>{});
     fetchRemote("baro_settings_v2").then(v=>{ if(v){ SETTINGS = v; idbSet("baro_settings_v2",v); } }).catch(()=>{});
     loadRegions();
     DATA_LOADED = true;
@@ -1159,6 +1168,90 @@ async function saveWhCount(bc, name, calc){
   requestAnimationFrame(()=>window.scrollTo(0,y));
 }
 
+
+// ═══ تصدير إكسل شامل — كل الفروع (جاهز لأودو) ═══
+function exportAllBranchesExcel(){
+  const rows = [];
+  const now = new Date();
+  const ds = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+
+  // المجرود من كل الفروع
+  Object.values(COUNTS||{}).forEach(v => {
+    if (!v.branch) return;
+    const p = PRODUCTS.find(x => x.barcode === v.barcode);
+    const d = v.date ? new Date(num(v.date)) : now;
+    rows.push({
+      "الفرع": v.branch,
+      "الموظف": v.emp || "",
+      "الستاند": v.stand || "",
+      "التاريخ": d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"),
+      "الوقت": String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"),
+      "الباركود": v.barcode,
+      "اسم المنتج": v.name || p?.name || "",
+      "الكمية المجرودة": num(v.count),
+      "الكمية المحسوبة": num(v.calc),
+      "الفرق": num(v.count) - num(v.calc),
+      "موجود بالنظام": "نعم",
+      "الكونتينر": p?.container || "",
+      "سعر البيع": p ? num(p.sellPrice) : "",
+    });
+  });
+
+  // الباركودات غير المعروفة من كل الفروع
+  Object.values(UNKNOWN_ALL||{}).forEach(v => {
+    if (!v.branch) return;
+    const d = v.date ? new Date(num(v.date)) : now;
+    rows.push({
+      "الفرع": v.branch,
+      "الموظف": v.emp || "",
+      "الستاند": v.stand || "",
+      "التاريخ": d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"),
+      "الوقت": String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"),
+      "الباركود": v.barcode,
+      "اسم المنتج": "",
+      "الكمية المجرودة": num(v.count),
+      "الكمية المحسوبة": "",
+      "الفرق": "",
+      "موجود بالنظام": "لا",
+      "الكونتينر": "",
+      "سعر البيع": "",
+    });
+  });
+
+  if (!rows.length){ alert("ما فيه جرد للتصدير"); return; }
+
+  // الترتيب: بالفرع، ثم المعروف قبل غير المعروف
+  rows.sort((a,b) =>
+    String(a["الفرع"]).localeCompare(String(b["الفرع"])) ||
+    ((a["موجود بالنظام"]==="لا"?1:0) - (b["موجود بالنظام"]==="لا"?1:0))
+  );
+
+  const cols = Object.keys(rows[0]);
+
+  // احتياطي CSV لو المكتبة ما تحمّلت
+  if (typeof XLSX === "undefined"){
+    const csv = "\uFEFF" + [cols.join(",")].concat(
+      rows.map(r => cols.map(k => {
+        const v = String(r[k] ?? "");
+        return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+      }).join(","))
+    ).join("\n");
+    const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `جرد_كل_الفروع_${ds}.csv`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+    return;
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws["!cols"] = [{wch:14},{wch:12},{wch:10},{wch:12},{wch:8},{wch:18},{wch:30},{wch:14},{wch:14},{wch:9},{wch:14},{wch:14},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "جرد كل الفروع");
+  XLSX.writeFile(wb, `جرد_كل_الفروع_${ds}.xlsx`);
+}
+
 function renderCounts(c){
   const counted = Object.values(COUNTS||{});
   // نضيف المنتجات اللي لها تحويل من المستودع بس مو مجرودة (عشان تظهر برضه)
@@ -1189,7 +1282,46 @@ function renderCounts(c){
   filtered.forEach(e=>{ if(!byBranch[e.branch]) byBranch[e.branch]=[]; byBranch[e.branch].push(e); });
   const branchNames = Object.keys(byBranch).sort();
   if (filtered.length === 0){ c.innerHTML = searchBox + `<div class="empty">لا نتائج لـ "${countSearch}"</div>`; return; }
-  c.innerHTML = searchBox + branchNames.map(branch=>{
+  // ═══ ملخص الإدارة عبر كل الفروع ═══
+  const allCounted = entries.filter(e=>!e._transferOnly);
+  const branchStats = {};
+  allCounted.forEach(e=>{
+    const b = e.branch || "؟";
+    if (!branchStats[b]) branchStats[b] = { n:0, short:0, over:0, emp:e.emp||"؟", last:0 };
+    branchStats[b].n++;
+    const d = num(e.count) - num(e.calc);
+    if (d < 0) branchStats[b].short++;
+    else if (d > 0) branchStats[b].over++;
+    if (num(e.date) > branchStats[b].last) branchStats[b].last = num(e.date);
+  });
+  const unkTotal = Object.values(UNKNOWN_ALL||{}).filter(v=>v.branch).length;
+  const summary = `
+    <div style="background:#111a2e;border:1px solid #2d3a52;border-radius:14px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+        <div style="font-size:15px;font-weight:900;color:#fff">📊 ملخص الجرد — كل الفروع</div>
+        <div style="font-size:12px;color:#5b6b85">${Object.keys(branchStats).length} فرع · ${allCounted.length} صنف</div>
+      </div>
+      ${Object.entries(branchStats).sort((a,b)=>b[1].n-a[1].n).map(([b,s])=>{
+        const d = s.last ? new Date(s.last) : null;
+        const ago = d ? (()=>{ const m=Math.round((Date.now()-s.last)/60000);
+          return m<60?`قبل ${m} د`: m<1440?`قبل ${Math.round(m/60)} س`:`قبل ${Math.round(m/1440)} يوم`; })() : "";
+        return `<div style="display:flex;align-items:center;gap:9px;background:#0f1626;border-radius:10px;padding:10px 12px;margin-bottom:6px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:900;color:#e2e8f0">${b}</div>
+            <div style="font-size:11px;color:#5b6b85;margin-top:2px">${s.emp} · ${ago}</div>
+          </div>
+          <div style="text-align:center"><div style="font-size:16px;font-weight:900;color:#fff">${s.n}</div><div style="font-size:9px;color:#5b6b85">صنف</div></div>
+          ${s.short?`<div style="text-align:center"><div style="font-size:16px;font-weight:900;color:#f87171">${s.short}</div><div style="font-size:9px;color:#5b6b85">ناقص</div></div>`:""}
+          ${s.over?`<div style="text-align:center"><div style="font-size:16px;font-weight:900;color:#fbbf24">${s.over}</div><div style="font-size:9px;color:#5b6b85">زيادة</div></div>`:""}
+        </div>`;
+      }).join("")}
+      ${unkTotal?`<div style="font-size:12px;color:#fbbf24;margin-top:8px">⚠ ${unkTotal} باركود غير معروف بكل الفروع</div>`:""}
+      <button onclick="exportAllBranchesExcel()" style="width:100%;margin-top:11px;background:#047857;border:none;border-radius:12px;padding:13px;font-family:'Cairo';font-size:14px;font-weight:900;color:#fff;cursor:pointer">
+        📊 حمّل إكسل شامل — كل الفروع (لأودو)
+      </button>
+    </div>`;
+
+  c.innerHTML = searchBox + summary + branchNames.map(branch=>{
     const allItems = byBranch[branch].sort((a,b)=>b.date-a.date);
     const items = allItems.filter(e=>!e._transferOnly);   // المجرودة
     const txItems = allItems.filter(e=>e._transferOnly);  // الوارد فقط (غير مجرود)
