@@ -87,7 +87,7 @@ let SEQ = 0;             // تسلسل يميّز العمليات المتتا�
 let STANDS_DONE = [];    // الستاندات اللي خلّصها الموظف
 let _scanTarget = null;  // "fast" = نتيجة الكاميرا تروح للمسح السريع
 let FAST_LOG = [];       // سجل آخر عمليات المسح السريع (لهذي الجلسة)
-let activeTab = "count"; // count | receive
+let activeTab = "home"; // home | count | receive | deliver | recvbranch
 let searchTerm = "";
 let EMP = "";
 let openConts = {};
@@ -420,6 +420,8 @@ function branchProductsGrouped(){
 
 function render(){
   const app = document.getElementById("app");
+  // ═══ شاشة الجرد المستقلة (كاملة، بدون تشتيت) ═══
+  if (activeTab === "count"){ renderCountScreen(app); return; }
   // عدد شحنات الاستلام المعلّقة (مرسلة للفرع، مطبوعة، ما استُلمت)
   const pendingReceive = TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received).length;
   // العدّادات تعد الفواتير (كل فرع = فاتورة وحدة) مو المنتجات
@@ -428,19 +430,20 @@ function render(){
   const pendingRecvWh = cntInvoices(TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && isWh(t.from)), "from");
   const pendingRecvBr = cntInvoices(TRANSFERS.filter(t=>t.to===BRANCH && t.printed && !t.received && !isWh(t.from)), "from");
   const pendingDeliver = cntInvoices(TRANSFERS.filter(t=>t.from===BRANCH && t.printed && !t.delivered && t.to!=="المستودع"), "to");
+  const countDone = Object.keys(COUNTS).filter(k=>k.endsWith("_"+BRANCH)).length
+                  + Object.keys(UNKNOWN).filter(k=>k.endsWith("_"+BRANCH)).length;
   app.innerHTML = `
     <h1>🏪 ${BRANCH}</h1>
     <div class="sub">ALBAROO · ${EMP}</div>
     <div class="empId">👤 الموظف: <b>${EMP}</b><button onclick="changeEmp()">تغيير</button></div>
     <button onclick="setTab('count')" style="
-      width:100%;padding:22px 14px;border-radius:18px;cursor:pointer;margin-bottom:10px;
-      border:2px solid ${activeTab==='count'?'#3b82f6':'#3b82f655'};
-      background:${activeTab==='count'?'#3b82f626':'#111827'};
-      color:${activeTab==='count'?'#3b82f6':'#8b96ab'};
-      font-family:'Cairo';font-weight:900;font-size:19px;line-height:1.3;transition:all .15s">
-      <div style="font-size:34px;margin-bottom:6px">📋</div>
-      الجرد
-      <div style="font-size:12px;font-weight:700;opacity:.75;margin-top:4px">امسح الباركود واكتب الكمية</div>
+      width:100%;padding:24px 16px;border-radius:20px;cursor:pointer;margin-bottom:12px;
+      border:2px solid #3b82f6;background:linear-gradient(160deg,#1e3a8a33,#111827);
+      color:#60a5fa;font-family:'Cairo';font-weight:900;font-size:21px;line-height:1.3;transition:transform .12s">
+      <div style="font-size:40px;margin-bottom:8px">📋</div>
+      ابدأ الجرد
+      <div style="font-size:13px;font-weight:700;opacity:.8;margin-top:6px">كاميرا · مسح · حفظ سريع</div>
+      ${countDone>0?`<div style="margin-top:12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);border-radius:12px;padding:9px;font-size:13px;color:#4ade80;font-weight:900">✓ جردت ${countDone} صنف${STAND?` · 📍 ستاند ${STAND}`:""}</div>`:""}
     </button>
 
     <div class="tabs" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:15px">
@@ -474,11 +477,112 @@ function setTab(t){ activeTab = t; render(); }
 
 function renderTabBody(){
   const body = document.getElementById("tabBody");
+  if (activeTab === "home"){ body.innerHTML = ""; return; }
   if (activeTab === "receive"){ renderReceive(body); return; }
   if (activeTab === "recvbranch"){ renderReceiveBranch(body); return; }
   if (activeTab === "deliver"){ renderDeliver(body); return; }
   renderCountTab(body);
   bindFast();   // نربط أحداث المسح السريع بعد كل رسم
+  updateSyncBar();
+}
+
+
+// ═══════════ شاشة الجرد المستقلة ═══════════
+function renderCountScreen(app){
+  const done = Object.keys(COUNTS).filter(k=>k.endsWith("_"+BRANCH)).length;
+  const unknownCount = Object.keys(UNKNOWN).filter(k=>k.endsWith("_"+BRANCH)).length;
+  const totalDone = done + unknownCount;
+  const standsDone = STANDS_DONE;
+
+  // تذكير الاستئناف
+  let resumeInfo = "";
+  if (!FAST_LOG.length){
+    const all = [...Object.values(COUNTS), ...Object.values(UNKNOWN)]
+      .filter(v => v.branch === BRANCH && v.date)
+      .sort((a,b) => (num(b.seq)-num(a.seq)) || (num(b.date)-num(a.date)));
+    const last = all[0];
+    if (last){
+      const mins = Math.round((Date.now() - num(last.date)) / 60000);
+      const ago = mins < 60 ? `قبل ${mins} دقيقة` : mins < 1440 ? `قبل ${Math.round(mins/60)} ساعة` : `قبل ${Math.round(mins/1440)} يوم`;
+      resumeInfo = `🔄 آخر جرد ${ago}` + (last.stand ? ` · وقفت عند ستاند <b>${last.stand}</b>` : "") + `<br>آخر منتج: ${last.name || last.barcode}`;
+    }
+  }
+
+  app.innerHTML = `
+    <!-- رأس الشاشة -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button onclick="setTab('home')" style="background:#1f2940;border:none;border-radius:12px;padding:12px 16px;font-family:'Cairo';font-size:15px;font-weight:900;color:#7cb3e8;cursor:pointer;flex-shrink:0">← رجوع</button>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:17px;font-weight:900;color:#fff">📋 الجرد</div>
+        <div style="font-size:12px;color:#5b6b85">${BRANCH} · ${EMP}</div>
+      </div>
+    </div>
+
+    <!-- شريط الحالة -->
+    <div id="syncBar" style="border-radius:12px;padding:10px 13px;margin-bottom:11px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:5px"></div>
+
+    ${resumeInfo ? `<div style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.28);border-radius:13px;padding:12px 14px;margin-bottom:11px;font-size:13px;color:#93c5fd;line-height:1.7">${resumeInfo}</div>` : ""}
+
+    <!-- 3 مربعات: الإحصاء -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:11px">
+      <div style="background:#141b2d;border:1px solid #1f2940;border-radius:14px;padding:14px 6px;text-align:center">
+        <div style="font-size:25px;font-weight:900;color:#fff;line-height:1">${totalDone}</div>
+        <div style="font-size:11px;color:#5b6b85;margin-top:5px">صنف مجرود</div>
+      </div>
+      <div style="background:#141b2d;border:1px solid #1f2940;border-radius:14px;padding:14px 6px;text-align:center">
+        <div style="font-size:25px;font-weight:900;color:#4ade80;line-height:1">${standsDone.length}</div>
+        <div style="font-size:11px;color:#5b6b85;margin-top:5px">ستاند خلص</div>
+      </div>
+      <div style="background:#141b2d;border:1px solid ${unknownCount?'rgba(251,191,36,0.35)':'#1f2940'};border-radius:14px;padding:14px 6px;text-align:center">
+        <div style="font-size:25px;font-weight:900;color:${unknownCount?'#fbbf24':'#475569'};line-height:1">${unknownCount}</div>
+        <div style="font-size:11px;color:#5b6b85;margin-top:5px">غير معروف</div>
+      </div>
+    </div>
+
+    <!-- مستطيل: الستاند -->
+    <div style="display:flex;align-items:center;gap:9px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.28);border-radius:14px;padding:11px 13px;margin-bottom:11px">
+      <span style="font-size:14px;font-weight:900;color:#fbbf24;white-space:nowrap">📍 ستاند</span>
+      <input id="standNo" value="${STAND}" placeholder="الرقم" onchange="setStand(this.value)" oninput="setStand(this.value)"
+        style="flex:1;min-width:0;background:rgba(0,0,0,0.3);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:11px;padding:11px;font-family:'Cairo';font-size:17px;font-weight:900;text-align:center" />
+      ${STAND ? `<button onclick="finishStand()" style="background:#16a34a;border:none;border-radius:11px;padding:12px 16px;font-family:'Cairo';font-size:14px;font-weight:900;color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0">✓ تم</button>` : ""}
+    </div>
+
+    ${standsDone.length ? `<div style="font-size:12px;color:#5b6b85;margin-bottom:11px;line-height:2.1">
+      خلصت: ${standsDone.map(s=>`<span style="background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:8px;padding:4px 11px;font-weight:900;margin-left:5px">${s}</span>`).join("")}
+    </div>` : ""}
+
+    <!-- مستطيل الباركود + مربع الكاميرا -->
+    <div style="display:flex;gap:9px;margin-bottom:9px">
+      <input id="fastBc" inputmode="text" autocomplete="off" placeholder="امسح الباركود…"
+        style="flex:1;min-width:0;background:#0a1220;border:2px solid #1e3a5f;color:#fff;border-radius:14px;padding:17px 14px;font-family:monospace;font-size:18px;font-weight:900;letter-spacing:1px" />
+      <button onclick="fastCam()" style="width:64px;background:#7c3aed;border:none;border-radius:14px;font-size:27px;cursor:pointer;flex-shrink:0">📷</button>
+    </div>
+
+    <!-- سطر النتيجة -->
+    <div id="fastFound" style="font-size:14px;color:#94a3b8;min-height:22px;margin-bottom:9px;padding:0 4px">جاهز — امسح أو اكتب الباركود</div>
+
+    <!-- مستطيل الكمية + مربع الحفظ -->
+    <div style="display:flex;gap:9px;margin-bottom:14px">
+      <input id="fastQty" type="number" inputmode="numeric" min="0" placeholder="الكمية"
+        style="flex:1;min-width:0;background:#0a1220;border:2px solid #1e3a5f;color:#fff;border-radius:14px;padding:17px 14px;font-family:'Cairo';font-size:21px;font-weight:900;text-align:center" />
+      <button onclick="fastSave()" style="width:110px;background:#16a34a;border:none;border-radius:14px;font-family:'Cairo';font-size:17px;font-weight:900;color:#fff;cursor:pointer;flex-shrink:0">حفظ</button>
+    </div>
+
+    <!-- مربعان: الأدوات -->
+    ${totalDone > 0 ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px">
+      <button onclick="openReview()" style="background:#1e3a5f;border:1px solid #2563eb;border-radius:14px;padding:15px 8px;font-family:'Cairo';font-size:14px;font-weight:900;color:#93c5fd;cursor:pointer">
+        <div style="font-size:23px;margin-bottom:5px">📝</div>راجع وعدّل
+      </button>
+      <button onclick="exportInventoryExcel()" style="background:#065f46;border:1px solid #059669;border-radius:14px;padding:15px 8px;font-family:'Cairo';font-size:14px;font-weight:900;color:#6ee7b7;cursor:pointer">
+        <div style="font-size:23px;margin-bottom:5px">📊</div>حمّل إكسل
+      </button>
+    </div>` : ""}
+
+    <!-- السجل -->
+    <div id="fastLog"></div>`;
+
+  bindFast();
   updateSyncBar();
 }
 
@@ -514,82 +618,66 @@ function renderCountTab(app){
     }
   }
 
-  const totalDone = done + unknownCount;
-
   app.innerHTML = `
-    <!-- ═══ لوحة الجرد ═══ -->
-    <div style="background:linear-gradient(160deg,#132238,#0d1626);border:2px solid #1e40af;border-radius:18px;padding:14px;margin-bottom:14px">
+    <!-- ═══ المسح السريع ═══ -->
+    <div style="background:linear-gradient(160deg,#132238,#0d1626);border:2px solid #1e40af;border-radius:18px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:16px;font-weight:900;color:#60a5fa">⚡ المسح السريع</div>
+        <div style="font-size:12px;color:#7f9ac4">${fastDone} عملية${unknownCount?` · ${unknownCount} غير معروف`:""}</div>
+      </div>
 
-      <!-- شريط الحالة -->
-      <div id="syncBar" style="border-radius:11px;padding:9px 12px;margin-bottom:10px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px"></div>
+      <div id="syncBar" style="border-radius:11px;padding:10px 13px;margin-bottom:11px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px"></div>
 
-      ${resumeInfo ? `<div style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.28);border-radius:12px;padding:11px 13px;margin-bottom:10px;font-size:13px;color:#93c5fd;line-height:1.7">
+      ${resumeInfo ? `<div style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.28);border-radius:12px;padding:11px 13px;margin-bottom:11px;font-size:13px;color:#93c5fd;line-height:1.7">
         ${resumeInfo}
       </div>` : ""}
 
-      <!-- الإحصاءات: 3 مربعات متساوية -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
-        <div style="background:#0f1b2e;border:1px solid #1e3a5f;border-radius:13px;padding:12px 6px;text-align:center">
-          <div style="font-size:22px;font-weight:900;color:#fff;line-height:1">${totalDone}</div>
-          <div style="font-size:10px;color:#7f9ac4;margin-top:4px">صنف مجرود</div>
-        </div>
-        <div style="background:#0f1b2e;border:1px solid #1e3a5f;border-radius:13px;padding:12px 6px;text-align:center">
-          <div style="font-size:22px;font-weight:900;color:#4ade80;line-height:1">${standsDone.length}</div>
-          <div style="font-size:10px;color:#7f9ac4;margin-top:4px">ستاند خلص</div>
-        </div>
-        <div style="background:#0f1b2e;border:1px solid ${unknownCount?'rgba(251,191,36,0.35)':'#1e3a5f'};border-radius:13px;padding:12px 6px;text-align:center">
-          <div style="font-size:22px;font-weight:900;color:${unknownCount?'#fbbf24':'#475569'};line-height:1">${unknownCount}</div>
-          <div style="font-size:10px;color:#7f9ac4;margin-top:4px">غير معروف</div>
-        </div>
-      </div>
-
-      <!-- الستاند: مستطيل واحد -->
-      <div style="display:flex;align-items:center;gap:8px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:13px;padding:10px 12px;margin-bottom:10px">
-        <span style="font-size:13px;font-weight:900;color:#fbbf24;white-space:nowrap">📍 ستاند</span>
-        <input id="standNo" value="${STAND}" placeholder="الرقم"
+      <!-- الستاند — يذكّرك وين وقفت -->
+      <div style="display:flex;align-items:center;gap:9px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:13px;padding:11px 13px;margin-bottom:11px">
+        <span style="font-size:13px;font-weight:900;color:#fbbf24;white-space:nowrap">📍 الستاند</span>
+        <input id="standNo" value="${STAND}" placeholder="رقم أو اسم الستاند"
           onchange="setStand(this.value)" oninput="setStand(this.value)"
-          style="flex:1;min-width:0;background:rgba(0,0,0,0.3);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:10px;padding:10px;font-family:'Cairo';font-size:16px;font-weight:900;text-align:center" />
-        ${STAND ? `<button onclick="finishStand()" style="background:#16a34a;border:none;border-radius:10px;padding:11px 15px;font-family:'Cairo';font-size:13px;font-weight:900;color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0">✓ تم</button>` : ""}
+          style="flex:1;min-width:0;background:rgba(0,0,0,0.3);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:10px;padding:10px 12px;font-family:'Cairo';font-size:16px;font-weight:900;text-align:center" />
+        ${STAND ? `<button onclick="finishStand()" style="background:#16a34a;border:none;border-radius:10px;padding:10px 14px;font-family:'Cairo';font-size:13px;font-weight:900;color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0">✓ تم</button>` : ""}
       </div>
 
-      ${standsDone.length ? `<div style="font-size:11px;color:#7f9ac4;margin-bottom:10px;line-height:2">
-        خلصت: ${standsDone.map(s=>`<span style="background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:3px 10px;font-weight:900;margin-left:5px">${s}</span>`).join("")}
+      ${standsDone.length ? `<div style="font-size:11px;color:#7f9ac4;margin-bottom:10px;line-height:1.8">
+        ✅ خلصت: ${standsDone.map(s=>`<span style="background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:2px 9px;font-weight:900;margin-left:4px">${s}</span>`).join("")}
       </div>` : ""}
 
-      <!-- المسح: مستطيل + مربع كاميرا -->
-      <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="display:flex;gap:8px;margin-bottom:9px">
         <input id="fastBc" inputmode="text" autocomplete="off" placeholder="امسح الباركود…"
           style="flex:1;min-width:0;background:#0a1220;border:2px solid #1e3a5f;color:#fff;border-radius:13px;padding:15px 13px;font-family:monospace;font-size:17px;font-weight:900;letter-spacing:1px" />
-        <button onclick="fastCam()" style="width:58px;background:#7c3aed;border:none;border-radius:13px;font-size:24px;cursor:pointer;flex-shrink:0">📷</button>
+        <button onclick="fastCam()" style="background:#7c3aed;border:none;border-radius:13px;padding:0 18px;font-size:24px;cursor:pointer;flex-shrink:0">📷</button>
       </div>
 
-      <div id="fastFound" style="font-size:13px;color:#94a3b8;min-height:20px;margin-bottom:8px;padding:0 3px">جاهز — امسح أو اكتب الباركود</div>
+      <div id="fastFound" style="font-size:13px;color:#94a3b8;min-height:20px;margin-bottom:9px">جاهز — امسح أو اكتب الباركود</div>
 
-      <!-- الكمية: مستطيل + مربع حفظ -->
-      <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="display:flex;gap:8px">
         <input id="fastQty" type="number" inputmode="numeric" min="0" placeholder="الكمية"
           style="flex:1;min-width:0;background:#0a1220;border:2px solid #1e3a5f;color:#fff;border-radius:13px;padding:15px 13px;font-family:'Cairo';font-size:19px;font-weight:900;text-align:center" />
-        <button onclick="fastSave()" style="width:96px;background:#16a34a;border:none;border-radius:13px;font-family:'Cairo';font-size:16px;font-weight:900;color:#fff;cursor:pointer;flex-shrink:0">حفظ</button>
+        <button onclick="fastSave()" style="background:#16a34a;border:none;border-radius:13px;padding:0 24px;font-family:'Cairo';font-size:15px;font-weight:900;color:#fff;cursor:pointer;flex-shrink:0">حفظ</button>
       </div>
 
-      <!-- أدوات الجرد: مربعان متساويان -->
-      ${totalDone > 0 ? `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:10px;border-top:1px solid rgba(96,165,250,0.15)">
+      <div id="fastLog" style="margin-top:12px"></div>
+
+      ${(done + unknownCount) > 0 ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
         <button onclick="openReview()" style="
-          background:#1e3a5f;border:1px solid #2563eb;border-radius:13px;padding:14px 8px;
+          background:#1e3a5f;border:1px solid #2563eb;border-radius:13px;padding:13px 8px;
           font-family:'Cairo';font-size:13px;font-weight:900;color:#93c5fd;cursor:pointer">
-          <div style="font-size:21px;margin-bottom:4px">📝</div>
+          <div style="font-size:19px;margin-bottom:3px">📝</div>
           راجع وعدّل
+          <div style="font-size:11px;opacity:.7;font-weight:700;margin-top:2px">${done + unknownCount} صنف</div>
         </button>
         <button onclick="exportInventoryExcel()" style="
-          background:#065f46;border:1px solid #059669;border-radius:13px;padding:14px 8px;
+          background:#065f46;border:1px solid #059669;border-radius:13px;padding:13px 8px;
           font-family:'Cairo';font-size:13px;font-weight:900;color:#6ee7b7;cursor:pointer">
-          <div style="font-size:21px;margin-bottom:4px">📊</div>
+          <div style="font-size:19px;margin-bottom:3px">📊</div>
           حمّل إكسل
+          <div style="font-size:11px;opacity:.7;font-weight:700;margin-top:2px">لأودو</div>
         </button>
       </div>` : ""}
-
-      <div id="fastLog" style="margin-top:10px"></div>
     </div>
 
     <div class="hint">أو استخدم الطريقة التفصيلية تحت: اضغط <b>+</b> أو <b>−</b> أو اكتب الرقم مباشرة.</div>
