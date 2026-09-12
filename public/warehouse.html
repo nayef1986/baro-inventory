@@ -1170,7 +1170,9 @@ async function saveWhCount(bc, name, calc){
 
 
 // ═══ تصدير إكسل شامل — كل الفروع (جاهز لأودو) ═══
-function exportAllBranchesExcel(){
+function exportBranchExcel(branch){ exportAllBranchesExcel(branch); }
+
+function exportAllBranchesExcel(onlyBranch = null){
   const rows = [];
   const now = new Date();
   const ds = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
@@ -1178,6 +1180,7 @@ function exportAllBranchesExcel(){
   // المجرود من كل الفروع
   Object.values(COUNTS||{}).forEach(v => {
     if (!v.branch) return;
+    if (onlyBranch && v.branch !== onlyBranch) return;
     const p = PRODUCTS.find(x => x.barcode === v.barcode);
     const d = v.date ? new Date(num(v.date)) : now;
     rows.push({
@@ -1200,6 +1203,7 @@ function exportAllBranchesExcel(){
   // الباركودات غير المعروفة من كل الفروع
   Object.values(UNKNOWN_ALL||{}).forEach(v => {
     if (!v.branch) return;
+    if (onlyBranch && v.branch !== onlyBranch) return;
     const d = v.date ? new Date(num(v.date)) : now;
     rows.push({
       "الفرع": v.branch,
@@ -1218,7 +1222,7 @@ function exportAllBranchesExcel(){
     });
   });
 
-  if (!rows.length){ alert("ما فيه جرد للتصدير"); return; }
+  if (!rows.length){ alert(onlyBranch ? `ما فيه جرد لفرع ${onlyBranch}` : "ما فيه جرد للتصدير"); return; }
 
   // الترتيب: بالفرع، ثم المعروف قبل غير المعروف
   rows.sort((a,b) =>
@@ -1239,7 +1243,7 @@ function exportAllBranchesExcel(){
     const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `جرد_كل_الفروع_${ds}.csv`;
+    a.download = (onlyBranch ? `جرد_${onlyBranch}_${ds}.csv` : `جرد_كل_الفروع_${ds}.csv`).replace(/[^\u0600-\u06FFA-Za-z0-9_.\-]/g,"_");
     a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
     return;
@@ -1248,8 +1252,8 @@ function exportAllBranchesExcel(){
   const ws = XLSX.utils.json_to_sheet(rows);
   ws["!cols"] = [{wch:14},{wch:12},{wch:10},{wch:12},{wch:8},{wch:18},{wch:30},{wch:14},{wch:14},{wch:9},{wch:14},{wch:14},{wch:10}];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "جرد كل الفروع");
-  XLSX.writeFile(wb, `جرد_كل_الفروع_${ds}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, onlyBranch ? "الجرد" : "جرد كل الفروع");
+  XLSX.writeFile(wb, (onlyBranch ? `جرد_${onlyBranch}_${ds}.xlsx` : `جرد_كل_الفروع_${ds}.xlsx`).replace(/[^\u0600-\u06FFA-Za-z0-9_.\-]/g,"_"));
 }
 
 function renderCounts(c){
@@ -1313,12 +1317,10 @@ function renderCounts(c){
           <div style="text-align:center"><div style="font-size:16px;font-weight:900;color:#fff">${s.n}</div><div style="font-size:9px;color:#5b6b85">صنف</div></div>
           ${s.short?`<div style="text-align:center"><div style="font-size:16px;font-weight:900;color:#f87171">${s.short}</div><div style="font-size:9px;color:#5b6b85">ناقص</div></div>`:""}
           ${s.over?`<div style="text-align:center"><div style="font-size:16px;font-weight:900;color:#fbbf24">${s.over}</div><div style="font-size:9px;color:#5b6b85">زيادة</div></div>`:""}
+          <button onclick="exportBranchExcel('${String(b).replace(/'/g,"")}')" title="حمّل إكسل ${b}" style="background:#065f46;border:1px solid #059669;border-radius:10px;padding:10px 13px;font-family:'Cairo';font-size:13px;font-weight:900;color:#6ee7b7;cursor:pointer;flex-shrink:0">📊</button>
         </div>`;
       }).join("")}
       ${unkTotal?`<div style="font-size:12px;color:#fbbf24;margin-top:8px">⚠ ${unkTotal} باركود غير معروف بكل الفروع</div>`:""}
-      <button onclick="exportAllBranchesExcel()" style="width:100%;margin-top:11px;background:#047857;border:none;border-radius:12px;padding:13px;font-family:'Cairo';font-size:14px;font-weight:900;color:#fff;cursor:pointer">
-        📊 حمّل إكسل شامل — كل الفروع (لأودو)
-      </button>
     </div>`;
 
   c.innerHTML = searchBox + summary + branchNames.map(branch=>{
