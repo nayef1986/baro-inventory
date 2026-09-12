@@ -85,6 +85,20 @@ const abs = (p) =>
         .replace(/%7D/g, '}')
     : '';
 
+/**
+ * يقبل الروابط الآمنة فقط. تهريب الاقتباسات يمنع الخروج من السمة، لكنه لا يمنع
+ * `javascript:` — ورابط المتجر أو المعلن يأتي من خارج الموقع. أي مخطّط غير
+ * http/https أو مسارٍ داخلي يُستبدل بـ # فلا يُنفَّذ شيء.
+ */
+function safeUrl(u) {
+  const v = String(u || '').trim();
+  if (!v) return '#';
+  if (/^[/#?]/.test(v)) return v;                    // مسار داخل الموقع
+  if (/^https?:\/\//i.test(v)) return v;             // رابط خارجي صريح
+  if (/^(mailto|tel):/i.test(v)) return v;
+  return '#';
+}
+
 /** تحويل نصٍّ عربي أو لاتيني إلى معرّف صالح للروابط. */
 const slugify = (s) =>
   String(s || '')
@@ -307,7 +321,7 @@ function logoHtml(store, cls = '') {
   const classes = ('store-logo ' + cls).trim();
 
   if (store.logo) {
-    return `<img class="${classes} store-logo--img" src="${esc(store.logo)}" alt="شعار ${esc(store.name)}" width="56" height="56" loading="lazy" decoding="async">`;
+    return `<img class="${classes} store-logo--img" src="${esc(safeUrl(store.logo))}" alt="شعار ${esc(store.name)}" width="56" height="56" loading="lazy" decoding="async">`;
   }
 
   const letter = esc((store.name || '؟').trim().charAt(0));
@@ -348,9 +362,9 @@ function codeTile(code, { heading = 'h3', showBrand = true } = {}) {
   ${brand}
 
   <div class="tile__row">
-    <span class="tile__code" data-copy="${esc(code.code)}" data-url="${esc(s.url)}" data-id="${esc(code.id)}"
+    <span class="tile__code" data-copy="${esc(code.code)}" data-url="${esc(safeUrl(s.url))}" data-id="${esc(code.id)}"
           role="button" tabindex="0" aria-label="انسخ الكود ${esc(code.code)}">${esc(code.code)}</span>
-    <button type="button" class="tile__copy" data-copy="${esc(code.code)}" data-url="${esc(s.url)}" data-id="${esc(code.id)}"
+    <button type="button" class="tile__copy" data-copy="${esc(code.code)}" data-url="${esc(safeUrl(s.url))}" data-id="${esc(code.id)}"
             aria-label="انسخ الكود ${esc(code.code)} وافتح ${esc(s.name)}">نسخ</button>
   </div>
 
@@ -407,21 +421,21 @@ function adSlot(slot, { category = '', className = '' } = {}) {
       if (a.banner) {
         const alt = esc(a.title || a.advertiser || 'إعلان');
         const mobile = a.bannerMobile
-          ? `<source media="(max-width: 600px)" srcset="${esc(a.bannerMobile)}">`
+          ? `<source media="(max-width: 600px)" srcset="${esc(safeUrl(a.bannerMobile))}">`
           : '';
         return `<aside class="ad ad--banner ${className}" aria-label="محتوى إعلاني">
   <span class="ad__label">إعلان</span>
-  <a href="${esc(a.url)}" target="_blank" rel="nofollow sponsored noopener">
+  <a href="${esc(safeUrl(a.url))}" target="_blank" rel="nofollow sponsored noopener">
     <picture>
       ${mobile}
-      <img src="${esc(a.banner)}" alt="${alt}" loading="lazy" decoding="async">
+      <img src="${esc(safeUrl(a.banner))}" alt="${alt}" loading="lazy" decoding="async">
     </picture>
   </a>
 </aside>`;
       }
 
       const media = a.image
-        ? `<img class="ad__img" src="${esc(a.image)}" alt="" width="96" height="96" loading="lazy" decoding="async">`
+        ? `<img class="ad__img" src="${esc(safeUrl(a.image))}" alt="" width="96" height="96" loading="lazy" decoding="async">`
         : '';
       return `<aside class="ad ${className}" style="--ad-accent:${esc(accent)}" aria-label="محتوى إعلاني">
   <span class="ad__label">إعلان</span>
@@ -431,7 +445,7 @@ function adSlot(slot, { category = '', className = '' } = {}) {
     <p class="ad__title">${esc(a.title)}</p>
     ${a.body ? `<p class="ad__text">${esc(a.body)}</p>` : ''}
   </div>
-  <a class="btn btn-primary ad__cta" href="${esc(a.url)}" target="_blank" rel="nofollow sponsored noopener">${esc(a.cta || 'اعرف أكثر')}</a>
+  <a class="btn btn-primary ad__cta" href="${esc(safeUrl(a.url))}" target="_blank" rel="nofollow sponsored noopener">${esc(a.cta || 'اعرف أكثر')}</a>
 </aside>`;
     })
     .join('\n');
@@ -671,7 +685,7 @@ function offerSchema(code, pageUrl) {
     priceCurrency: 'SAR',
     availability: 'https://schema.org/InStock',
     category: s.category,
-    seller: { '@type': 'Organization', name: s.name, url: s.url },
+    seller: { '@type': 'Organization', name: s.name, url: safeUrl(s.url) },
     ...(code.expires ? { validThrough: code.expires } : {}),
     ...(code.discount ? { discount: code.discount } : {}),
   };
@@ -908,7 +922,7 @@ ${s.codes.map((c) => codeTile(c, { heading: 'h2', showBrand: false })).join('\n'
   <section class="tail">
     <div class="about">
       <p>${esc(s.description || '')}</p>
-      <a class="btn btn-ghost" href="${esc(s.url)}" target="_blank" rel="nofollow sponsored noopener">فتح ${esc(s.name)}<span aria-hidden="true"> ↗</span></a>
+      <a class="btn btn-ghost" href="${esc(safeUrl(s.url))}" target="_blank" rel="nofollow sponsored noopener">فتح ${esc(s.name)}<span aria-hidden="true"> ↗</span></a>
     </div>
 
     ${guide ? `<a class="post-tie post-tie--store" href="${esc(guide.url)}">
@@ -952,7 +966,7 @@ ${others.map((x) => storeCard(x)).join('\n')}
           '@context': 'https://schema.org',
           '@type': 'Organization',
           name: s.name,
-          url: s.url,
+          url: safeUrl(s.url),
           description: s.description,
           ...(s.logo ? { logo: s.logo.startsWith('http') ? s.logo : abs(s.logo) } : {}),
           makesOffer: s.codes.map((c) => offerSchema(c, url)),
@@ -1561,6 +1575,15 @@ function main() {
   write('index.html', pageHome());
   write('stores/index.html', pageStores());
   write('advertise/index.html', pageAdvertise());
+
+  /*
+   * لوحة الإدارة لا تُنشر افتراضيًا. هي آمنة بطبعها — تعمل في متصفح صاحبها ولا
+   * تملك أي وصولٍ للموقع — لكن نشرها يكشف بنية الموقع بلا فائدة.
+   * محليًا تبقى متاحة (npm run dev)، وعلى Vercel تُحذف ما لم تضبط
+   * "publishAdmin": true في data/site.json.
+   */
+  const publishAdmin = site.publishAdmin === true || !process.env.VERCEL;
+  if (!publishAdmin) fs.rmSync(path.join(DIST, 'admin'), { recursive: true, force: true });
   write('search/index.html', pageSearch());
   write('favorites/index.html', pageFavorites());
   write('offline/index.html', pageOffline());
@@ -1594,9 +1617,9 @@ function main() {
         store: {
           slug: c.store.slug,
           name: c.store.name,
-          url: c.store.url,
+          url: safeUrl(c.store.url),
           category: c.store.category,
-          logo: c.store.logo || '',
+          logo: c.store.logo ? safeUrl(c.store.logo) : '',
           brandColor: c.store.brandColor || '#FF9500',
           ink: readableInk(c.store.brandColor || '#FF9500'),
         },

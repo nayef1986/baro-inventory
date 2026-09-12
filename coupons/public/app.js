@@ -105,7 +105,8 @@
     }
 
     /* فتح المتجر في النقرة نفسها، فلا يحجبه المتصفح */
-    if (el.dataset.url) window.open(el.dataset.url, '_blank', 'noopener');
+    var dest = safeUrl(el.dataset.url);
+    if (dest !== '#') window.open(dest, '_blank', 'noopener');
   }
 
   /* ---------------- المفضلة ---------------- */
@@ -227,6 +228,16 @@
     return indexPromise;
   }
 
+  /** يقبل http/https والمسارات الداخلية فقط — يمنع javascript: من التنفيذ. */
+  function safeUrl(u) {
+    var v = String(u == null ? '' : u).trim();
+    if (!v) return '#';
+    if (/^[/#?]/.test(v)) return v;
+    if (/^https?:\/\//i.test(v)) return v;
+    if (/^(mailto|tel):/i.test(v)) return v;
+    return '#';
+  }
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -237,7 +248,7 @@
 
   function logoMarkup(store) {
     if (store.logo) {
-      return '<img class="store-logo tile__logo store-logo--img" src="' + esc(store.logo) + '" alt="" width="78" height="78" loading="lazy">';
+      return '<img class="store-logo tile__logo store-logo--img" src="' + esc(safeUrl(store.logo)) + '" alt="" width="78" height="78" loading="lazy">';
     }
     return (
       '<span class="store-logo tile__logo store-logo--text" style="--logo-bg:' +
@@ -261,9 +272,9 @@
           '<span class="tile__name">' + esc(c.store.name) + '</span>' +
         '</a>' +
         '<div class="tile__row">' +
-          '<span class="tile__code" data-copy="' + esc(c.code) + '" data-url="' + esc(c.store.url) + '"' +
+          '<span class="tile__code" data-copy="' + esc(c.code) + '" data-url="' + esc(safeUrl(c.store.url)) + '"' +
             ' data-id="' + esc(c.id) + '" role="button" tabindex="0" aria-label="انسخ ' + esc(c.code) + '">' + esc(c.code) + '</span>' +
-          '<button type="button" class="tile__copy" data-copy="' + esc(c.code) + '" data-url="' + esc(c.store.url) + '"' +
+          '<button type="button" class="tile__copy" data-copy="' + esc(c.code) + '" data-url="' + esc(safeUrl(c.store.url)) + '"' +
             ' data-id="' + esc(c.id) + '" aria-label="انسخ ' + esc(c.code) + '">نسخ</button>' +
         '</div>' +
         (c.expires ? '<p class="tile__exp">ينتهي ' + esc(c.expires) + '</p>' : '') +
