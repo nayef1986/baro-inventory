@@ -1,0 +1,29 @@
+[
+  {
+    "id": "acme-q4",
+    "slot": "hero",
+    "advertiser": "اسم الشركة المعلنة",
+    "title": "عنوان الإعلان — يُستخدم كنصٍّ بديل للصورة",
+    "url": "https://example.com/landing",
+    "banner": "/images/acme-1800x300.jpg",
+    "bannerMobile": "/images/acme-800x400.jpg",
+    "starts": "2026-10-01",
+    "ends": "2026-10-31",
+    "priority": 1
+  },
+  {
+    "id": "acme-feed",
+    "slot": "feed",
+    "advertiser": "شركة أخرى",
+    "title": "إعلان نصّي داخل قائمة الأكواد",
+    "body": "سطر أو سطران يشرحان العرض للزائر.",
+    "cta": "اعرف أكثر",
+    "url": "https://example.com/offer",
+    "image": "/images/acme-logo.png",
+    "brandColor": "#0B5FFF",
+    "starts": "2026-10-01",
+    "ends": "2026-12-31",
+    "priority": 2,
+    "targetCategory": "إلكترونيات"
+  }
+]

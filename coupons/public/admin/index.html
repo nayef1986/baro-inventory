@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة الإدارة — إضافة البراندات والأكواد</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@700&display=swap" media="print" onload="this.media='all';this.onload=null">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body class="admin">
+
+<header class="appbar">
+  <div class="appbar__inner">
+    <a class="brand" href="/"><svg class="brand__mark" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><path transform="translate(12.13 50.60) scale(0.04987 -0.04987)" fill="#fff" d="M715 754H698V752L697 754L621 656L648 176C591 166 438 156 320 156C217 156 65 164 65 266H50C37 208 35 153 35 138C35 28 124 -8 277 -8C405 -8 568 17 639 50C691 162 728 329 728 379V519L762 561ZM477 577 470 587H452C375 587 343 547 328 500C310 446 326 415 385 401L455 383C401 362 348 348 260 335V313C291 293 333 289 361 289C425 289 466 337 475 399L478 417C483 448 457 459 424 467C389 476 344 481 346 496C347 512 401 518 433 518H459Z"/></svg><span class="brand__name">لوحة الإدارة</span></a>
+    <div class="admin__actions">
+      <button type="button" class="btn btn-ghost" id="import-btn">استيراد</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+      <button type="button" class="btn btn-primary" id="export-btn">تنزيل stores.json</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell admin__main">
+  <p class="admin__hint" id="status">تُحفظ تعديلاتك في هذا المتصفح تلقائيًا. حمّل الملف وضعه في <code>coupons/data/stores.json</code> ثم ارفعه.</p>
+
+  <div class="admin__grid">
+    <!-- قائمة البراندات -->
+    <aside class="admin__side">
+      <div class="admin__sidehead">
+        <h2>البراندات <span id="brand-count">0</span></h2>
+        <button type="button" class="btn btn-primary btn-sm" id="add-brand">+ براند</button>
+      </div>
+      <ul class="brandlist" id="brand-list"></ul>
+    </aside>
+
+    <!-- محرّر البراند -->
+    <section class="admin__editor" id="editor" hidden>
+      <div class="editor__head">
+        <label class="logo-drop" id="logo-drop">
+          <input type="file" id="logo-file" accept="image/*" hidden>
+          <span class="logo-drop__preview" id="logo-preview"></span>
+          <span class="logo-drop__label">ارفع الشعار</span>
+        </label>
+        <div class="editor__headfields">
+          <label class="field"><span>اسم البراند</span><input id="f-name" placeholder="نمشي"></label>
+          <label class="field"><span>رابط المتجر</span><input id="f-url" type="url" dir="ltr" placeholder="https://www.namshi.com/"></label>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="field"><span>التصنيف</span><input id="f-category" list="cats" placeholder="أزياء"></label>
+        <datalist id="cats"></datalist>
+        <label class="field"><span>لون العلامة</span><input id="f-color" type="color" value="#FF9500"></label>
+        <label class="field"><span>المعرّف (الرابط)</span><input id="f-slug" dir="ltr" placeholder="namshi"></label>
+      </div>
+
+      <label class="field"><span>وصف قصير <em>اختياري</em></span><input id="f-desc" placeholder="وجهة الأزياء والأحذية…"></label>
+
+      <div class="codes-head">
+        <h3>الأكواد <span id="code-count">0</span></h3>
+        <button type="button" class="btn btn-primary btn-sm" id="add-code">+ كود</button>
+      </div>
+      <div id="code-list"></div>
+
+      <div class="editor__foot">
+        <button type="button" class="btn btn-ghost danger" id="del-brand">حذف البراند</button>
+      </div>
+    </section>
+
+    <!-- المعاينة الحيّة -->
+    <aside class="admin__preview">
+      <p class="admin__previewlabel">كما سيظهر في الموقع</p>
+      <div class="tile-grid" id="preview" style="grid-template-columns:1fr;max-width:260px"></div>
+    </aside>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="/admin/admin.js" defer></script>
+</body>
+</html>
