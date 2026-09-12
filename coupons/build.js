@@ -518,11 +518,11 @@ ${robots}
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 ${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
-<meta property="og:image" content="${esc(abs('/og.png'))}">
+<meta property="og:image" content="${esc(abs('/og.jpg'))}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
-<meta name="twitter:image" content="${esc(abs('/og.png'))}">
+<meta name="twitter:image" content="${esc(abs('/og.jpg'))}">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -1120,7 +1120,7 @@ ${related.map((x) => postCard(x, { compact: true })).join('\n')}
           inLanguage: 'ar',
           wordCount: words,
           keywords: (post.keywords || []).join('، '),
-          image: abs('/og.png'),
+          image: abs('/og.jpg'),
           author: { '@type': 'Organization', name: post.author || site.name },
           publisher: {
             '@type': 'Organization',
