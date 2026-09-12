@@ -84,6 +84,7 @@ let PRODUCTS = [], PERIODS = [], IMAGES = {}, COUNTS = {}, TRANSFERS = [];
 let UNKNOWN = {};        // باركودات مجرودة مو موجودة بالنظام
 let STAND = "";          // رقم الستاند الحالي — يذكّر الموظف وين وقف
 let SEQ = 0;             // تسلسل يميّز العمليات المتتالية بنفس اللحظة
+let STANDS_DONE = [];    // الستاندات اللي خلّصها الموظف
 let _scanTarget = null;  // "fast" = نتيجة الكاميرا تروح للمسح السريع
 let FAST_LOG = [];       // سجل آخر عمليات المسح السريع (لهذي الجلسة)
 let activeTab = "count"; // count | receive
@@ -195,14 +196,96 @@ async function loadPeriodsSmart(){
   if (fresh != null) idbSet("baro_periods_v2", fresh);
   return fresh;
 }
-async function save(key, value){
-  await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
-    method:"POST",
-    headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
-    body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
-  });
-  idbSet(key, value); // حدّث الكاش
+// ═══ الحفظ المرن: محلي فوراً، ورفع بالخلفية ═══
+// يشتغل بدون إنترنت نهائياً — البيانات آمنة بالجهاز، وترتفع أول ما يرجع النت
+const PENDING_KEY = "baro_pending_uploads";
+let PENDING = {};          // { key: value } — بيانات تنتظر الرفع
+let _uploading = false;
+
+function loadPending(){
+  try { PENDING = JSON.parse(localStorage.getItem(PENDING_KEY) || "{}"); } catch(e){ PENDING = {}; }
 }
+function persistPending(){
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify(PENDING)); } catch(e){}
+}
+function pendingCount(){ return Object.keys(PENDING).length; }
+
+// الرفع الفعلي — يرجع true لو نجح
+async function pushToCloud(key, value){
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 12000);   // مهلة: ما نعلّق على نت بطيء
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+      method:"POST",
+      headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates" },
+      body: JSON.stringify({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    return r.ok;
+  } catch(e){ return false; }
+}
+
+// الحفظ الرئيسي: محلي فوري (مضمون)، ثم محاولة رفع بالخلفية
+async function save(key, value){
+  idbSet(key, value);                    // 1) محلي فوراً — ما ينتظر شبكة
+  PENDING[key] = value;                  // 2) بطابور الرفع
+  persistPending();
+  syncPending();                         // 3) نحاول نرفع (بدون انتظار)
+  return true;
+}
+
+// يرفع كل المعلّق — يُستدعى تلقائياً وعند رجوع النت
+async function syncPending(silent = true){
+  if (_uploading) return;
+  const keys = Object.keys(PENDING);
+  if (!keys.length){ updateSyncBar(); return; }
+  if (!navigator.onLine){ updateSyncBar(); return; }
+
+  _uploading = true;
+  updateSyncBar();
+  let done = 0;
+  for (const key of keys){
+    const ok = await pushToCloud(key, PENDING[key]);
+    if (ok){ delete PENDING[key]; done++; }
+    else break;                          // النت رجع ينقطع — نوقف ونحاول لاحقاً
+  }
+  persistPending();
+  _uploading = false;
+  updateSyncBar();
+  if (done && !silent) showToast(`✓ رُفع ${done}`);
+}
+
+// شريط الحالة — يبيّن للموظف وضعه بنظرة
+function updateSyncBar(){
+  const el = document.getElementById("syncBar");
+  if (!el) return;
+  const n = pendingCount();
+  const online = navigator.onLine;
+  if (_uploading){
+    el.style.cssText = "background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);color:#93c5fd";
+    el.innerHTML = `⏳ جاري الرفع…`;
+  } else if (n === 0){
+    el.style.cssText = "background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80";
+    el.innerHTML = `✓ الكل محفوظ ومرفوع`;
+  } else if (!online){
+    el.style.cssText = "background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24";
+    el.innerHTML = `📵 بدون إنترنت · <b>${n}</b> محفوظة بجهازك — بترتفع تلقائياً`;
+  } else {
+    el.style.cssText = "background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24";
+    el.innerHTML = `⏳ <b>${n}</b> تنتظر الرفع <button onclick="syncPending(false)" style="background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:8px;padding:4px 11px;font-family:'Cairo';font-size:11px;font-weight:900;cursor:pointer;margin-right:7px">ارفع الآن</button>`;
+  }
+}
+
+// نراقب رجوع النت ونرفع تلقائياً
+window.addEventListener("online", () => { showToast("رجع الإنترنت — جاري الرفع"); syncPending(false); });
+window.addEventListener("offline", () => { updateSyncBar(); });
+setInterval(() => syncPending(true), 20000);   // محاولة دورية كل 20 ثانية
+
+// تحذير قبل إغلاق الصفحة لو فيه شي ما رُفع
+window.addEventListener("beforeunload", (e) => {
+  if (pendingCount() > 0){ e.preventDefault(); e.returnValue = ""; return ""; }
+});
 function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
 function totalPurchases(p){ return (p.purchases??[]).reduce((s,x)=>s+num(x.qty),0); }
 function unitOf(bc){ const p = PRODUCTS.find(x=>x.barcode===bc); const u = num(p?.unitQty ?? 0); return u >= 1 ? u : MIN; }
@@ -265,6 +348,9 @@ async function init(){
     IMAGES = {};
     try { UNKNOWN = (await load(UNKNOWN_KEY)) ?? {}; } catch(e){ UNKNOWN = {}; }
     try { STAND = localStorage.getItem("baro_stand_"+BRANCH) || ""; } catch(e){ STAND = ""; }
+    try { STANDS_DONE = JSON.parse(localStorage.getItem("baro_stands_done_"+BRANCH) || "[]"); } catch(e){ STANDS_DONE = []; }
+    loadPending();           // نستعيد أي بيانات ما رُفعت من جلسة سابقة
+    syncPending(true);       // ونحاول نرفعها فوراً
     // نكمّل التسلسل من آخر رقم محفوظ (يمنع التعارض بعد إعادة الفتح)
     try {
       const seqs = [...Object.values(COUNTS), ...Object.values(UNKNOWN)]
@@ -393,6 +479,7 @@ function renderTabBody(){
   if (activeTab === "deliver"){ renderDeliver(body); return; }
   renderCountTab(body);
   bindFast();   // نربط أحداث المسح السريع بعد كل رسم
+  updateSyncBar();
 }
 
 function renderCountTab(app){
@@ -404,6 +491,7 @@ function renderCountTab(app){
 
   const fastDone = FAST_LOG.length;
   const unknownCount = Object.keys(UNKNOWN).filter(k=>k.endsWith("_"+BRANCH)).length;
+  const standsDone = STANDS_DONE;
 
   // تذكير الاستئناف: آخر عملية محفوظة بهذا الفرع (حتى لو من جلسة سابقة)
   let resumeInfo = "";
@@ -434,6 +522,8 @@ function renderCountTab(app){
         <div style="font-size:12px;color:#7f9ac4">${fastDone} عملية${unknownCount?` · ${unknownCount} غير معروف`:""}</div>
       </div>
 
+      <div id="syncBar" style="border-radius:11px;padding:10px 13px;margin-bottom:11px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px"></div>
+
       ${resumeInfo ? `<div style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.28);border-radius:12px;padding:11px 13px;margin-bottom:11px;font-size:13px;color:#93c5fd;line-height:1.7">
         ${resumeInfo}
       </div>` : ""}
@@ -444,7 +534,12 @@ function renderCountTab(app){
         <input id="standNo" value="${STAND}" placeholder="رقم أو اسم الستاند"
           onchange="setStand(this.value)" oninput="setStand(this.value)"
           style="flex:1;min-width:0;background:rgba(0,0,0,0.3);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:10px;padding:10px 12px;font-family:'Cairo';font-size:16px;font-weight:900;text-align:center" />
+        ${STAND ? `<button onclick="finishStand()" style="background:#16a34a;border:none;border-radius:10px;padding:10px 14px;font-family:'Cairo';font-size:13px;font-weight:900;color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0">✓ تم</button>` : ""}
       </div>
+
+      ${standsDone.length ? `<div style="font-size:11px;color:#7f9ac4;margin-bottom:10px;line-height:1.8">
+        ✅ خلصت: ${standsDone.map(s=>`<span style="background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:2px 9px;font-weight:900;margin-left:4px">${s}</span>`).join("")}
+      </div>` : ""}
 
       <div style="display:flex;gap:8px;margin-bottom:9px">
         <input id="fastBc" inputmode="text" autocomplete="off" placeholder="امسح الباركود…"
@@ -462,11 +557,23 @@ function renderCountTab(app){
 
       <div id="fastLog" style="margin-top:12px"></div>
 
-      ${(done + unknownCount) > 0 ? `<button onclick="exportInventoryExcel()" style="
-        width:100%;margin-top:12px;background:#047857;border:none;border-radius:13px;padding:14px;
-        font-family:'Cairo';font-size:14px;font-weight:900;color:#fff;cursor:pointer">
-        📊 حمّل إكسل الجرد (${done + unknownCount} صنف)
-      </button>` : ""}
+      ${(done + unknownCount) > 0 ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        <button onclick="openReview()" style="
+          background:#1e3a5f;border:1px solid #2563eb;border-radius:13px;padding:13px 8px;
+          font-family:'Cairo';font-size:13px;font-weight:900;color:#93c5fd;cursor:pointer">
+          <div style="font-size:19px;margin-bottom:3px">📝</div>
+          راجع وعدّل
+          <div style="font-size:11px;opacity:.7;font-weight:700;margin-top:2px">${done + unknownCount} صنف</div>
+        </button>
+        <button onclick="exportInventoryExcel()" style="
+          background:#065f46;border:1px solid #059669;border-radius:13px;padding:13px 8px;
+          font-family:'Cairo';font-size:13px;font-weight:900;color:#6ee7b7;cursor:pointer">
+          <div style="font-size:19px;margin-bottom:3px">📊</div>
+          حمّل إكسل
+          <div style="font-size:11px;opacity:.7;font-weight:700;margin-top:2px">لأودو</div>
+        </button>
+      </div>` : ""}
     </div>
 
     <div class="hint">أو استخدم الطريقة التفصيلية تحت: اضغط <b>+</b> أو <b>−</b> أو اكتب الرقم مباشرة.</div>
@@ -583,6 +690,159 @@ function onType(key, remaining){
 
 
 
+
+
+// ═══ إنهاء الستاند والانتقال للتالي تلقائياً ═══
+window.finishStand = () => {
+  const cur = String(STAND||"").trim();
+  if (!cur){ showToast("اكتب رقم الستاند أولاً"); return; }
+
+  // كم صنف انجرد بهذا الستاند
+  const inStand = [...Object.values(COUNTS), ...Object.values(UNKNOWN)]
+    .filter(v => v.branch === BRANCH && String(v.stand||"") === cur).length;
+
+  if (!STANDS_DONE.includes(cur)) STANDS_DONE.push(cur);
+  try { localStorage.setItem("baro_stands_done_"+BRANCH, JSON.stringify(STANDS_DONE)); } catch(e){}
+
+  // الانتقال التلقائي: لو رقم، نزيده واحد. لو اسم، نفرّغه للكتابة
+  const asNum = parseInt(cur, 10);
+  const next = (!isNaN(asNum) && String(asNum) === cur) ? String(asNum + 1) : "";
+  setStand(next);
+
+  beep(true);
+  showToast(`✓ خلص ستاند ${cur} (${inStand} صنف)${next?` — انتقلت للستاند ${next}`:""}`);
+  renderTabBody();
+  setTimeout(()=>{ const el=document.getElementById(next?"fastBc":"standNo"); if(el) el.focus(); }, 100);
+};
+
+// ═══ شاشة مراجعة الجرد — تعديل وحذف بحرية (كل موظف بفرعه) ═══
+let _reviewSearch = "";
+
+window.openReview = () => {
+  _reviewSearch = "";
+  renderReview();
+};
+
+function reviewRows(){
+  const rows = [];
+  Object.entries(COUNTS).forEach(([key, v]) => {
+    if (!key.endsWith("_"+BRANCH)) return;
+    rows.push({ ...v, key, known: true });
+  });
+  Object.entries(UNKNOWN).forEach(([key, v]) => {
+    if (!key.endsWith("_"+BRANCH)) return;
+    rows.push({ ...v, key, known: false, name: "" });
+  });
+  return rows.sort((a,b) => (num(b.seq)-num(a.seq)) || (num(b.date)-num(a.date)));
+}
+
+function renderReview(){
+  const all = reviewRows();
+  const q = _reviewSearch.trim().toLowerCase();
+  const list = q ? all.filter(r =>
+    String(r.barcode).toLowerCase().includes(q) ||
+    (r.name||"").toLowerCase().includes(q) ||
+    String(r.stand||"").toLowerCase().includes(q)
+  ) : all;
+
+  const ov = document.createElement("div");
+  ov.id = "reviewOverlay";
+  ov.style.cssText = "position:fixed;inset:0;background:#0a0e1a;z-index:900;overflow-y:auto;padding:14px";
+  ov.innerHTML = `
+    <div style="max-width:560px;margin:0 auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-size:20px;font-weight:900;color:#fff">📝 مراجعة الجرد</div>
+          <div style="font-size:12px;color:#7f9ac4;margin-top:2px">${BRANCH} · ${all.length} صنف</div>
+        </div>
+        <button onclick="closeReview()" style="background:#1f2937;border:1px solid #374151;color:#e2e8f0;border-radius:12px;padding:11px 18px;font-family:'Cairo';font-size:14px;font-weight:900;cursor:pointer">✕ إغلاق</button>
+      </div>
+
+      <input id="revSearch" value="${_reviewSearch}" oninput="onReviewSearch(this.value)"
+        placeholder="🔍 ابحث بالباركود أو الاسم أو الستاند"
+        style="width:100%;background:#111827;border:1px solid #1f2937;color:#e2e8f0;border-radius:12px;padding:13px;font-family:'Cairo';font-size:14px;margin-bottom:12px" />
+
+      ${q ? `<div style="font-size:12px;color:#7f9ac4;margin-bottom:10px">${list.length} نتيجة</div>` : ""}
+
+      ${list.map(r => `
+        <div style="background:#111827;border:1px solid ${r.known?'#1f2937':'rgba(251,191,36,0.3)'};border-radius:14px;padding:13px;margin-bottom:9px">
+          <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:900;color:${r.known?'#e2e8f0':'#fbbf24'};line-height:1.4">
+                ${r.known ? (r.name || r.barcode) : "⚠ غير موجود بالنظام"}
+              </div>
+              <div style="font-family:monospace;font-size:12px;color:#64748b;margin-top:3px">${r.barcode}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:3px">
+                ${r.stand ? `📍 ستاند ${r.stand} · ` : ""}${r.emp || ""}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" min="0" id="rev_${r.key}" value="${num(r.count)}"
+              style="flex:1;min-width:0;background:#0a1220;border:1px solid #1e3a5f;color:#fff;border-radius:11px;padding:12px;font-family:'Cairo';font-size:17px;font-weight:900;text-align:center" />
+            <button onclick="updateReview('${r.key}',${r.known})" style="background:#2563eb;border:none;border-radius:11px;padding:12px 16px;font-family:'Cairo';font-size:13px;font-weight:900;color:#fff;cursor:pointer;flex-shrink:0">حدّث</button>
+            <button onclick="deleteReview('${r.key}',${r.known})" style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.35);border-radius:11px;padding:12px 15px;font-family:'Cairo';font-size:13px;font-weight:900;color:#f87171;cursor:pointer;flex-shrink:0">حذف</button>
+          </div>
+        </div>`).join("")}
+
+      ${list.length===0 ? `<div style="text-align:center;padding:50px 20px;color:#64748b;font-size:14px">${q ? "ما فيه نتيجة" : "ما جردت شي بعد"}</div>` : ""}
+    </div>`;
+
+  const old = document.getElementById("reviewOverlay");
+  if (old) old.remove();
+  document.body.appendChild(ov);
+}
+
+let _revT = null;
+window.onReviewSearch = (v) => {
+  _reviewSearch = v;
+  clearTimeout(_revT);
+  _revT = setTimeout(()=>{
+    renderReview();
+    const el = document.getElementById("revSearch");
+    if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 250);
+};
+
+window.closeReview = () => {
+  const ov = document.getElementById("reviewOverlay");
+  if (ov) ov.remove();
+  render();
+};
+
+window.updateReview = async (key, known) => {
+  const inp = document.getElementById("rev_"+key);
+  if (!inp) return;
+  const val = num(inp.value);
+  if (inp.value === "" || val < 0){ showToast("اكتب رقم صحيح"); return; }
+  if (val === 0){
+    if (!confirm("الكمية صفر — تبي تحذف الصنف من الجرد؟")) return;
+    return deleteReview(key, known);
+  }
+  if (known){
+    if (COUNTS[key]){ COUNTS[key].count = val; COUNTS[key].date = Date.now(); COUNTS[key].seq = ++SEQ; }
+    await save("baro_branch_counts_v2", COUNTS);
+  } else {
+    if (UNKNOWN[key]){ UNKNOWN[key].count = val; UNKNOWN[key].date = Date.now(); UNKNOWN[key].seq = ++SEQ; }
+    await save(UNKNOWN_KEY, UNKNOWN);
+  }
+  beep(true);
+  showToast("✓ تحدّثت الكمية");
+  renderReview();
+};
+
+window.deleteReview = async (key, known) => {
+  const item = known ? COUNTS[key] : UNKNOWN[key];
+  if (!item) return;
+  if (!confirm(`حذف ${item.name || item.barcode} من الجرد نهائياً؟`)) return;
+  if (known){ delete COUNTS[key]; await save("baro_branch_counts_v2", COUNTS); }
+  else { delete UNKNOWN[key]; await save(UNKNOWN_KEY, UNKNOWN); }
+  // نشيله من سجل الجلسة كمان لو موجود
+  FAST_LOG = FAST_LOG.filter(r => (r.bc + "_" + BRANCH) !== key);
+  showToast("✓ حُذف");
+  renderReview();
+};
+
 // ═══ تصدير إكسل للجرد (جاهز للرفع على أودو) ═══
 function exportInventoryExcel(){
   const rows = [];
@@ -633,6 +893,25 @@ function exportInventoryExcel(){
   });
 
   if (!rows.length){ showToast("ما فيه جرد للتصدير"); return; }
+
+  // لو مكتبة الإكسل ما تحمّلت (فُتحت الصفحة بدون إنترنت) — نصدّر CSV، يفتح بالإكسل عادي
+  if (typeof XLSX === "undefined"){
+    const cols = Object.keys(rows[0]);
+    const csv = "\uFEFF" + [cols.join(",")].concat(
+      rows.map(r => cols.map(k => {
+        const v = String(r[k] ?? "");
+        return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+      }).join(","))
+    ).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `جرد_${BRANCH}_${ds}.csv`.replace(/[^\u0600-\u06FFA-Za-z0-9_.\-]/g,"_");
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+    showToast(`نزّل ${rows.length} صنف (CSV — يفتح بالإكسل)`);
+    return;
+  }
 
   // نرتّب: الموجود أول، ثم غير الموجود
   rows.sort((a,b) => (a["موجود بالنظام"]==="لا"?1:0) - (b["موجود بالنظام"]==="لا"?1:0));
@@ -730,6 +1009,7 @@ async function fastSave(){
   beep(true);
   bcEl.value = ""; qtyEl.value = "";
   renderFastLog();
+  updateSyncBar();
   const out = document.getElementById("fastFound");
   if (out) out.innerHTML = `<span style="color:#4ade80">✓ حُفظ — جاهز للتالي</span>`;
   fastFocusBc();
