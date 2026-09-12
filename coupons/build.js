@@ -550,9 +550,7 @@ ${schema.map((o) => `<script type="application/ld+json">${JSON.stringify(o).repl
     <a class="brand" href="/">
       <svg class="brand__mark" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true">
         <rect width="64" height="64" rx="15" fill="currentColor"/>
-        <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round">
-          <path d="M44 20 20 44"/><circle cx="24" cy="24" r="5.5"/><circle cx="40" cy="40" r="5.5"/>
-        </g>
+        <path transform="${KAF_TRANSFORM}" fill="#fff" d="${KAF_PATH}"/>
       </svg>
       <span class="brand__name">${esc(site.name)}</span>
     </a>
@@ -1430,14 +1428,30 @@ self.addEventListener('fetch', (e) => {
 });
 `;
 
-/* الأيقونة المتجهة — تُرسم بمسارٍ لا بخط، فلا تعتمد على خطٍّ مثبَّت على جهاز الزائر. */
-const faviconSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="أكواد خصم">
+/**
+ * علامة الموقع: حرف «ك» مرسومًا مسارًا متجهًا لا نصًّا بخط.
+ * النصّ في SVG يتطلّب خطًّا مثبَّتًا على جهاز الزائر، ولا خط يُحمَّل داخل أيقونة
+ * المتصفح — فالمسار هو ما يضمن الشكل نفسه في كل مكان وبأي مقاس.
+ * المسار مستخرَجٌ مرّة واحدة من الحرف ولا يتغيّر.
+ */
+const KAF_PATH =
+  'M715 754H698V752L697 754L621 656L648 176C591 166 438 156 320 156C217 156 65 164 65 266H50C37 208 35 153 35 138C35 28 124 -8 277 -8C405 -8 568 17 639 50C691 162 728 329 728 379V519L762 561ZM477 577 470 587H452C375 587 343 547 328 500C310 446 326 415 385 401L455 383C401 362 348 348 260 335V313C291 293 333 289 361 289C425 289 466 337 475 399L478 417C483 448 457 459 424 467C389 476 344 481 346 496C347 512 401 518 433 518H459Z';
+
+const KAF_TRANSFORM = 'translate(12.13 50.60) scale(0.04987 -0.04987)';
+
+/** العلامة كوسم SVG جاهز — تُستخدم في الفافيكون والترويسة وتوليد الأيقونات. */
+const markSvg = ({ size = 64, box = true, fill = '#FF9500', ink = '#fff', cls = '', attrs = '' } = {}) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}"${
+    cls ? ` class="${cls}"` : ''
+  } ${attrs}>
+  ${box ? `<rect width="64" height="64" rx="15" fill="${fill}"/>` : ''}
+  <path transform="${KAF_TRANSFORM}" fill="${ink}" d="${KAF_PATH}"/>
+</svg>`;
+
+const faviconSvg = () =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="أكواد خصم">
   <rect width="64" height="64" rx="15" fill="#FF9500"/>
-  <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round">
-    <path d="M44 20 20 44"/>
-    <circle cx="24" cy="24" r="5.5"/>
-    <circle cx="40" cy="40" r="5.5"/>
-  </g>
+  <path transform="${KAF_TRANSFORM}" fill="#fff" d="${KAF_PATH}"/>
 </svg>
 `;
 
