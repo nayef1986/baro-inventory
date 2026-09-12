@@ -2,8 +2,8 @@
 (function () {
   'use strict';
 
-  var FAV_KEY = 'baro:favorites';
-  var COPIED_KEY = 'baro:copied';
+  var FAV_KEY = 'akwad:favorites';
+  var COPIED_KEY = 'akwad:copied';
 
   /* ---------------- تخزين آمن ---------------- */
   /* التخزين قد يكون معطّلًا (تصفّح خاص، حظر الكوكيز) — كل قراءة وكتابة محمية. */

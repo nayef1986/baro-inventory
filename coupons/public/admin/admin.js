@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var KEY = 'baro:admin:stores';
+  var KEY = 'akwad:admin:stores';
   var LOGO_PX = 256;
 
   var state = { stores: [], active: 0 };
@@ -188,7 +188,7 @@
 
     $('code-list').innerHTML = s.codes.map(function (c, i) {
       return '<div class="coderow" data-ci="' + i + '">' +
-        '<label class="field"><span>الكود</span><input dir="ltr" data-k="code" value="' + esc(c.code) + '" placeholder="BARO20"></label>' +
+        '<label class="field"><span>الكود</span><input dir="ltr" data-k="code" value="' + esc(c.code) + '" placeholder="SAVE20"></label>' +
         '<label class="field"><span>الوصف <em>اختياري</em></span><input data-k="title" value="' + esc(c.title) + '" placeholder="خصم على كل الطلب"></label>' +
         '<label class="field"><span>النسبة <em>اختياري</em></span><input data-k="discount" value="' + esc(c.discount) + '" placeholder="20%"></label>' +
         '<label class="field"><span>الانتهاء <em>اختياري</em></span><input type="date" data-k="expires" value="' + esc(c.expires) + '"></label>' +

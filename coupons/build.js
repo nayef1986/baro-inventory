@@ -1423,7 +1423,7 @@ const buildManifest = () =>
 /** عامل الخدمة: يجعل الصفحات المزارة تعمل بلا إنترنت. */
 const buildSW = (version) => `/* يُولَّد آليًا — لا تعدّله يدويًا */
 const VERSION = '${version}';
-const CACHE = 'baro-coupons-' + VERSION;
+const CACHE = 'akwad-khasm-' + VERSION;
 const SHELL = ['/', '/styles.css', '/app.js', '/offline/', '/favicon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
