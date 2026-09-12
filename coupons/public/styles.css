@@ -833,3 +833,33 @@ button { font-family: inherit; }
   .ad--stage { padding: 22px 18px; gap: 14px; text-align: start; }
   .ad--stage .ad__cta { width: 100%; }
 }
+
+/* ============================================================
+   إعلان بصورة مصمَّمة — الصورة هي الإعلان
+   ============================================================ */
+
+.ad--banner {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.ad--banner::before { display: none; }
+.ad--banner a, .ad--banner picture { display: block; }
+.ad--banner img {
+  width: 100%; height: auto; display: block;
+  aspect-ratio: 6 / 1; object-fit: cover;
+}
+.ad--banner .ad__label {
+  top: 10px; inset-inline-end: 12px;
+  background: rgba(14, 17, 22, .72); color: #fff; border-color: transparent;
+  backdrop-filter: blur(4px);
+}
+
+/* بطاقة داخل شبكة الأكواد: الصورة مربّعة تقريبًا لا عريضة */
+.ad--banner.ad--card img { aspect-ratio: 4 / 3; }
+
+@media (max-width: 600px) {
+  .ad--banner img { aspect-ratio: 2 / 1; }
+}

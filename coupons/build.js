@@ -188,7 +188,7 @@ const TOTAL_CODES = allCodes.length;
 
 /** الإعلان يظهر فقط داخل مدّته وفي موضعه؛ غير ذلك تُعرض مساحة الحجز. */
 const ads = rawAds
-  .filter((a) => a && a.url && a.title)
+  .filter((a) => a && a.url && (a.title || a.banner))
   .filter((a) => (!a.starts || a.starts <= BUILT_AT) && (!a.ends || a.ends >= BUILT_AT))
   .sort((a, b) => (a.priority || 99) - (b.priority || 99));
 
@@ -367,6 +367,28 @@ function adSlot(slot, { category = '', className = '' } = {}) {
   return list
     .map((a) => {
       const accent = a.brandColor || '#FF9500';
+
+      /*
+       * إعلان بصورة مصمَّمة: الصورة هي الإعلان كلّه، فيملك المعلن تصميمه كاملًا.
+       * نسختان بنسبتين مختلفتين — عريضة للشاشات الكبيرة ومربّعة تقريبًا للجوال —
+       * لأن قصّ صورة واحدة على النسبتين يفسد التصميم في إحداهما حتمًا.
+       */
+      if (a.banner) {
+        const alt = esc(a.title || a.advertiser || 'إعلان');
+        const mobile = a.bannerMobile
+          ? `<source media="(max-width: 600px)" srcset="${esc(a.bannerMobile)}">`
+          : '';
+        return `<aside class="ad ad--banner ${className}" aria-label="محتوى إعلاني">
+  <span class="ad__label">إعلان</span>
+  <a href="${esc(a.url)}" target="_blank" rel="nofollow sponsored noopener">
+    <picture>
+      ${mobile}
+      <img src="${esc(a.banner)}" alt="${alt}" loading="lazy" decoding="async">
+    </picture>
+  </a>
+</aside>`;
+      }
+
       const media = a.image
         ? `<img class="ad__img" src="${esc(a.image)}" alt="" width="96" height="96" loading="lazy" decoding="async">`
         : '';
