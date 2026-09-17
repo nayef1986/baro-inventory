@@ -794,6 +794,7 @@ function renderApp(){
     <div class="tabsGroup">
       <div class="tabsLabel">🏪 الفروع</div>
       <div class="tabs">
+        <button class="${activeTab==='boxes'?'on':''}" onclick="setTab('boxes')">📦 صناديق التوزيع</button>
         <button class="${activeTab==='branchtx'?'on':''}" onclick="setTab('branchtx')">🔄 نقل الفروع</button>
         <button class="${activeTab==='count'?'on':''}" onclick="setTab('count')">📥 جرد الفروع</button>
       </div>
@@ -853,6 +854,7 @@ function setTab(t){ activeTab=t; openCont=null; openProd=null; openLog=null; sel
 function renderContent(){
   const c = document.getElementById("content");
   if (activeTab === "log"){ renderLog(c); return; }
+  if (activeTab === "boxes"){ renderBoxes(c); return; }
   if (activeTab === "branchtx"){ renderBranchTx(c); return; }
   if (activeTab === "whcount"){ renderWhCount(c); return; }
   if (activeTab === "count"){ renderCounts(c); return; }
@@ -1447,6 +1449,117 @@ function fInvDate(ts){
   const p=n=>String(n).padStart(2,"0");
   return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} · ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+// ═══════════ صناديق التوزيع — بضاعة كل فرع بالأسبوع ═══════════
+let boxOpenBranch = {};   // الفرع المفتوح
+let boxOpenWeek = {};     // الأسبوع المفتوح (مفتاح: فرع|أسبوع)
+
+// بداية الأسبوع = السبت
+function weekStart(ts){
+  const d = new Date(num(ts));
+  d.setHours(0,0,0,0);
+  const day = d.getDay();            // 0=أحد ... 6=سبت
+  const back = (day + 1) % 7;        // كم يوم نرجع للسبت
+  d.setDate(d.getDate() - back);
+  return d.getTime();
+}
+function weekLabel(startTs){
+  const s = new Date(startTs);
+  const e = new Date(startTs + 6*86400000);
+  const p = n => String(n).padStart(2,"0");
+  const fmt = d => `${p(d.getDate())}/${p(d.getMonth()+1)}`;
+  const thisWeek = weekStart(Date.now());
+  const tag = startTs === thisWeek ? " · هذا الأسبوع"
+            : startTs === thisWeek - 7*86400000 ? " · الأسبوع الماضي" : "";
+  return `${fmt(s)} — ${fmt(e)}${tag}`;
+}
+
+function renderBoxes(c){
+  const txs = TRANSFERS.filter(t => t.printed && isWh(t.from) && t.to);
+  if (txs.length === 0){
+    c.innerHTML = `<div class="empty">لا توزيعات بعد<br><span style="font-size:12px">اعتمد منتجات من تبويب النواقص</span></div>`;
+    return;
+  }
+
+  // تجميع: فرع → أسبوع → باركود (الكميات تتجمع)
+  const byBranch = {};
+  txs.forEach(t => {
+    const br = t.to;
+    const ws = weekStart(t.date);
+    if (!byBranch[br]) byBranch[br] = {};
+    if (!byBranch[br][ws]) byBranch[br][ws] = {};
+    const k = t.barcode;
+    if (!byBranch[br][ws][k]) byBranch[br][ws][k] = { barcode:k, name:t.name, qty:0, times:0 };
+    byBranch[br][ws][k].qty += num(t.qty);
+    byBranch[br][ws][k].times++;
+  });
+
+  const thisWeek = weekStart(Date.now());
+  const branches = Object.keys(byBranch).sort();
+
+  c.innerHTML = `
+    <div style="background:rgba(124,179,232,0.08);border:1px solid rgba(124,179,232,0.2);border-radius:11px;padding:11px 13px;font-size:12px;color:#7cb3e8;margin-bottom:12px;line-height:1.7">
+      📦 وش وصل كل فرع بكل أسبوع (الأسبوع يبدأ السبت). راجعها قبل ما توافق على طلب جديد — تمنع تكرار الإرسال.
+    </div>
+    ${branches.map(br => {
+      const weeks = Object.keys(byBranch[br]).map(Number).sort((a,b)=>b-a);
+      const isOpen = boxOpenBranch[br] === true;
+      const thisWeekItems = byBranch[br][thisWeek] ? Object.keys(byBranch[br][thisWeek]).length : 0;
+
+      const weeksHtml = isOpen ? weeks.map(ws => {
+        const items = Object.values(byBranch[br][ws]).sort((a,b)=>b.qty-a.qty);
+        const totalQty = items.reduce((s,i)=>s+i.qty,0);
+        const wk = br+"|"+ws;
+        const wOpen = boxOpenWeek[wk] === true;
+        const isThis = ws === thisWeek;
+        return `<div style="background:#0d1424;border:1px solid ${isThis?'rgba(74,222,128,0.35)':'#1f2940'};border-radius:12px;margin:8px 0;overflow:hidden">
+          <div onclick="boxToggleWeek('${wk.replace(/'/g,"")}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 13px;cursor:pointer;background:${isThis?'rgba(74,222,128,0.07)':'#111a2e'}">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:900;color:${isThis?'#4ade80':'#e2e8f0'}">📅 ${weekLabel(ws)}</div>
+              <div style="font-size:11px;color:#5b6b85;margin-top:3px">${items.length} صنف</div>
+            </div>
+            <div style="text-align:center;margin-left:10px">
+              <div style="font-size:26px;font-weight:900;color:#7cb3e8;line-height:1">${fmtN(totalQty)}</div>
+              <div style="font-size:9px;color:#5b6b85">قطعة</div>
+            </div>
+            <span style="color:#5b6b85;font-size:14px">${wOpen?'▲':'▼'}</span>
+          </div>
+          ${wOpen ? `<div style="padding:6px 10px 11px">
+            ${items.map(it => {
+              const img = IMAGES?.[it.barcode];
+              return `<div style="display:flex;gap:10px;align-items:center;background:#0f1626;border-radius:11px;padding:11px;margin-top:7px">
+                ${img?`<img src="${img}" loading="lazy" onclick="openImg('${(img||'').replace(/'/g,"\\'")}','${(it.name||'').replace(/'/g,'')}')" style="width:50px;height:50px;border-radius:9px;object-fit:cover;background:#fff;cursor:pointer;flex-shrink:0"/>`:`<div style="width:50px;height:50px;border-radius:9px;background:#1f2940;display:flex;align-items:center;justify-content:center;font-size:23px;flex-shrink:0">📦</div>`}
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.35">${it.name||"—"}</div>
+                  <div style="font-family:monospace;font-size:13px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin-top:3px">${it.barcode}</div>
+                  ${it.times>1?`<div style="font-size:10px;color:#fbbf24;margin-top:3px">⚠️ أُرسل ${it.times} مرات بهذا الأسبوع</div>`:""}
+                </div>
+                <div style="text-align:center;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.25);border-radius:11px;padding:9px 14px;flex-shrink:0">
+                  <div style="font-size:30px;font-weight:900;color:#4ade80;line-height:1">${fmtN(it.qty)}</div>
+                  <div style="font-size:10px;color:#5b6b85;margin-top:2px">قطعة</div>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>` : ""}
+        </div>`;
+      }).join("") : "";
+
+      return `<div style="background:#0d1424;border:1px solid #1f2940;border-radius:13px;margin-bottom:10px;overflow:hidden">
+        <div onclick="boxToggleBranch('${br.replace(/'/g,"")}')" style="display:flex;align-items:center;justify-content:space-between;padding:14px;cursor:pointer;background:#141d33">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;font-weight:900;color:#fff">🏪 ${br}</div>
+            <div style="font-size:11px;color:#5b6b85;margin-top:3px">${weeks.length} أسبوع${thisWeekItems?` · ${thisWeekItems} صنف هذا الأسبوع`:""}</div>
+          </div>
+          <span style="color:#5b6b85;font-size:14px">${isOpen?'▲':'▼'}</span>
+        </div>
+        ${isOpen?`<div style="padding:2px 10px 10px">${weeksHtml}</div>`:""}
+      </div>`;
+    }).join("")}`;
+}
+
+function boxToggleBranch(br){ boxOpenBranch[br] = !boxOpenBranch[br]; renderBoxes(document.getElementById("content")); }
+function boxToggleWeek(wk){ boxOpenWeek[wk] = !boxOpenWeek[wk]; renderBoxes(document.getElementById("content")); }
+
 function renderBranchTx(c){
 
   let txs = TRANSFERS.filter(t => t.printed && !isWh(t.from) && t.to && t.to!=="المستودع" && t.to!=="المستودع الرئيسي");
