@@ -93,24 +93,29 @@ export default function App() {
 
 function SetupNotice() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="max-w-xl w-full bg-surface border border-line rounded-2xl p-6">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-xl min-w-0 bg-surface border border-line rounded-2xl p-5 sm:p-6">
         <h1 className="display m-0 text-[28px] font-bold">سويت كوست</h1>
         <p className="mt-3 mb-4 text-[14px] leading-loose text-soft">
           قاعدة البيانات غير مهيأة بعد. خطوتان فقط:
         </p>
-        <ol className="m-0 ps-5 text-[14px] leading-loose text-soft flex flex-col gap-2">
+        <ol className="m-0 ps-5 list-decimal text-[14px] leading-loose text-soft flex flex-col gap-2 min-w-0">
           <li>
-            شغّل ملف <code className="bg-sand px-1.5 py-0.5 rounded">supabase/migrations/0001_sweet_cost.sql</code>{' '}
+            شغّل ملف{' '}
+            <code dir="ltr" className="inline-block bg-sand px-1.5 py-0.5 rounded break-all align-middle">
+              supabase/migrations/0001_sweet_cost.sql
+            </code>{' '}
             في محرّر SQL داخل مشروع Supabase.
           </li>
           <li>
-            أنشئ ملف <code className="bg-sand px-1.5 py-0.5 rounded">.env.local</code> في جذر المشروع وضع فيه:
+            أنشئ ملف{' '}
+            <code dir="ltr" className="inline-block bg-sand px-1.5 py-0.5 rounded align-middle">.env.local</code>{' '}
+            في جذر المشروع وضع فيه:
           </li>
         </ol>
         <pre
           dir="ltr"
-          className="mt-3 bg-bark text-[#f3ede4] rounded-xl p-4 text-[12.5px] leading-relaxed overflow-x-auto"
+          className="mt-3 max-w-full bg-bark text-[#f3ede4] rounded-xl p-4 text-[11.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-all"
         >
 {`VITE_SWEETCOST_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SWEETCOST_SUPABASE_ANON_KEY=eyJhbGci...`}

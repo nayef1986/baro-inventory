@@ -11,7 +11,7 @@ export default defineConfig({
         // تطبيق باروو الحالي — بدون تغيير
         main: resolve(import.meta.dirname, 'index.html'),
         // SWEET COST — تطبيق مستقل على /sweet-cost.html
-        sweetcost: resolve(import.meta.dirname, 'sweet-cost.html'),
+        sweetcost: resolve(import.meta.dirname, 'sweet-cost/index.html'),
       },
     },
   },

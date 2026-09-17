@@ -60,6 +60,8 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
 
   const recipe = data.recipes.find((r) => r.id === recipeId) ?? null
   const batchCount = Number(batches) > 0 ? Number(batches) : 0
+  const batchWord = recipe?.batch_label ?? 'وصفة'
+  const unitWord = recipe?.yield_unit_label ?? 'قطعة'
 
   // بناء الأسطر من الوصفة — القياسي = كمية الوصفة × عدد الوصفات
   useEffect(() => {
@@ -214,10 +216,10 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
               options={data.recipes.map((r) => ({ value: r.id, label: r.name }))}
             />
           </Field>
-          <Field label="عدد الوصفات" htmlFor="pr-batches">
+          <Field label={`عدد الـ${batchWord}`} htmlFor="pr-batches">
             <NumberInput id="pr-batches" value={batches} onChange={setBatches} step="0.5" />
           </Field>
-          <Field label="الكمية المنتجة" htmlFor="pr-produced" hint="قطعة">
+          <Field label="الكمية المنتجة" htmlFor="pr-produced" hint={unitWord}>
             <NumberInput id="pr-produced" value={producedUnits} onChange={setProducedUnits} />
           </Field>
           <Field label="الكمية المباعة" htmlFor="pr-sold" hint="فارغ = كل المنتج بيع">
@@ -231,7 +233,7 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
           <div className="px-5 pt-4 pb-3">
             <CardTitle
               title="القياسي مقابل الفعلي"
-              subtitle={recipe ? `${recipe.name} · ${batchCount} وصفة · ${fmtQty(produced)} قطعة` : ''}
+              subtitle={recipe ? `${recipe.name} · ${batchCount} ${batchWord} · ${fmtQty(produced)} ${unitWord}` : ''}
             />
           </div>
 
@@ -318,9 +320,9 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
             </dl>
 
             <div className="bg-bark-2 rounded-xl p-4 mt-4 flex flex-col gap-2.5">
-              <DarkRow label="تكلفة القطعة القياسية" value={money(perUnitStandard)} />
+              <DarkRow label={`تكلفة الـ${unitWord} القياسية`} value={money(perUnitStandard)} />
               <DarkRow
-                label="تكلفة القطعة الفعلية"
+                label={`تكلفة الـ${unitWord} الفعلية`}
                 value={money(perUnitActual)}
                 tone={perUnitActual > perUnitStandard ? 'bad' : undefined}
                 strong
@@ -354,7 +356,8 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
                       <div className="min-w-0">
                         <div className="text-[13.5px] font-semibold truncate">{r?.name ?? 'وصفة محذوفة'}</div>
                         <div className="text-[12px] text-muted mt-0.5">
-                          {arabicDateShort(production.produced_on)} · {fmtQty(production.produced_units)} قطعة ·{' '}
+                          {arabicDateShort(production.produced_on)} · {fmtQty(production.produced_units)}{' '}
+                          {r?.yield_unit_label ?? 'قطعة'} ·{' '}
                           {money(production.revenue)} ر.س
                         </div>
                       </div>

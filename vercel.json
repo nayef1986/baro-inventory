@@ -1,6 +1,20 @@
 {
   "rewrites": [
-    { "source": "/sweet-cost", "destination": "/sweet-cost.html" },
+    { "source": "/sweet-cost", "destination": "/sweet-cost/index.html" },
+    { "source": "/sweet-cost/", "destination": "/sweet-cost/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/sweet-cost/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/sweet-cost/" }
+      ]
+    },
+    {
+      "source": "/sweet-cost/manifest.webmanifest",
+      "headers": [{ "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }]
+    }
   ]
 }

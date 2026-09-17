@@ -209,7 +209,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           <div className="px-5 pt-4 pb-3">
             <CardTitle
               title="أداء المنتجات"
-              subtitle="بالأسعار الحالية · مرتّبة حسب الهامش"
+              subtitle="لكل وحدة بيع · بالأسعار الحالية · مرتّبة حسب الهامش"
               action={
                 <Button variant="ghost" className="!px-2 !text-[13px]" onClick={() => goTo('recipes')}>
                   فتح الوصفات
@@ -239,7 +239,12 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
 
                   return (
                     <tr key={row.recipe.id} className={lowest ? 'bg-bad-soft/40' : ''}>
-                      <Td className="ps-5 font-semibold text-[14px]">{row.recipe.name}</Td>
+                      <Td className="ps-5">
+                        <span className="font-semibold text-[14px]">{row.recipe.name}</span>
+                        <span className="block text-[11.5px] text-muted mt-0.5">
+                          {row.recipe.batch_label} = {row.recipe.yield_units} {row.recipe.yield_unit_label}
+                        </span>
+                      </Td>
                       <Td className="num">{money(row.sellPrice)}</Td>
                       <Td className="num">{money(row.unitCost)}</Td>
                       <Td className="num">{money(row.profit)}</Td>

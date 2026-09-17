@@ -186,7 +186,10 @@ export async function deletePurchase(id: string): Promise<void> {
 
 // ─── الوصفات ─────────────────────────────────────────────────
 
-export type RecipeInput = Pick<Recipe, 'name' | 'sell_price' | 'yield_units' | 'notes'>
+export type RecipeInput = Pick<
+  Recipe,
+  'name' | 'sell_price' | 'yield_units' | 'batch_label' | 'yield_unit_label' | 'notes'
+>
 export type RecipeLineInput = Pick<RecipeItem, 'ingredient_id' | 'quantity' | 'unit'>
 
 export async function saveRecipe(

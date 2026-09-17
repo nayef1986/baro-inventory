@@ -4,6 +4,8 @@
 
 import type { ReactNode } from 'react'
 
+import { InstallButton } from './InstallButton.tsx'
+
 export type ScreenKey = 'ingredients' | 'suppliers' | 'recipes' | 'production' | 'waste' | 'dashboard'
 
 interface NavItem {
@@ -145,15 +147,19 @@ export function Shell({
           })}
         </nav>
 
-        <p className="mt-auto m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#a99783]">
-          كل التكاليف تُحسب من آخر سعر شراء مسجّل. لا تُدخل تكلفة يدوياً.
-        </p>
+        <div className="mt-auto flex flex-col gap-4">
+          <InstallButton tone="dark" />
+          <p className="m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#a99783]">
+            كل التكاليف تُحسب من آخر سعر شراء مسجّل. لا تُدخل تكلفة يدوياً.
+          </p>
+        </div>
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* رأس الجوال */}
-        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#f3ede4] px-4 py-3">
+        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#f3ede4] px-4 py-3 flex items-center justify-between gap-3">
           <div className="display text-[22px] font-bold leading-tight text-honey">سويت كوست</div>
+          <InstallButton />
         </header>
 
         <main className="flex-1 min-w-0 px-4 py-5 sm:px-7 sm:py-7 pb-24 lg:pb-7 max-w-[1400px] w-full">
@@ -162,7 +168,7 @@ export function Shell({
       </div>
 
       {/* التنقل السفلي — جوال */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-line flex px-1 pt-1.5 pb-3">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-line flex px-1 pt-1.5 pb-safe">
         {NAV_ITEMS.map((item) => {
           const active = item.key === screen
           return (

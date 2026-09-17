@@ -169,6 +169,8 @@ function RecipeEditor({
   const [name, setName] = useState(recipe?.name ?? '')
   const [sellPrice, setSellPrice] = useState(String(recipe?.sell_price ?? ''))
   const [yieldUnits, setYieldUnits] = useState(String(recipe?.yield_units ?? '1'))
+  const [batchLabel, setBatchLabel] = useState(recipe?.batch_label ?? 'صينية')
+  const [yieldUnitLabel, setYieldUnitLabel] = useState(recipe?.yield_unit_label ?? 'قطعة')
   const [lines, setLines] = useState<DraftLine[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -228,6 +230,8 @@ function RecipeEditor({
 
   async function submit() {
     if (!name.trim()) return setError('اسم المنتج مطلوب.')
+    if (!batchLabel.trim()) return setError('اسم الوعاء مطلوب (صينية، زبدية…).')
+    if (!yieldUnitLabel.trim()) return setError('وحدة البيع مطلوبة (قطعة، حبة…).')
     if (!Number.isFinite(yieldValue) || yieldValue <= 0) return setError('عدد القطع لازم يكون أكبر من صفر.')
     if (!Number.isFinite(price) || price < 0) return setError('سعر البيع لازم يكون رقماً موجباً.')
 
@@ -256,6 +260,8 @@ function RecipeEditor({
           name: name.trim(),
           sell_price: price,
           yield_units: yieldValue,
+          batch_label: batchLabel.trim(),
+          yield_unit_label: yieldUnitLabel.trim(),
           notes: recipe?.notes ?? null,
         },
         payload,
@@ -275,17 +281,29 @@ function RecipeEditor({
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_286px] gap-4 items-start">
       <div className="flex flex-col gap-4">
         <Card>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_140px] gap-4">
-            <Field label="اسم المنتج" htmlFor="r-name">
-              <TextInput id="r-name" value={name} onChange={setName} />
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="col-span-2 sm:col-span-1">
+              <Field label="اسم المنتج" htmlFor="r-name">
+                <TextInput id="r-name" value={name} onChange={setName} />
+              </Field>
+            </div>
+            <Field label="الوعاء" htmlFor="r-batch" hint="صينية، زبدية، قالب…">
+              <TextInput id="r-batch" value={batchLabel} onChange={setBatchLabel} />
             </Field>
-            <Field label="عدد القطع" htmlFor="r-yield">
+            <Field label="وحدة البيع" htmlFor="r-unitlabel" hint="قطعة، حبة، كوب…">
+              <TextInput id="r-unitlabel" value={yieldUnitLabel} onChange={setYieldUnitLabel} />
+            </Field>
+            <Field label={`عدد الـ${yieldUnitLabel || 'قطع'}`} htmlFor="r-yield" hint={`في الـ${batchLabel || 'وعاء'}`}>
               <NumberInput id="r-yield" value={yieldUnits} onChange={setYieldUnits} />
             </Field>
-            <Field label="سعر بيع القطعة" htmlFor="r-price">
+            <Field label={`سعر بيع الـ${yieldUnitLabel || 'قطعة'}`} htmlFor="r-price">
               <NumberInput id="r-price" value={sellPrice} onChange={setSellPrice} step="0.25" />
             </Field>
           </div>
+          <p className="m-0 mt-3 text-[12.5px] text-muted leading-relaxed">
+            {batchLabel || 'وعاء'} واحدة فيها {yieldValue} {yieldUnitLabel || 'قطعة'}، وتُباع بـ{' '}
+            <span className="num">{money(price * yieldValue)}</span> ر.س.
+          </p>
         </Card>
 
         <Card pad={false} className="overflow-hidden">
@@ -385,7 +403,7 @@ function RecipeEditor({
             <tfoot>
               <tr className="bg-cream">
                 <td colSpan={4} className="px-5 py-3.5 text-right text-[14.5px] font-bold border-t border-line">
-                  إجمالي تكلفة الوصفة
+                  {`إجمالي تكلفة الـ${batchLabel || 'وصفة'}`}
                 </td>
                 <td className="px-3 py-3.5 text-right text-[17px] font-bold num border-t border-line" colSpan={2}>
                   {money(cost.total)}
@@ -408,14 +426,14 @@ function RecipeEditor({
         <h2 className="m-0 text-[16.5px] font-bold text-honey">التكلفة والربح</h2>
 
         <dl className="m-0 flex flex-col gap-2.5">
-          <Row label="إجمالي تكلفة الوصفة" value={money(cost.total)} />
-          <Row label="عدد القطع" value={String(yieldValue)} />
-          <Row label="تكلفة القطعة" value={money(cost.perUnit)} bordered />
-          <Row label="سعر بيع القطعة" value={money(price)} />
+          <Row label={`تكلفة الـ${batchLabel || 'وصفة'}`} value={money(cost.total)} />
+          <Row label={`عدد الـ${yieldUnitLabel || 'قطع'} في الـ${batchLabel || 'وعاء'}`} value={String(yieldValue)} />
+          <Row label={`تكلفة الـ${yieldUnitLabel || 'قطعة'}`} value={money(cost.perUnit)} bordered />
+          <Row label={`سعر بيع الـ${yieldUnitLabel || 'قطعة'}`} value={money(price)} />
         </dl>
 
         <div className="bg-bark-2 rounded-xl p-4">
-          <div className="text-[12.5px] text-[#bfae99]">الربح للقطعة</div>
+          <div className="text-[12.5px] text-[#bfae99]">الربح للـ{yieldUnitLabel || 'قطعة'}</div>
           <div className={`mt-1 text-[30px] font-bold num leading-tight ${p.profit < 0 ? 'text-[#f0a28e]' : ''}`}>
             {money(p.profit)} <span className="text-[14px] font-medium text-[#bfae99]">ر.س</span>
           </div>
@@ -429,7 +447,7 @@ function RecipeEditor({
         </div>
 
         <dl className="m-0">
-          <Row label="إجمالي بيع الوصفة" value={money(price * yieldValue)} bordered />
+          <Row label={`إجمالي بيع الـ${batchLabel || 'وصفة'}`} value={money(price * yieldValue)} bordered />
         </dl>
 
         {p.profit < 0 && price > 0 ? (

@@ -72,7 +72,12 @@ export interface Recipe {
   id: string
   name: string
   sell_price: number
+  /** عدد وحدات البيع في الوعاء الواحد */
   yield_units: number
+  /** وعاء الإنتاج: صينية، زبدية، قالب… */
+  batch_label: string
+  /** وحدة البيع: قطعة، حبة، كوب… */
+  yield_unit_label: string
   notes: string | null
   created_at: string
   updated_at: string
