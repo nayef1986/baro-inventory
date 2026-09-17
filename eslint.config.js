@@ -8,6 +8,18 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // سكربتات Node (تعمل خارج المتصفح)
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        fetch: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
+  {
     files: ['src/sweetcost/**/*.{ts,tsx}'],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },

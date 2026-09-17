@@ -1,5 +1,61 @@
 @import "tailwindcss";
 
+/* ── خط ثمانية ───────────────────────────────────────────────
+   المسار المحلي أولاً، وCDN احتياطي. `npm run fonts:local`
+   ينزّل الملفات ويلغي الاعتماد الخارجي.
+   الترخيص: https://font.thmanyah.com/licenses
+   ─────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    url("/sweet-cost/fonts/thmanyah-sans-Regular.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-sans/woff2/thmanyah-sans-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src:
+    url("/sweet-cost/fonts/thmanyah-sans-Medium.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-sans/woff2/thmanyah-sans-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    url("/sweet-cost/fonts/thmanyah-sans-Bold.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-sans/woff2/thmanyah-sans-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    url("/sweet-cost/fonts/thmanyah-serif-display-Regular.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-serif-display/woff2/thmanyah-serif-display-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    url("/sweet-cost/fonts/thmanyah-serif-display-Bold.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-serif-display/woff2/thmanyah-serif-display-Bold.woff2") format("woff2");
+}
+
 /* ── ألوان ونصوص سويت كوست ───────────────────────────────── */
 @theme {
   --color-cream: #faf7f2;
@@ -23,8 +79,8 @@
   --color-warn: #6b5320;
   --color-warn-soft: #f5efe4;
 
-  --font-display: "Amiri", Georgia, serif;
-  --font-sans: "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Thmanyah Serif Display", "Amiri", Georgia, serif;
+  --font-sans: "Thmanyah Sans", "SF Arabic", "Segoe UI", system-ui, sans-serif;
 }
 
 html {
