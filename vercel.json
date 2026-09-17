@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/sweet-cost", "destination": "/sweet-cost.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

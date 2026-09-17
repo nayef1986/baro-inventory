@@ -1,0 +1,122 @@
+// ============================================================
+// App.tsx — تحميل البيانات والتنقل بين الشاشات
+// ============================================================
+
+import { useCallback, useEffect, useState } from 'react'
+
+import { Shell, type ScreenKey } from './components/Shell.tsx'
+import { ErrorBanner, Spinner } from './components/UI.tsx'
+import { loadAll } from './lib/api.ts'
+import { dbErrorMessage, isConfigured } from './lib/supabase.ts'
+import type { SweetCostData } from './types.ts'
+
+import DashboardScreen from './screens/Dashboard.tsx'
+import IngredientsScreen from './screens/Ingredients.tsx'
+import ProductionScreen from './screens/Production.tsx'
+import RecipesScreen from './screens/Recipes.tsx'
+import SuppliersScreen from './screens/Suppliers.tsx'
+import WasteScreen from './screens/Waste.tsx'
+
+export interface ScreenProps {
+  data: SweetCostData
+  reload: () => Promise<void>
+  onError: (message: string) => void
+  goTo: (screen: ScreenKey) => void
+}
+
+export default function App() {
+  const [data, setData] = useState<SweetCostData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [fatal, setFatal] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [screen, setScreen] = useState<ScreenKey>('dashboard')
+
+  const reload = useCallback(async () => {
+    try {
+      setData(await loadAll())
+      setFatal(null)
+    } catch (e) {
+      setFatal(dbErrorMessage(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isConfigured) {
+      setLoading(false)
+      return
+    }
+    void reload().finally(() => setLoading(false))
+  }, [reload])
+
+  if (!isConfigured) return <SetupNotice />
+  if (loading) return <Spinner />
+
+  if (fatal && !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-lg w-full flex flex-col gap-4">
+          <ErrorBanner message={fatal} />
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="min-h-11 rounded-xl bg-accent text-white font-semibold cursor-pointer border-0"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) return <Spinner />
+
+  const props: ScreenProps = { data, reload, onError: setError, goTo: setScreen }
+
+  const SCREENS: Record<ScreenKey, React.ReactElement> = {
+    dashboard: <DashboardScreen {...props} />,
+    ingredients: <IngredientsScreen {...props} />,
+    suppliers: <SuppliersScreen {...props} />,
+    recipes: <RecipesScreen {...props} />,
+    production: <ProductionScreen {...props} />,
+    waste: <WasteScreen {...props} />,
+  }
+
+  return (
+    <Shell screen={screen} onNavigate={setScreen}>
+      <div className="flex flex-col gap-5">
+        {error ? <ErrorBanner message={error} onDismiss={() => setError(null)} /> : null}
+        {SCREENS[screen]}
+      </div>
+    </Shell>
+  )
+}
+
+function SetupNotice() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="max-w-xl w-full bg-surface border border-line rounded-2xl p-6">
+        <h1 className="display m-0 text-[28px] font-bold">سويت كوست</h1>
+        <p className="mt-3 mb-4 text-[14px] leading-loose text-soft">
+          قاعدة البيانات غير مهيأة بعد. خطوتان فقط:
+        </p>
+        <ol className="m-0 ps-5 text-[14px] leading-loose text-soft flex flex-col gap-2">
+          <li>
+            شغّل ملف <code className="bg-sand px-1.5 py-0.5 rounded">supabase/migrations/0001_sweet_cost.sql</code>{' '}
+            في محرّر SQL داخل مشروع Supabase.
+          </li>
+          <li>
+            أنشئ ملف <code className="bg-sand px-1.5 py-0.5 rounded">.env.local</code> في جذر المشروع وضع فيه:
+          </li>
+        </ol>
+        <pre
+          dir="ltr"
+          className="mt-3 bg-bark text-[#f3ede4] rounded-xl p-4 text-[12.5px] leading-relaxed overflow-x-auto"
+        >
+{`VITE_SWEETCOST_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SWEETCOST_SUPABASE_ANON_KEY=eyJhbGci...`}
+        </pre>
+        <p className="mt-4 mb-0 text-[13px] text-muted">ثم أعد تشغيل الخادم.</p>
+      </div>
+    </div>
+  )
+}
