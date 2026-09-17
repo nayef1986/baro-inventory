@@ -9,8 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test src/sweetcost/lib/*.test.ts",
-    "fonts:local": "node scripts/fetch-fonts.mjs"
+    "test": "node --experimental-strip-types --test src/sweetcost/lib/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",

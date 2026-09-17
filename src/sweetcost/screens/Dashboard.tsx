@@ -117,9 +117,9 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
       ) : null}
 
       {/* ── رسالتك اليوم ─────────────────────────────────── */}
-      <section className="bg-bark rounded-2xl p-6 sm:p-7 text-[#f5efe6] flex flex-col lg:flex-row gap-7">
+      <section className="bg-bark rounded-2xl p-6 sm:p-7 text-[#f1ede0] flex flex-col lg:flex-row gap-7">
         <div className="flex-1 min-w-0 flex flex-col gap-3">
-          <div className="flex items-center gap-2.5 text-[11.5px] tracking-[0.12em] text-[#e0a96d]">
+          <div className="flex items-center gap-2.5 text-[11.5px] tracking-[0.12em] text-[#c6b274]">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
               <path d="M12 3v2" /><path d="M12 19v2" /><path d="M5 12H3" /><path d="M21 12h-2" />
               <circle cx="12" cy="12" r="4.5" />
@@ -128,9 +128,9 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           </div>
 
           <h2 className="display m-0 text-[24px] sm:text-[27px] font-bold leading-snug">{coach.card.head}</h2>
-          <p className="m-0 text-[15.5px] leading-loose text-[#e4dacb] max-w-[560px]">{coach.card.body}</p>
+          <p className="m-0 text-[15.5px] leading-loose text-[#d5dcc6] max-w-[560px]">{coach.card.body}</p>
           {coach.card.action ? (
-            <p className="m-0 text-[13.5px] leading-loose text-[#bfae99] border-r-2 border-[#5a4433] pr-3 max-w-[560px]">
+            <p className="m-0 text-[13.5px] leading-loose text-[#a3b491] border-r-2 border-[#45593a] pr-3 max-w-[560px]">
               {coach.card.action}
             </p>
           ) : null}
@@ -139,25 +139,25 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
         <div className="w-full lg:w-[302px] shrink-0 bg-bark-2 rounded-2xl p-5">
           {coach.progress ? (
             <div className="flex flex-col gap-2.5">
-              <div className="text-[12.5px] text-[#bfae99]">{coach.progress.label}</div>
+              <div className="text-[12.5px] text-[#a3b491]">{coach.progress.label}</div>
               <div className="text-[28px] font-bold num leading-none">
-                {money(coach.progress.goal)} <span className="text-[14px] font-medium text-[#bfae99]">ر.س</span>
+                {money(coach.progress.goal)} <span className="text-[14px] font-medium text-[#a3b491]">ر.س</span>
               </div>
-              <ProgressBar percent={coach.progress.percent} className="mt-1 !bg-[#48382c]" />
-              <div className="flex justify-between text-[12.5px] text-[#bfae99] num">
+              <ProgressBar percent={coach.progress.percent} className="mt-1 !bg-[#3d4f31]" />
+              <div className="flex justify-between text-[12.5px] text-[#a3b491] num">
                 <span>المحقق {money(coach.progress.achieved)}</span>
                 <span>{percent(coach.progress.percent, 1)}</span>
               </div>
-              <p className="m-0 mt-1.5 bg-bark-3 rounded-lg px-3.5 py-2.5 text-[13.5px] leading-relaxed text-[#f0e5d6]">
+              <p className="m-0 mt-1.5 bg-bark-3 rounded-lg px-3.5 py-2.5 text-[13.5px] leading-relaxed text-[#ede7d6]">
                 {coach.progress.message}
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              <div className="text-[12.5px] text-[#bfae99]">
+              <div className="text-[12.5px] text-[#a3b491]">
                 {periodKey === 'custom' ? 'الفترة المخصصة' : 'بدون هدف'}
               </div>
-              <p className="m-0 text-[14.5px] leading-loose text-[#e4dacb]">
+              <p className="m-0 text-[14.5px] leading-loose text-[#d5dcc6]">
                 {periodKey === 'custom'
                   ? 'لا يوجد هدف مرتبط بفترة مخصصة. اختر الأسبوع أو الشهر لمتابعة التقدم.'
                   : periodKey === 'today'
@@ -167,7 +167,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
               <button
                 type="button"
                 onClick={() => setShowGoals(true)}
-                className="self-start text-[13.5px] text-[#e0a96d] bg-transparent border-0 border-b border-[#5a4433] pb-0.5 cursor-pointer"
+                className="self-start text-[13.5px] text-[#c6b274] bg-transparent border-0 border-b border-[#45593a] pb-0.5 cursor-pointer"
               >
                 تعديل الأهداف
               </button>
@@ -289,7 +289,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
                   <div
                     key={m.id}
                     className={`rounded-xl px-4 py-3.5 border ${
-                      index === 0 ? 'bg-[#fcf7ee] border-[#e2d6c4]' : 'bg-surface border-line'
+                      index === 0 ? 'bg-[#f6edda] border-[#e5d5ae]' : 'bg-surface border-line'
                     }`}
                   >
                     <div className="flex items-center gap-2 text-[11.5px] font-semibold text-warn tracking-wide">

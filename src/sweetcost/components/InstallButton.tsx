@@ -17,7 +17,7 @@ export function InstallButton({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   const label = 'تثبيت على الجوال'
   const className =
     tone === 'dark'
-      ? 'w-full !bg-bark-3 !text-[#f0e5d6] !border-[#5a4433] hover:!bg-bark-2'
+      ? 'w-full !bg-bark-3 !text-[#ede7d6] !border-[#45593a] hover:!bg-bark-2'
       : '!px-3 !text-[13px]'
 
   return (

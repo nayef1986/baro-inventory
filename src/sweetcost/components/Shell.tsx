@@ -119,10 +119,10 @@ export function Shell({
   return (
     <div className="min-h-screen flex bg-cream">
       {/* التنقل الجانبي — كمبيوتر */}
-      <aside className="hidden lg:flex w-[236px] shrink-0 flex-col gap-7 bg-bark text-[#f3ede4] px-4 py-7 sticky top-0 h-screen">
+      <aside className="hidden lg:flex w-[236px] shrink-0 flex-col gap-7 bg-bark text-[#f1ede0] px-4 py-7 sticky top-0 h-screen">
         <div className="px-1.5">
           <div className="display text-[31px] font-bold leading-tight text-honey">سويت كوست</div>
-          <div className="mt-1.5 text-[10.5px] tracking-[0.18em] text-[#a99783]">SWEET COST</div>
+          <div className="mt-1.5 text-[10.5px] tracking-[0.18em] text-[#93a683]">SWEET COST</div>
         </div>
 
         <nav className="flex flex-col gap-0.5">
@@ -136,8 +136,8 @@ export function Shell({
                 aria-current={active ? 'page' : undefined}
                 className={`flex items-center gap-3 min-h-11 px-3 rounded-[9px] text-[14.5px] cursor-pointer text-right transition-colors border-0 ${
                   active
-                    ? 'bg-bark-3 text-[#fbf3e7] font-semibold border-r-[3px] border-r-accent'
-                    : 'bg-transparent text-[#d8ccbc] hover:bg-bark-2'
+                    ? 'bg-bark-3 text-[#f4f0e4] font-semibold border-r-[3px] border-r-accent'
+                    : 'bg-transparent text-[#b7c4a6] hover:bg-bark-2'
                 }`}
               >
                 {item.icon}
@@ -149,7 +149,7 @@ export function Shell({
 
         <div className="mt-auto flex flex-col gap-4">
           <InstallButton tone="dark" />
-          <p className="m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#a99783]">
+          <p className="m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#93a683]">
             كل التكاليف تُحسب من آخر سعر شراء مسجّل. لا تُدخل تكلفة يدوياً.
           </p>
         </div>
@@ -157,7 +157,7 @@ export function Shell({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* رأس الجوال */}
-        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#f3ede4] px-4 py-3 flex items-center justify-between gap-3">
+        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#f1ede0] px-4 py-3 flex items-center justify-between gap-3">
           <div className="display text-[22px] font-bold leading-tight text-honey">سويت كوست</div>
           <InstallButton />
         </header>

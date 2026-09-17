@@ -115,7 +115,7 @@ function SetupNotice() {
         </ol>
         <pre
           dir="ltr"
-          className="mt-3 max-w-full bg-bark text-[#f3ede4] rounded-xl p-4 text-[11.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-all"
+          className="mt-3 max-w-full bg-bark text-[#f1ede0] rounded-xl p-4 text-[11.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-all"
         >
 {`VITE_SWEETCOST_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SWEETCOST_SUPABASE_ANON_KEY=eyJhbGci...`}

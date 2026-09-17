@@ -1,86 +1,29 @@
 @import "tailwindcss";
 
-/* ── خط ثمانية ───────────────────────────────────────────────
-   المسار المحلي أولاً، وCDN احتياطي. `npm run fonts:local`
-   ينزّل الملفات ويلغي الاعتماد الخارجي.
-   الترخيص: https://font.thmanyah.com/licenses
-   ─────────────────────────────────────────────────────────── */
-
-@font-face {
-  font-family: "Thmanyah Sans";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src:
-    url("/sweet-cost/fonts/thmanyah-sans-Regular.woff2") format("woff2"),
-    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-sans/woff2/thmanyah-sans-Regular.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Thmanyah Sans";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src:
-    url("/sweet-cost/fonts/thmanyah-sans-Medium.woff2") format("woff2"),
-    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-sans/woff2/thmanyah-sans-Medium.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Thmanyah Sans";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src:
-    url("/sweet-cost/fonts/thmanyah-sans-Bold.woff2") format("woff2"),
-    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-sans/woff2/thmanyah-sans-Bold.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src:
-    url("/sweet-cost/fonts/thmanyah-serif-display-Regular.woff2") format("woff2"),
-    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-serif-display/woff2/thmanyah-serif-display-Regular.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src:
-    url("/sweet-cost/fonts/thmanyah-serif-display-Bold.woff2") format("woff2"),
-    url("https://cdn.jsdelivr.net/gh/engdawood/thmanyah-font-web@4266a9d/fonts/thmanyah-serif-display/woff2/thmanyah-serif-display-Bold.woff2") format("woff2");
-}
-
-/* ── ألوان ونصوص سويت كوست ───────────────────────────────── */
 @theme {
-  --color-cream: #faf7f2;
-  --color-surface: #ffffff;
-  --color-ink: #1c1917;
-  --color-muted: #6b6259;
-  --color-soft: #4a4340;
-  --color-line: #e7e0d6;
-  --color-line-soft: #f0eae0;
-  --color-accent: #b4531f;
-  --color-accent-dark: #8c3e15;
-  --color-bark: #241c17;
-  --color-bark-2: #2f251e;
-  --color-bark-3: #3e2e23;
-  --color-sand: #f3ede3;
-  --color-honey: #f1b87e;
-  --color-good: #22584c;
-  --color-good-soft: #e4efe9;
-  --color-bad: #8e2a1b;
-  --color-bad-soft: #f8e6e2;
-  --color-warn: #6b5320;
-  --color-warn-soft: #f5efe4;
+  --color-cream: #f4eee1;
+  --color-surface: #fcfaf4;
+  --color-ink: #1f2118;
+  --color-muted: #64604f;
+  --color-soft: #46493f;
+  --color-line: #e5dcc9;
+  --color-line-soft: #f0e9da;
+  --color-accent: #55793f;
+  --color-accent-dark: #3f5c33;
+  --color-bark: #26381f;
+  --color-bark-2: #31472a;
+  --color-bark-3: #3f5c33;
+  --color-sand: #eae1ce;
+  --color-honey: #e3d2a6;
+  --color-good: #31472a;
+  --color-good-soft: #e9efdf;
+  --color-bad: #a4442e;
+  --color-bad-soft: #f7e7e1;
+  --color-warn: #8a6218;
+  --color-warn-soft: #f6edda;
 
-  --font-display: "Thmanyah Serif Display", "Amiri", Georgia, serif;
-  --font-sans: "Thmanyah Sans", "SF Arabic", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Cairo", system-ui, sans-serif;
+  --font-sans: "Cairo", "SF Arabic", "Segoe UI", system-ui, sans-serif;
 }
 
 html {
@@ -100,6 +43,7 @@ body {
 
 .display {
   font-family: var(--font-display);
+  font-weight: 900;
 }
 
 input[type="number"]::-webkit-inner-spin-button,
