@@ -120,3 +120,42 @@ export function invoiceMessage({
 
   return lines.join('\n')
 }
+
+/** نص كشف الحساب الشهري — ملخّص يرافق ملف الـPDF */
+export function statementMessage({
+  statement,
+  monthText,
+  settings,
+  customerName,
+}: {
+  statement: { opening: number; charges: number; payments: number; closing: number; lines: unknown[] }
+  monthText: string
+  settings: Settings
+  customerName: string | null
+}): string {
+  const c = settings.currency
+  const lines: string[] = [`*${settings.store_name}*`]
+  if (settings.store_tagline) lines.push(settings.store_tagline)
+  lines.push('')
+
+  if (customerName) lines.push(`أهلاً ${customerName} 👋`)
+  lines.push(`*كشف حساب ${monthText}*`)
+  lines.push('')
+
+  lines.push(`رصيد ما قبل الشهر: ${money(statement.opening)} ${c}`)
+  lines.push(`فواتير الشهر (${statement.lines.length}): ${money(statement.charges)} ${c}`)
+  lines.push(`المسدَّد خلال الشهر: ${money(statement.payments)} ${c}`)
+  lines.push('')
+
+  lines.push(
+    statement.closing > 0
+      ? `*الرصيد المستحق: ${money(statement.closing)} ${c}*`
+      : 'الحساب مسدَّد بالكامل — شكراً لكم 🌿',
+  )
+
+  lines.push('')
+  lines.push('التفاصيل في الكشف المرفق.')
+  if (settings.store_phone) lines.push(`للتواصل: ${settings.store_phone}`)
+
+  return lines.join('\n')
+}

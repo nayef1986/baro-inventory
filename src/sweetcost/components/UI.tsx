@@ -245,7 +245,7 @@ export function TextInput({
   value: string
   onChange: (v: string) => void
   placeholder?: string
-  type?: 'text' | 'date' | 'search' | 'tel'
+  type?: 'text' | 'date' | 'month' | 'search' | 'tel'
 }) {
   return (
     <input

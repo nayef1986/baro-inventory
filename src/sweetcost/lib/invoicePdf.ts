@@ -78,3 +78,9 @@ export async function invoicePdfBlob(node: HTMLElement): Promise<Blob> {
 export function invoiceFileName(invoiceNo: string): string {
   return `${invoiceNo.replace(/[^\w-]+/g, '-')}.pdf`
 }
+
+/** كشف-مقهى-الرصيف-2026-09.pdf */
+export function statementFileName(customerName: string, month: string): string {
+  const name = customerName.trim().replace(/\s+/g, '-').replace(/[\\/:*?"<>|]+/g, '')
+  return `كشف-${name}-${month}.pdf`
+}

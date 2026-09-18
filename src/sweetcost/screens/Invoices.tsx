@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ScreenProps } from '../App.tsx'
 import { InvoiceCapture, InvoicePrint } from '../components/InvoicePrint.tsx'
+import { StatementCapture, StatementPrint } from '../components/StatementPrint.tsx'
 import {
   ACTION_ICONS,
   ActionButton,
@@ -49,8 +50,9 @@ import {
   type PaymentState,
   type TermKey,
 } from '../lib/dues.ts'
-import { invoiceMessage, normalizePhone, whatsappUrl } from '../lib/whatsapp.ts'
-import { invoiceFileName, invoicePdfBlob } from '../lib/invoicePdf.ts'
+import { invoiceMessage, normalizePhone, statementMessage, whatsappUrl } from '../lib/whatsapp.ts'
+import { invoiceFileName, invoicePdfBlob, statementFileName } from '../lib/invoicePdf.ts'
+import { buildStatement, currentMonth, monthLabel, monthRange } from '../lib/statement.ts'
 import { canShareFile, downloadFile, shareFile } from '../lib/share.ts'
 import { recipeCostFor } from '../lib/derive.ts'
 import { arabicDateShort, arabicDays, money, percent, todayISO } from '../lib/format.ts'
@@ -100,6 +102,7 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const [showForm, setShowForm] = useState(false)
   const [showStore, setShowStore] = useState(false)
   const [showCustomers, setShowCustomers] = useState(false)
+  const [showStatement, setShowStatement] = useState(false)
   const [printId, setPrintId] = useState<string | null>(null)
   const [payFor, setPayFor] = useState<SalesInvoice | null>(null)
   // الفاتورة التي تُصوَّر الآن إلى PDF، والعقدة التي تحمل رسمها
@@ -219,6 +222,13 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" onClick={() => setShowCustomers(true)}>
               العملاء
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setShowStatement(true)}
+              disabled={data.invoices.length === 0}
+            >
+              كشف شهري
             </Button>
             <Button variant="secondary" onClick={() => setShowStore(true)}>
               بيانات المتجر
@@ -404,6 +414,10 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
           onSaved={reload}
           onError={onError}
         />
+      ) : null}
+
+      {showStatement ? (
+        <StatementModal data={data} onClose={() => setShowStatement(false)} onError={onError} />
       ) : null}
 
       {showCustomers ? (
@@ -1190,6 +1204,193 @@ function PaymentModal({
       </p>
 
       {error ? <p className="mt-3 mb-0 text-[13px] text-bad">{error}</p> : null}
+    </Modal>
+  )
+}
+
+// ─── كشف الحساب الشهري ───────────────────────────────────────
+
+function StatementModal({
+  data,
+  onClose,
+  onError,
+}: {
+  data: SweetCostData
+  onClose: () => void
+  onError: (message: string) => void
+}) {
+  const today = todayISO()
+  const [customerId, setCustomerId] = useState<string>(data.customers[0]?.id ?? '')
+  const [month, setMonth] = useState(currentMonth(today))
+  const [busy, setBusy] = useState(false)
+  const captureNode = useRef<HTMLDivElement | null>(null)
+  const [capturing, setCapturing] = useState(false)
+  const [printing, setPrinting] = useState(false)
+
+  const customer = data.customers.find((c) => c.id === customerId) ?? null
+  const range = monthRange(month)
+  const statement = useMemo(
+    () =>
+      buildStatement({
+        invoices: data.invoices,
+        totals: data.invoiceTotals,
+        payments: data.invoicePayments,
+        customerId: customerId || null,
+        ...range,
+      }),
+    [data, customerId, range.from, range.to],
+  )
+
+  const sheet = {
+    statement,
+    month,
+    customer,
+    settings: data.settings,
+    issuedOn: today,
+  }
+
+  // الطباعة تبقى مركّبة حتى ينتهي المتصفح منها
+  useEffect(() => {
+    if (!printing) return
+    const done = () => setPrinting(false)
+    window.addEventListener('afterprint', done)
+    const timer = setTimeout(() => window.print(), 80)
+    return () => {
+      window.removeEventListener('afterprint', done)
+      clearTimeout(timer)
+    }
+  }, [printing])
+
+  /** يولّد الملف ثم يشارك أو ينزّل — نفس مسار الفاتورة */
+  async function makePdf(share: boolean) {
+    setBusy(true)
+    setCapturing(true)
+    try {
+      await new Promise((r) => setTimeout(r, 160))
+      const node = captureNode.current
+      if (!node) throw new Error('no node')
+
+      const blob = await invoicePdfBlob(node)
+      const file = new File([blob], statementFileName(customer?.name ?? 'نقدي', month), {
+        type: 'application/pdf',
+      })
+
+      if (!share) {
+        downloadFile(file)
+        return
+      }
+
+      const phone = normalizePhone(customer?.phone)
+      const message = statementMessage({
+        statement,
+        monthText: monthLabel(month),
+        settings: data.settings,
+        customerName: customer?.name ?? null,
+      })
+
+      if (canShareFile(file)) {
+        const outcome = await shareFile(file, message, `كشف ${monthLabel(month)}`)
+        if (outcome === 'unsupported') {
+          downloadFile(file)
+          if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
+        }
+      } else {
+        downloadFile(file)
+        if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
+      }
+    } catch {
+      onError('تعذّر تجهيز ملف الكشف. جرّب الطباعة.')
+    } finally {
+      setCapturing(false)
+      setBusy(false)
+    }
+  }
+
+  const hasPhone = Boolean(normalizePhone(customer?.phone))
+
+  return (
+    <Modal
+      title="كشف حساب شهري"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            إغلاق
+          </Button>
+          <Button variant="secondary" onClick={() => setPrinting(true)} disabled={busy}>
+            طباعة
+          </Button>
+          <Button variant="secondary" onClick={() => void makePdf(false)} disabled={busy}>
+            {busy ? 'جاري…' : 'تنزيل PDF'}
+          </Button>
+          <Button onClick={() => void makePdf(true)} disabled={busy || !hasPhone}>
+            واتساب
+          </Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="العميل" htmlFor="st-cust">
+          <Select
+            id="st-cust"
+            value={customerId}
+            onChange={setCustomerId}
+            placeholder="عميل نقدي"
+            options={data.customers.map((c) => ({ value: c.id, label: c.name }))}
+          />
+        </Field>
+        <Field label="الشهر" htmlFor="st-month">
+          <TextInput id="st-month" type="month" value={month} onChange={setMonth} />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        <ReadOnlyValue label="رصيد سابق">{money(statement.opening)}</ReadOnlyValue>
+        <ReadOnlyValue label={`فواتير الشهر (${statement.lines.length})`}>
+          {money(statement.charges)}
+        </ReadOnlyValue>
+        <ReadOnlyValue label="المسدَّد">{money(statement.payments)}</ReadOnlyValue>
+        <ReadOnlyValue label="الرصيد المستحق">{money(statement.closing)}</ReadOnlyValue>
+      </div>
+
+      {statement.lines.length === 0 ? (
+        <p className="mt-4 mb-0 text-[13.5px] text-muted">
+          لا توجد فواتير لهذا العميل في {monthLabel(month)}.
+        </p>
+      ) : (
+        <div className="mt-4 border border-line rounded-xl overflow-hidden">
+          {statement.lines.map((line) => (
+            <div
+              key={line.invoice.id}
+              className="flex items-center justify-between gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-[13.5px]"
+            >
+              <span className="num font-semibold">{line.invoice.invoice_no}</span>
+              <span className="text-muted">{arabicDateShort(line.invoice.issued_on)}</span>
+              <span className="num">{money(line.total)}</span>
+              <span className={`num ${line.balance > 0 ? 'text-bad font-semibold' : 'text-muted'}`}>
+                {line.balance > 0 ? money(line.balance) : 'مسدَّدة'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!hasPhone ? (
+        <p className="mt-3 mb-0 text-[12.5px] text-muted">
+          لا يوجد رقم جوال لهذا العميل — أضفه من «العملاء» ليعمل الإرسال.
+        </p>
+      ) : null}
+
+      {capturing ? (
+        <StatementCapture
+          nodeRef={(node) => {
+            captureNode.current = node
+          }}
+          {...sheet}
+        />
+      ) : null}
+
+      {printing ? <StatementPrint {...sheet} /> : null}
     </Modal>
   )
 }
