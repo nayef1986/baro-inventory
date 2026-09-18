@@ -41,6 +41,7 @@ src/sweetcost/
   lib/supabase.ts    العميل وتسجيل الدخول
   components/InvoicePrint.tsx  قالب فاتورة التوريد للطباعة/PDF
   components/Login.tsx         بوابة الدخول
+  components/Wordmark.tsx      الشعار — مسار متجه مُولَّد، لا يُحرَّر
   screens/           الشاشات السبع
 ```
 
@@ -59,6 +60,10 @@ src/sweetcost/
 | `#a33b28` | التنبيهات |
 
 الخط: **القاهرة** من Google Fonts — 400 للنص، 600 للتأكيد، 900 للعناوين.
+وهو الخط الوحيد المحمَّل: الشعار رسم متجه لا نص.
+
+الشعار والأيقونات تُولَّد من `brand/coco-cake-logo.png` — انظر
+`brand/README.md`.
 
 ## قواعد ثابتة في هذا الكود
 
@@ -123,9 +128,9 @@ src/sweetcost/
 
 ## النشر
 
-يعمل على <https://coco-cake-web-baro2.vercel.app/> — مشروع Vercel
-مستقل ينشر COCO CAKE وحده بلا تطبيق باروو. الوصفة كاملة في
-`deploy/coco-cake/README.md`.
+يعمل على <https://coco-cake-app-baro2.vercel.app/> — مشروع Vercel
+مستقل مربوط بالمستودع، ينشر COCO CAKE وحده بلا تطبيق باروو، وكل دفعة
+إلى `main` تنشر تلقائياً. التفاصيل في `deploy/coco-cake/README.md`.
 
 ## الوصول
 

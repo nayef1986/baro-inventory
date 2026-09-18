@@ -7,6 +7,7 @@ import { useState } from 'react'
 
 import { authErrorMessage, signIn } from '../lib/supabase.ts'
 import { Button, Field } from './UI.tsx'
+import { Wordmark } from './Wordmark.tsx'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -38,10 +39,7 @@ export function Login() {
           void submit()
         }}
       >
-        <div>
-          <h1 className="brand m-0 text-[30px] leading-none">Coco Cake</h1>
-          <p className="eyebrow m-0 mt-2.5 text-muted">Sweets &amp; Tarts</p>
-        </div>
+        <Wordmark className="w-[200px] h-auto text-bark" />
 
         <Field label="البريد الإلكتروني" htmlFor="lg-email">
           <input

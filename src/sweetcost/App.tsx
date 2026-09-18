@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Login } from './components/Login.tsx'
 import { Shell, type ScreenKey } from './components/Shell.tsx'
 import { ErrorBanner, Spinner } from './components/UI.tsx'
+import { Wordmark } from './components/Wordmark.tsx'
 import { loadAll } from './lib/api.ts'
 import { dbErrorMessage, isConfigured, requireAuth, supabase } from './lib/supabase.ts'
 import type { SweetCostData } from './types.ts'
@@ -120,7 +121,7 @@ function SetupNotice() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-xl min-w-0 bg-surface border border-line rounded-2xl p-5 sm:p-6">
-        <h1 className="brand m-0 text-[28px] font-bold">Coco Cake</h1>
+        <Wordmark className="w-[170px] h-auto text-bark" />
         <p className="mt-3 mb-4 text-[14px] leading-loose text-soft">
           قاعدة البيانات غير مهيأة بعد. خطوتان فقط:
         </p>

@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 
 import { requireAuth, signOut } from '../lib/supabase.ts'
 import { InstallButton } from './InstallButton.tsx'
+import { Wordmark } from './Wordmark.tsx'
 
 export type ScreenKey =
   | 'ingredients'
@@ -143,8 +144,7 @@ export function Shell({
       {/* التنقل الجانبي — كمبيوتر */}
       <aside className="hidden lg:flex w-[236px] shrink-0 flex-col gap-7 bg-bark text-[#ede3d7] px-4 py-7 sticky top-0 h-screen">
         <div className="px-1.5">
-          <div className="brand text-[32px] leading-none text-cream">Coco Cake</div>
-          <div className="eyebrow mt-2.5 text-honey">Sweets &amp; Tarts</div>
+          <Wordmark className="w-[188px] h-auto text-cream" />
           <div className="mt-3 text-[11px] text-[#b8a493]">{storeName}</div>
         </div>
 
@@ -189,11 +189,8 @@ export function Shell({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* رأس الجوال */}
-        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#ede3d7] px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <div className="brand text-[24px] leading-none text-cream">Coco Cake</div>
-            <div className="eyebrow mt-1.5 text-honey">Sweets &amp; Tarts</div>
-          </div>
+        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#ede3d7] px-4 py-2.5 flex items-center justify-between gap-3">
+          <Wordmark className="w-[104px] h-auto text-cream" />
           <InstallButton />
         </header>
 

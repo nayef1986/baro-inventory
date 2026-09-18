@@ -29,8 +29,8 @@
   --color-warn: #8a5f36;
   --color-warn-soft: #f2e7d8;
 
+  /* الشعار صار رسماً متجهاً في Wordmark.tsx، فلا حاجة لخط لاتيني. */
   --font-display: "Cairo", system-ui, sans-serif;
-  --font-brand: "Playfair Display", Georgia, serif;
   --font-sans: "Cairo", "SF Arabic", "Segoe UI", system-ui, sans-serif;
 }
 
@@ -52,20 +52,6 @@ body {
 .display {
   font-family: var(--font-display);
   font-weight: 900;
-}
-
-/* الشعار اللاتيني — Coco Cake */
-.brand {
-  font-family: var(--font-brand);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-
-/* السطور الصغيرة بتباعد واسع، كما في الهوية */
-.eyebrow {
-  font-size: 10px;
-  letter-spacing: 0.26em;
-  text-transform: uppercase;
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -120,7 +106,7 @@ input[type="number"] {
   align-items: flex-start;
   gap: 24pt;
   padding-bottom: 12pt;
-  border-bottom: 2pt solid #26381f;
+  border-bottom: 2pt solid #2a1d15;
 }
 
 .invoice-brand {
@@ -128,7 +114,7 @@ input[type="number"] {
   font-size: 22pt;
   font-weight: 900;
   letter-spacing: 0.02em;
-  color: #26381f;
+  color: #2a1d15;
 }
 
 .invoice-meta {
@@ -191,9 +177,9 @@ input[type="number"] {
 }
 
 .invoice-lines thead th {
-  background: #eae1ce;
-  border-top: 1pt solid #26381f;
-  border-bottom: 1pt solid #26381f;
+  background: #ede3d7;
+  border-top: 1pt solid #2a1d15;
+  border-bottom: 1pt solid #2a1d15;
   font-weight: 700;
   font-size: 9.5pt;
 }
@@ -261,11 +247,11 @@ input[type="number"] {
 
 .invoice-grand th,
 .invoice-grand td {
-  border-top: 1.5pt solid #26381f;
+  border-top: 1.5pt solid #2a1d15;
   padding-top: 8pt;
   font-size: 13pt;
   font-weight: 900;
-  color: #26381f;
+  color: #2a1d15;
 }
 
 .invoice-thanks {
