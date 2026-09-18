@@ -72,7 +72,7 @@ export default function App() {
 
   if (!isConfigured) return <SetupNotice />
   if (!authReady) return <Spinner label="جاري التحقّق…" />
-  if (!signedIn) return <Login storeName="COCO CAKE" />
+  if (!signedIn) return <Login />
   if (loading) return <Spinner />
 
   if (fatal && !data) {
@@ -140,7 +140,7 @@ function SetupNotice() {
         </ol>
         <pre
           dir="ltr"
-          className="mt-3 max-w-full bg-bark text-[#f1ede0] rounded-xl p-4 text-[11.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-all"
+          className="mt-3 max-w-full bg-bark text-[#ede3d7] rounded-xl p-4 text-[11.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-all"
         >
 {`VITE_SWEETCOST_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SWEETCOST_SUPABASE_ANON_KEY=eyJhbGci...`}

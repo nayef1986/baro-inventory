@@ -306,7 +306,7 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
         </Card>
 
         <div className="flex flex-col gap-4">
-          <div className="bg-bark rounded-2xl p-5 text-[#f1ede0]">
+          <div className="bg-bark rounded-2xl p-5 text-[#ede3d7]">
             <h2 className="m-0 mb-4 text-[16.5px] font-bold text-honey">تكلفة الدفعة</h2>
             <dl className="m-0 flex flex-col gap-2.5">
               <DarkRow label="التكلفة القياسية" value={money(totals.standardCost)} />
@@ -330,7 +330,7 @@ export default function ProductionScreen({ data, reload, onError }: ScreenProps)
               <DarkRow label="الهامش الفعلي" value={percent(actualMargin.marginPercent)} bordered />
             </div>
 
-            <p className="m-0 mt-4 text-[12.5px] leading-relaxed text-[#93a683]">
+            <p className="m-0 mt-4 text-[12.5px] leading-relaxed text-[#b8a493]">
               التكلفة تُحفظ مع الدفعة كما هي الآن، فلا تتغيّر أرقام الماضي عند تغيّر أسعار المكونات لاحقاً.
             </p>
           </div>
@@ -402,10 +402,10 @@ function DarkRow({
   strong?: boolean
   tone?: 'good' | 'bad'
 }) {
-  const color = tone === 'bad' ? 'text-[#e9a58c]' : tone === 'good' ? 'text-[#bbd79a]' : ''
+  const color = tone === 'bad' ? 'text-[#d99e86]' : tone === 'good' ? 'text-[#c9a177]' : ''
   return (
     <div className={`flex justify-between items-baseline ${bordered ? 'border-t border-bark-3 pt-2.5' : ''}`}>
-      <dt className="text-[13px] text-[#a3b491]">{label}</dt>
+      <dt className="text-[13px] text-[#b8a493]">{label}</dt>
       <dd className={`m-0 text-[14.5px] num ${strong ? 'font-bold' : 'font-semibold'} ${color}`}>{value}</dd>
     </div>
   )

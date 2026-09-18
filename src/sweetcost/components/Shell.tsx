@@ -141,10 +141,11 @@ export function Shell({
   return (
     <div className="min-h-screen flex bg-cream">
       {/* التنقل الجانبي — كمبيوتر */}
-      <aside className="hidden lg:flex w-[236px] shrink-0 flex-col gap-7 bg-bark text-[#f1ede0] px-4 py-7 sticky top-0 h-screen">
+      <aside className="hidden lg:flex w-[236px] shrink-0 flex-col gap-7 bg-bark text-[#ede3d7] px-4 py-7 sticky top-0 h-screen">
         <div className="px-1.5">
-          <div className="display text-[31px] font-bold leading-tight text-honey">سويت كوست</div>
-          <div className="mt-1.5 text-[10.5px] tracking-[0.18em] text-[#93a683]">{storeName}</div>
+          <div className="brand text-[32px] leading-none text-cream">Coco Cake</div>
+          <div className="eyebrow mt-2.5 text-honey">Sweets &amp; Tarts</div>
+          <div className="mt-3 text-[11px] text-[#b8a493]">{storeName}</div>
         </div>
 
         <nav className="flex flex-col gap-0.5">
@@ -158,8 +159,8 @@ export function Shell({
                 aria-current={active ? 'page' : undefined}
                 className={`flex items-center gap-3 min-h-11 px-3 rounded-[9px] text-[14.5px] cursor-pointer text-right transition-colors border-0 ${
                   active
-                    ? 'bg-bark-3 text-[#f4f0e4] font-semibold border-r-[3px] border-r-accent'
-                    : 'bg-transparent text-[#b7c4a6] hover:bg-bark-2'
+                    ? 'bg-bark-3 text-[#f7f1e8] font-semibold border-r-[3px] border-r-accent'
+                    : 'bg-transparent text-[#b8a493] hover:bg-bark-2'
                 }`}
               >
                 {item.icon}
@@ -175,12 +176,12 @@ export function Shell({
             <button
               type="button"
               onClick={() => void signOut()}
-              className="min-h-11 px-4 rounded-xl text-[13.5px] font-semibold cursor-pointer bg-transparent border border-[#45593a] text-[#b7c4a6] hover:bg-bark-2"
+              className="min-h-11 px-4 rounded-xl text-[13.5px] font-semibold cursor-pointer bg-transparent border border-[#5c4437] text-[#b8a493] hover:bg-bark-2"
             >
               تسجيل الخروج
             </button>
           ) : null}
-          <p className="m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#93a683]">
+          <p className="m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#b8a493]">
             كل التكاليف تُحسب من آخر سعر شراء مسجّل. لا تُدخل تكلفة يدوياً.
           </p>
         </div>
@@ -188,10 +189,10 @@ export function Shell({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* رأس الجوال */}
-        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#f1ede0] px-4 py-3 flex items-center justify-between gap-3">
+        <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#ede3d7] px-4 py-3 flex items-center justify-between gap-3">
           <div>
-            <div className="display text-[22px] font-bold leading-tight text-honey">سويت كوست</div>
-            <div className="text-[10.5px] tracking-[0.16em] text-[#93a683] mt-0.5">{storeName}</div>
+            <div className="brand text-[24px] leading-none text-cream">Coco Cake</div>
+            <div className="eyebrow mt-1.5 text-honey">Sweets &amp; Tarts</div>
           </div>
           <InstallButton />
         </header>

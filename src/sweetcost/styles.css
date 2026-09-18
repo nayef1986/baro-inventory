@@ -1,28 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-cream: #f4eee1;
-  --color-surface: #fcfaf4;
-  --color-ink: #1f2118;
-  --color-muted: #64604f;
-  --color-soft: #46493f;
-  --color-line: #e5dcc9;
-  --color-line-soft: #f0e9da;
-  --color-accent: #55793f;
-  --color-accent-dark: #3f5c33;
-  --color-bark: #26381f;
-  --color-bark-2: #31472a;
-  --color-bark-3: #3f5c33;
-  --color-sand: #eae1ce;
-  --color-honey: #e3d2a6;
-  --color-good: #31472a;
-  --color-good-soft: #e9efdf;
-  --color-bad: #a4442e;
-  --color-bad-soft: #f7e7e1;
-  --color-warn: #8a6218;
-  --color-warn-soft: #f6edda;
+  --color-cream: #ede3d7;
+  --color-surface: #f7f1e8;
+  --color-ink: #2a1d15;
+  --color-muted: #6e5b4b;
+  --color-soft: #55443a;
+  --color-line: #d9c9b6;
+  --color-line-soft: #e9dfd2;
+  --color-accent: #8a5f36;
+  --color-accent-dark: #5c4437;
+  --color-bark: #2a1d15;
+  --color-bark-2: #3a2820;
+  --color-bark-3: #4a362b;
+  --color-sand: #e1d3c2;
+  --color-honey: #c9a177;
+  --color-good: #4a6b4a;
+  --color-good-soft: #e6ebdf;
+  --color-bad: #a33b28;
+  --color-bad-soft: #f5e3dd;
+  --color-warn: #8a5f36;
+  --color-warn-soft: #f2e7d8;
 
   --font-display: "Cairo", system-ui, sans-serif;
+  --font-brand: "Playfair Display", Georgia, serif;
   --font-sans: "Cairo", "SF Arabic", "Segoe UI", system-ui, sans-serif;
 }
 
@@ -44,6 +45,20 @@ body {
 .display {
   font-family: var(--font-display);
   font-weight: 900;
+}
+
+/* الشعار اللاتيني — Coco Cake */
+.brand {
+  font-family: var(--font-brand);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+/* السطور الصغيرة بتباعد واسع، كما في الهوية */
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
 }
 
 input[type="number"]::-webkit-inner-spin-button,

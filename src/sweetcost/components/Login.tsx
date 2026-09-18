@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { authErrorMessage, signIn } from '../lib/supabase.ts'
 import { Button, Field } from './UI.tsx'
 
-export function Login({ storeName }: { storeName: string }) {
+export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -39,8 +39,8 @@ export function Login({ storeName }: { storeName: string }) {
         }}
       >
         <div>
-          <h1 className="display m-0 text-[26px] font-bold leading-tight">سويت كوست</h1>
-          <p className="m-0 mt-1 text-[12.5px] tracking-[0.14em] text-muted">{storeName}</p>
+          <h1 className="brand m-0 text-[30px] leading-none">Coco Cake</h1>
+          <p className="eyebrow m-0 mt-2.5 text-muted">Sweets &amp; Tarts</p>
         </div>
 
         <Field label="البريد الإلكتروني" htmlFor="lg-email">

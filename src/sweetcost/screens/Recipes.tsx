@@ -422,7 +422,7 @@ function RecipeEditor({
         {error ? <p className="m-0 text-[13px] text-bad">{error}</p> : null}
       </div>
 
-      <aside className="bg-bark rounded-2xl p-5 text-[#f1ede0] flex flex-col gap-4">
+      <aside className="bg-bark rounded-2xl p-5 text-[#ede3d7] flex flex-col gap-4">
         <h2 className="m-0 text-[16.5px] font-bold text-honey">التكلفة والربح</h2>
 
         <dl className="m-0 flex flex-col gap-2.5">
@@ -433,14 +433,14 @@ function RecipeEditor({
         </dl>
 
         <div className="bg-bark-2 rounded-xl p-4">
-          <div className="text-[12.5px] text-[#a3b491]">الربح للـ{yieldUnitLabel || 'قطعة'}</div>
-          <div className={`mt-1 text-[30px] font-bold num leading-tight ${p.profit < 0 ? 'text-[#e9a58c]' : ''}`}>
-            {money(p.profit)} <span className="text-[14px] font-medium text-[#a3b491]">ر.س</span>
+          <div className="text-[12.5px] text-[#b8a493]">الربح للـ{yieldUnitLabel || 'قطعة'}</div>
+          <div className={`mt-1 text-[30px] font-bold num leading-tight ${p.profit < 0 ? 'text-[#d99e86]' : ''}`}>
+            {money(p.profit)} <span className="text-[14px] font-medium text-[#b8a493]">ر.س</span>
           </div>
-          <ProgressBar percent={Math.max(0, p.marginPercent)} className="mt-3.5 !bg-[#3d4f31]" />
-          <div className="flex justify-between mt-2 text-[12.5px] text-[#a3b491] num">
+          <ProgressBar percent={Math.max(0, p.marginPercent)} className="mt-3.5 !bg-[#4a362b]" />
+          <div className="flex justify-between mt-2 text-[12.5px] text-[#b8a493] num">
             <span>هامش الربح</span>
-            <span className={`font-semibold ${p.marginPercent < 35 ? 'text-[#e9a58c]' : 'text-[#bbd79a]'}`}>
+            <span className={`font-semibold ${p.marginPercent < 35 ? 'text-[#d99e86]' : 'text-[#c9a177]'}`}>
               {percent(p.marginPercent)}
             </span>
           </div>
@@ -451,7 +451,7 @@ function RecipeEditor({
         </dl>
 
         {p.profit < 0 && price > 0 ? (
-          <p className="m-0 text-[12.5px] leading-relaxed text-[#e9a58c]">
+          <p className="m-0 text-[12.5px] leading-relaxed text-[#d99e86]">
             سعر البيع أقل من التكلفة. راجع السعر أو مكونات الوصفة.
           </p>
         ) : null}
@@ -461,7 +461,7 @@ function RecipeEditor({
             {busy ? 'جاري الحفظ…' : recipe ? 'حفظ التعديلات' : 'حفظ الوصفة'}
           </Button>
           {onDelete ? (
-            <Button variant="ghost" onClick={onDelete} className="w-full !text-[#e9a58c]">
+            <Button variant="ghost" onClick={onDelete} className="w-full !text-[#d99e86]">
               حذف الوصفة
             </Button>
           ) : null}
@@ -474,7 +474,7 @@ function RecipeEditor({
 function Row({ label, value, bordered = false }: { label: string; value: string; bordered?: boolean }) {
   return (
     <div className={`flex justify-between items-baseline ${bordered ? 'border-t border-bark-3 pt-2.5' : ''}`}>
-      <dt className="text-[13.5px] text-[#a3b491]">{label}</dt>
+      <dt className="text-[13.5px] text-[#b8a493]">{label}</dt>
       <dd className="m-0 text-[15px] font-semibold num">{value}</dd>
     </div>
   )
