@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS: Settings = {
   monthly_goal: 0,
   currency: 'ر.س',
   store_name: 'COCO CAKE',
+  store_tagline: 'TART BAKERY',
   store_phone: null,
   store_address: null,
   vat_number: null,
@@ -325,6 +326,7 @@ export type SettingsInput = Partial<
     | 'weekly_goal'
     | 'monthly_goal'
     | 'store_name'
+    | 'store_tagline'
     | 'store_phone'
     | 'store_address'
     | 'vat_number'

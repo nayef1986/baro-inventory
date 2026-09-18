@@ -79,6 +79,23 @@ export function arabicDateShort(iso: string): string {
   return `${d.getDate()} ${AR_MONTHS[d.getMonth()] ?? ''}`
 }
 
+/** 2026-09-17 ← 6 ربيع الأول 1448 — يُستعمل في ترويسة الفاتورة */
+export function hijriDate(iso: string): string {
+  const d = parseISO(iso)
+  if (!d) return ''
+  try {
+    // nu-latn: أرقام لاتينية كبقية الفاتورة، لا هندية
+    return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(d)
+  } catch {
+    // متصفّح بلا دعم للتقويم الهجري — نتجاهل السطر بدل كسر الفاتورة
+    return ''
+  }
+}
+
 function parseISO(iso: string): Date | null {
   if (!iso) return null
   const d = new Date(`${iso.slice(0, 10)}T00:00:00`)

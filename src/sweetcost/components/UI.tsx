@@ -97,6 +97,102 @@ export function Button({
   )
 }
 
+// ─── أزرار الإجراءات في صفوف الجداول ─────────────────────────
+//
+// إطار واحد مقسّم بفواصل: الأزرار تُقرأ كمجموعة مرتّبة لا كنصوص
+// متناثرة، ولكل خانة رمز واسم تحته فلا لبس في وظيفتها. الارتفاع
+// 46 بكسل — فوق الحد الأدنى المريح للضغط بالإصبع.
+
+export function ActionGroup({ children }: { children: ReactNode }) {
+  return (
+    <div className="inline-flex rounded-xl border border-line overflow-hidden bg-surface divide-x divide-line rtl:divide-x-reverse">
+      {children}
+    </div>
+  )
+}
+
+export function ActionButton({
+  icon,
+  label,
+  onClick,
+  tone = 'normal',
+  disabled = false,
+}: {
+  icon: ReactNode
+  label: string
+  onClick: () => void
+  tone?: 'normal' | 'danger'
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`flex flex-col items-center justify-center gap-0.5 min-w-14 px-2.5 py-1.5 min-h-[46px] cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
+        tone === 'danger' ? 'text-bad hover:bg-bad-soft' : 'text-soft hover:bg-sand hover:text-ink'
+      }`}
+    >
+      {icon}
+      <span className="text-[10.5px] font-semibold leading-none">{label}</span>
+    </button>
+  )
+}
+
+const actionIcon = (paths: ReactNode) => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {paths}
+  </svg>
+)
+
+export const ACTION_ICONS = {
+  print: actionIcon(
+    <>
+      <path d="M6 9V3h12v6" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <path d="M6 14h12v7H6z" />
+    </>,
+  ),
+  paid: actionIcon(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 3 3 5-6" />
+    </>,
+  ),
+  unpaid: actionIcon(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12h8" />
+    </>,
+  ),
+  edit: actionIcon(
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </>,
+  ),
+  remove: actionIcon(
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5M14 11v5" />
+    </>,
+  ),
+}
+
 // ─── حقول الإدخال ────────────────────────────────────────────
 
 const FIELD_CLASS =

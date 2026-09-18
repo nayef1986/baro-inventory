@@ -8,6 +8,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ScreenProps } from '../App.tsx'
 import { InvoicePrint } from '../components/InvoicePrint.tsx'
 import {
+  ACTION_ICONS,
+  ActionButton,
+  ActionGroup,
   Button,
   Card,
   CardTitle,
@@ -198,38 +201,35 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                       <Pill tone={STATUS_TONE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Pill>
                     </Td>
                     <Td className="pe-5">
-                      <div className="flex gap-1 justify-end flex-wrap">
-                        <Button
-                          variant="ghost"
-                          className="!px-2.5 !text-[13px]"
-                          onClick={() => setPrintId(invoice.id)}
-                        >
-                          PDF
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="!px-2.5 !text-[13px]"
-                          onClick={() => void markPaid(invoice)}
-                        >
-                          {invoice.status === 'paid' ? 'إلغاء الدفع' : 'مدفوعة'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="!px-2.5 !text-[13px]"
-                          onClick={() => {
-                            setEditing(invoice)
-                            setShowForm(true)
-                          }}
-                        >
-                          تعديل
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="!px-2.5 !text-[13px] !text-bad"
-                          onClick={() => void remove(invoice)}
-                        >
-                          حذف
-                        </Button>
+                      <div className="flex justify-end">
+                        <ActionGroup>
+                          <ActionButton
+                            icon={ACTION_ICONS.print}
+                            label="PDF"
+                            onClick={() => setPrintId(invoice.id)}
+                          />
+                          <ActionButton
+                            icon={
+                              invoice.status === 'paid' ? ACTION_ICONS.unpaid : ACTION_ICONS.paid
+                            }
+                            label={invoice.status === 'paid' ? 'غير مدفوعة' : 'مدفوعة'}
+                            onClick={() => void markPaid(invoice)}
+                          />
+                          <ActionButton
+                            icon={ACTION_ICONS.edit}
+                            label="تعديل"
+                            onClick={() => {
+                              setEditing(invoice)
+                              setShowForm(true)
+                            }}
+                          />
+                          <ActionButton
+                            icon={ACTION_ICONS.remove}
+                            label="حذف"
+                            tone="danger"
+                            onClick={() => void remove(invoice)}
+                          />
+                        </ActionGroup>
                       </div>
                     </Td>
                   </tr>
@@ -591,6 +591,7 @@ function StoreModal({
 }) {
   const s = data.settings
   const [storeName, setStoreName] = useState(s.store_name)
+  const [tagline, setTagline] = useState(s.store_tagline)
   const [phone, setPhone] = useState(s.store_phone ?? '')
   const [address, setAddress] = useState(s.store_address ?? '')
   const [vatNumber, setVatNumber] = useState(s.vat_number ?? '')
@@ -610,6 +611,7 @@ function StoreModal({
     try {
       await saveSettings({
         store_name: storeName.trim(),
+        store_tagline: tagline.trim(),
         store_phone: phone.trim() || null,
         store_address: address.trim() || null,
         vat_number: vatNumber.trim() || null,
@@ -645,6 +647,13 @@ function StoreModal({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="اسم المتجر" htmlFor="st-name" hint="يظهر في ترويسة الفاتورة">
           <TextInput id="st-name" value={storeName} onChange={setStoreName} />
+        </Field>
+        <Field
+          label="السطر الإنجليزي"
+          htmlFor="st-tagline"
+          hint="يظهر تحت الشعار في الفاتورة"
+        >
+          <TextInput id="st-tagline" value={tagline} onChange={setTagline} />
         </Field>
         <Field label="رقم التواصل" htmlFor="st-phone">
           <TextInput id="st-phone" type="tel" value={phone} onChange={setPhone} />

@@ -141,6 +141,7 @@ export interface Settings {
   monthly_goal: number
   currency: string
   store_name: string
+  store_tagline: string
   store_phone: string | null
   store_address: string | null
   vat_number: string | null

@@ -93,116 +93,211 @@ input[type="number"] {
   }
 }
 
+/* ─── فاتورة التوريد ──────────────────────────────────────────
+   مستند محدّد بالكامل: كل خانة في الجدول مؤطّرة، والكتل مؤطّرة،
+   على نسق مستندات باروو. الألوان بالحبر الشوكولاتي لا الرمادي.
+
+   print-color-adjust ضروري: بدونه تحذف المتصفحات خلفيات الترويسة
+   والصفوف عند الطباعة، فيخرج الجدول بلا تمييز. */
+
 .invoice-sheet {
   font-family: var(--font-sans);
   color: #1a1a1a;
   font-size: 11pt;
   line-height: 1.7;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
+
+/* ── الترويسة ── */
 
 .invoice-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24pt;
+  gap: 20pt;
   padding-bottom: 12pt;
-  border-bottom: 2pt solid #2a1d15;
+  border-bottom: 3pt solid #2a1d15;
 }
 
-.invoice-brand {
-  margin: 0;
-  font-size: 22pt;
-  font-weight: 900;
-  letter-spacing: 0.02em;
+.invoice-identity {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.invoice-logo {
+  display: block;
+  width: 150pt;
+  height: auto;
   color: #2a1d15;
 }
 
+.invoice-tagline {
+  margin-top: 5pt;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: #8a5f36;
+}
+
 .invoice-meta {
-  margin-top: 4pt;
+  margin-top: 6pt;
   font-size: 9.5pt;
   color: #4a4a40;
 }
 
+.invoice-id {
+  flex: 0 0 auto;
+}
+
 .invoice-kind {
   font-size: 12pt;
-  font-weight: 700;
+  font-weight: 900;
   margin-bottom: 6pt;
   text-align: left;
+  color: #2a1d15;
+}
+
+.invoice-id-table {
+  border-collapse: collapse;
+  border: 1pt solid #2a1d15;
+}
+
+.invoice-id-table th,
+.invoice-id-table td {
+  border: 0.75pt solid #d9c9b6;
+  padding: 3pt 8pt;
+  font-size: 9.5pt;
 }
 
 .invoice-id-table th {
   text-align: right;
   font-weight: 500;
   color: #4a4a40;
-  font-size: 9.5pt;
-  padding: 1pt 0;
-  padding-left: 10pt;
+  background: #f7f1e8;
 }
 
 .invoice-id-table td {
   text-align: left;
   font-weight: 700;
   font-size: 10pt;
-  padding: 1pt 0;
 }
 
-.invoice-party {
+/* ── بطاقات الملخّص ── */
+
+.invoice-sum {
+  display: flex;
+  gap: 8pt;
   margin-top: 14pt;
 }
 
+.invoice-sum > div {
+  flex: 1;
+  border: 1pt solid #d9c9b6;
+  border-radius: 6pt;
+  background: #f7f1e8;
+  padding: 8pt 6pt;
+  text-align: center;
+}
+
+.invoice-sum .v {
+  font-size: 16pt;
+  font-weight: 900;
+  color: #2a1d15;
+  line-height: 1.2;
+}
+
+.invoice-sum .l {
+  font-size: 8.5pt;
+  color: #6e5b4b;
+  margin-top: 2pt;
+}
+
+/* ── العميل ── */
+
+.invoice-party {
+  margin-top: 14pt;
+  border: 1pt solid #d9c9b6;
+  border-radius: 6pt;
+  padding: 8pt 10pt;
+}
+
 .invoice-party h2 {
-  margin: 0 0 4pt;
-  font-size: 9.5pt;
+  margin: 0 0 3pt;
+  font-size: 9pt;
   font-weight: 600;
-  color: #4a4a40;
+  color: #6e5b4b;
   letter-spacing: 0.06em;
 }
 
 .invoice-party-name {
   font-size: 13pt;
   font-weight: 700;
+  color: #2a1d15;
 }
+
+.invoice-party .invoice-meta {
+  margin-top: 2pt;
+}
+
+/* ── جدول البنود: محدّد بالكامل ── */
 
 .invoice-lines {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 16pt;
+  margin-top: 14pt;
+  border: 1.5pt solid #2a1d15;
 }
 
 .invoice-lines th,
 .invoice-lines td {
-  text-align: right;
-  padding: 7pt 8pt;
+  border: 0.75pt solid #d9c9b6;
+  text-align: center;
+  padding: 6pt 7pt;
   font-size: 10pt;
 }
 
 .invoice-lines thead th {
-  background: #ede3d7;
-  border-top: 1pt solid #2a1d15;
-  border-bottom: 1pt solid #2a1d15;
+  background: #2a1d15;
+  color: #f7f1e8;
+  border-color: #2a1d15;
   font-weight: 700;
   font-size: 9.5pt;
 }
 
-.invoice-lines tbody td {
-  border-bottom: 0.5pt solid #d8d2c2;
+.invoice-lines tbody tr:nth-child(even) td {
+  background: #faf6f0;
 }
 
 .invoice-lines .col-idx {
   width: 7%;
 }
 
+.invoice-lines .col-name,
+.invoice-lines thead .col-name {
+  text-align: right;
+  font-weight: 600;
+  color: #2a1d15;
+}
+
+.invoice-lines thead .col-name {
+  color: #f7f1e8;
+}
+
 .invoice-lines .col-num {
   text-align: left;
-  width: 17%;
+  width: 15%;
   white-space: nowrap;
 }
+
+/* ── التذييل والمجاميع ── */
 
 .invoice-foot {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24pt;
+  gap: 20pt;
   margin-top: 14pt;
 }
 
@@ -216,7 +311,7 @@ input[type="number"] {
   margin: 0 0 3pt;
   font-size: 9.5pt;
   font-weight: 600;
-  color: #4a4a40;
+  color: #6e5b4b;
 }
 
 .invoice-notes p {
@@ -227,38 +322,67 @@ input[type="number"] {
 .invoice-totals {
   width: 46%;
   border-collapse: collapse;
+  border: 1.5pt solid #2a1d15;
+}
+
+.invoice-totals th,
+.invoice-totals td {
+  border: 0.75pt solid #d9c9b6;
+  padding: 5pt 8pt;
 }
 
 .invoice-totals th {
   text-align: right;
   font-weight: 500;
   font-size: 10pt;
-  padding: 5pt 0;
   color: #4a4a40;
+  background: #f7f1e8;
 }
 
 .invoice-totals td {
   text-align: left;
   font-weight: 600;
   font-size: 10.5pt;
-  padding: 5pt 0;
   white-space: nowrap;
 }
 
 .invoice-grand th,
 .invoice-grand td {
-  border-top: 1.5pt solid #2a1d15;
-  padding-top: 8pt;
-  font-size: 13pt;
+  font-size: 12.5pt;
   font-weight: 900;
-  color: #2a1d15;
+  color: #f7f1e8;
+  background: #2a1d15;
+  border-color: #2a1d15;
+}
+
+/* ── التوقيعات ── */
+
+.invoice-signs {
+  display: flex;
+  justify-content: space-around;
+  gap: 20pt;
+  margin-top: 26pt;
+}
+
+.invoice-signs .sign {
+  text-align: center;
+  font-size: 10pt;
+  color: #4a4a40;
+  flex: 0 0 40%;
+}
+
+/* فراغ للتوقيع، ثم خط، ثم الصفة تحته */
+.invoice-signs .line {
+  height: 26pt;
+  border-bottom: 0.75pt solid #6e5b4b;
+  margin-bottom: 5pt;
 }
 
 .invoice-thanks {
-  margin-top: 26pt;
-  padding-top: 8pt;
-  border-top: 0.5pt solid #d8d2c2;
+  margin-top: 18pt;
+  padding-top: 7pt;
+  border-top: 0.75pt solid #d9c9b6;
   font-size: 9.5pt;
-  color: #4a4a40;
+  color: #6e5b4b;
   text-align: center;
 }
