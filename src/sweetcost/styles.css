@@ -63,7 +63,14 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* شريط التنقل السفلي يحترم منطقة الإيماءة في الآيفون */
+/* مناطق الأمان في الآيفون.
+   التطبيق يعمل بـviewport-fit=cover وشريط حالة شفاف، فالمحتوى
+   يمتدّ تحت الساعة والبطارية أعلى الشاشة وتحت شريط الإيماءة
+   أسفلها. بلا هاتين المسافتين يختفي الشعار تحت الساعة. */
+.pt-safe {
+  padding-top: calc(0.625rem + env(safe-area-inset-top, 0px));
+}
+
 .pb-safe {
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
