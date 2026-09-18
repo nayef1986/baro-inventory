@@ -1,50 +1,55 @@
 # نشر COCO CAKE على Vercel
 
-مشروع Vercel اسمه **`coco-cake-web`** في فريق `baro`. ينشر تطبيق
-COCO CAKE وحده — تطبيق باروو لا يُنشر معه.
+هذا المجلد هو جذر مشروع Vercel الذي ينشر تطبيق COCO CAKE وحده —
+تطبيق باروو لا يُنشر معه.
 
-## لماذا هذه الطريقة
+## كيف يعمل
 
-مشروع Vercel غير مربوط بـGitHub، لأن تطبيق Vercel على GitHub لا يملك
-صلاحية على `nayef1986/baro-inventory`. بدل انتظار الصلاحية، المشروع
-يحمل خمسة ملفات فقط، و`prepare.sh` يجلب المصدر من المستودع العام وقت
-البناء ويثبّته قبل `vite build`.
+المجلد يحمل ملفات المشروع فقط، و`prepare.sh` يجهّز المصدر قبل البناء:
 
-المرجع في `prepare.sh` هو `main`، فكل إعادة نشر تأخذ آخر ما دُفع.
+- **إن كان المستودع مسحوباً** (المشروع مربوط بـGitHub) ينسخ من
+  `../../src/sweetcost` مباشرة.
+- **وإلا** يجلب `main` من المستودع العام عبر codeload.
+
+فيعمل في الحالتين بلا تغيير: مربوطاً بـGitHub أو منشوراً بالملفات مباشرة.
 
 ## الملفات
 
 | الملف | دوره |
 | --- | --- |
-| `package.json` | الاعتماديات التي يحتاجها sweetcost فقط |
+| `package.json` | الاعتماديات التي يحتاجها sweetcost فقط، وأمر البناء |
 | `vite.config.js` | مدخل بناء واحد: `sweet-cost/index.html` |
 | `tsconfig.json` | نفس إعدادات المستودع |
 | `vercel.json` | تحويل `/` إلى `/sweet-cost/` وترويسات الـservice worker |
-| `prepare.sh` | يجلب المصدر ويكتب `.env.production` |
+| `prepare.sh` | يجهّز المصدر ويكتب `.env.production` |
+| `.gitignore` | ما يولّده `prepare.sh` — لا يُلتزم به هنا |
 
-## إعدادات البناء في Vercel
+## إعدادات المشروع في Vercel
 
 ```
+Root Directory:    deploy/coco-cake
 Framework:         vite
-Install Command:   npm install
-Build Command:     sh prepare.sh && npm run build
+Build Command:     npm run build     (يشغّل prepare.sh ثم vite build)
 Output Directory:  dist
 ```
 
 لا متغيّرات بيئة في لوحة Vercel — `prepare.sh` يكتب `.env.production`.
 
+## تحذير: مصادر Tailwind
+
+`src/sweetcost/styles.css` يحمل سطري `@source` صراحةً. الاكتشاف التلقائي
+في Tailwind يتخطّى ما يتجاهله `.gitignore`، والنسخة هنا مُولَّدة
+ومتجاهَلة — فبلا هذين السطرين يخرج CSS ناقصاً (‏7 ك.ب بدل 22) والتطبيق
+مكسور الشكل بلا أي خطأ في البناء. لا تحذفهما.
+
+## الوصول
+
 **بلا بوابة دخول** بطلب صاحب المتجر: السياسات للدور `anon`، ومفتاح anon
-يظهر في حزمة المتصفح بطبيعته. من يصل إلى الرابط يقرأ ويكتب. الرابط وحده
-هو ما يحمي القاعدة.
+يظهر في حزمة المتصفح بطبيعته. من يصل إلى الرابط يقرأ البيانات ويكتبها.
+الرابط وحده هو ما يحمي القاعدة.
+
+لإرجاع البوابة: انظر «الوصول» في `src/sweetcost/README.md`.
 
 ## نشر تحديث
 
-1. ادفع التغيير إلى `main`.
-2. أعد النشر بنفس الملفات الخمسة — `prepare.sh` يجلب `main` وحده.
-
-## الأفضل لاحقاً
-
-امنح تطبيق Vercel على GitHub صلاحية على `nayef1986/baro-inventory`
-من <https://github.com/apps/vercel/installations/select_target>، ثم
-اربط المشروع بالمستودع. عندها كل دفعة إلى `main` تنشر تلقائياً ويُستغنى
-عن `prepare.sh`.
+ادفع إلى `main` — المشروع مربوط بالمستودع فينشر تلقائياً.

@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* مصادر الأصناف صراحةً.
+   الاكتشاف التلقائي في Tailwind يتخطّى ما يتجاهله .gitignore، ونسخة
+   النشر في deploy/coco-cake تُولَّد ومتجاهَلة — فبلا هذين السطرين يخرج
+   ملف CSS ناقصاً والتطبيق مكسور الشكل. المساران صحيحان في البناءين. */
+@source "./";
+@source "../../sweet-cost/index.html";
+
 @theme {
   --color-cream: #ede3d7;
   --color-surface: #f7f1e8;

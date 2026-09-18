@@ -1,20 +1,29 @@
 #!/bin/sh
-# يجلب مصدر COCO CAKE من المستودع العام nayef1986/baro-inventory
-# ويثبّته على هذه النسخة قبل البناء. المرجع هو main، فكل إعادة نشر
-# تأخذ آخر ما دُفع — كما لو كان المشروع مربوطاً بالمستودع.
+# يجهّز مصدر COCO CAKE في هذا المجلد قبل البناء.
+#
+# إن كان المستودع نفسه حاضراً (المشروع مربوط بـGitHub) ينسخ من النسخة
+# المسحوبة مباشرة. وإلا يجلب main من المستودع العام — فالسكربت يعمل في
+# الحالتين بلا تغيير.
 set -e
 REPO=nayef1986/baro-inventory
 REF=main
 
-curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" -o src.tgz
-rm -rf .src && mkdir .src && tar xzf src.tgz -C .src --strip-components=1
-rm -f src.tgz
+if [ -d ../../src/sweetcost ]; then
+  SRC=../..
+  ORIGIN="المستودع المسحوب"
+else
+  curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" -o src.tgz
+  rm -rf .src && mkdir .src && tar xzf src.tgz -C .src --strip-components=1
+  rm -f src.tgz
+  SRC=.src
+  ORIGIN="codeload @ $REF"
+fi
 
 mkdir -p src public
 rm -rf src/sweetcost public/sweet-cost sweet-cost
-cp -R .src/src/sweetcost      src/sweetcost
-cp -R .src/public/sweet-cost  public/sweet-cost
-cp -R .src/sweet-cost         sweet-cost
+cp -R "$SRC/src/sweetcost"     src/sweetcost
+cp -R "$SRC/public/sweet-cost" public/sweet-cost
+cp -R "$SRC/sweet-cost"        sweet-cost
 rm -rf .src
 
 # ملفات لا تلزم النشر
@@ -28,4 +37,4 @@ VITE_SWEETCOST_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOi
 VITE_SWEETCOST_REQUIRE_AUTH=false
 ENV
 
-echo "COCO CAKE source ready @ $REF"
+echo "COCO CAKE source ready — $ORIGIN"

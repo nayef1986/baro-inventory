@@ -4,7 +4,8 @@ import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**', 'public/**', 'api/**', 'src/**/*.jsx', 'src/**/*.js'] },
+  // deploy/** نسخة نشر مُولَّدة من src/sweetcost — تُفحص في مصدرها لا هنا.
+  { ignores: ['dist/**', 'node_modules/**', 'public/**', 'api/**', 'deploy/**', 'src/**/*.jsx', 'src/**/*.js'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

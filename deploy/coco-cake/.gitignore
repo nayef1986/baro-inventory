@@ -1,0 +1,6 @@
+# كل ما ينتجه prepare.sh — منسوخ من جذر المستودع، لا يُلتزم به هنا
+src/
+sweet-cost/
+public/
+.src/
+.env.production

@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "build": "vite build" },
+  "scripts": { "build": "sh prepare.sh && vite build" },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",
     "react": "^18.3.1",
