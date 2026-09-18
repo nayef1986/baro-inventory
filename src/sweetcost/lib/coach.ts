@@ -131,11 +131,14 @@ function buildCard(
 ): CoachCard {
   const word = PERIOD_WORD[periodKey]
 
-  if (totals.batchCount === 0) {
+  if (totals.invoiceCount === 0) {
     return {
-      head: 'لا يوجد نشاط مسجّل بعد.',
-      body: `لم تُسجَّل أي دفعة إنتاج في ${word}. سجّل أول دفعة لتبدأ الأرقام بالظهور هنا.`,
-      action: 'كل رقم تسجّله اليوم يبني معرفة حقيقية بتكلفة منتجاتك.',
+      head: totals.batchCount > 0 ? 'أنتجت، ولم تفوتر بعد.' : 'لا يوجد نشاط مسجّل بعد.',
+      body:
+        totals.batchCount > 0
+          ? `سجّلت ${totals.batchCount} دفعة إنتاج في ${word} بتكلفة ${money(totals.productionCost)} ر.س، ولم تصدر فاتورة توريد بعد. المبيعات تُحتسب من الفواتير.`
+          : `لم تُسجَّل أي فاتورة توريد في ${word}. أصدر أول فاتورة لتبدأ الأرقام بالظهور هنا.`,
+      action: 'كل رقم تسجّله اليوم يبني معرفة حقيقية بتكلفة منتجاتك وربحها.',
     }
   }
 
@@ -149,12 +152,12 @@ function buildCard(
   let head = `ملخص ${word}.`
   let action: string | null = null
 
-  if (previous.batchCount > 0 && marginDelta >= 1) {
+  if (previous.invoiceCount > 0 && marginDelta >= 1) {
     head = 'الربحية تتحسّن.'
     action =
       `الهامش ارتفع من ${percent(previous.marginPercent)} إلى ${percent(totals.marginPercent)} ` +
       `مقارنة بـ${PERIOD_PREV[periodKey]}. أنت لا تبيع أكثر فقط، بل تحقّق ربحاً أفضل.`
-  } else if (previous.batchCount > 0 && marginDelta <= -1) {
+  } else if (previous.invoiceCount > 0 && marginDelta <= -1) {
     head = 'انتبه للهامش.'
     action =
       `الهامش نزل من ${percent(previous.marginPercent)} إلى ${percent(totals.marginPercent)} ` +
@@ -162,7 +165,7 @@ function buildCard(
   } else if (salesChange !== null && salesChange >= 5) {
     head = 'المبيعات ترتفع.'
     action = `نمو ${signedPercent(salesChange)} عن ${PERIOD_PREV[periodKey]} مع ثبات الهامش عند ${percent(totals.marginPercent)}.`
-  } else if (previous.batchCount > 0) {
+  } else if (previous.invoiceCount > 0) {
     head = 'أداء مستقر.'
     action = `الهامش ثابت قرب ${percent(totals.marginPercent)}. ركّز الآن على خفض الهدر لرفع الربح.`
   }
@@ -181,9 +184,12 @@ function buildMilestones(data: SweetCostData, totals: PeriodTotals): Milestone[]
   const series = dailySeries(data)
   if (series.length === 0) return out
 
-  const lifetimeSales = data.productions.reduce((s, p) => s + p.revenue, 0)
+  const lifetimeSales = data.invoices.reduce((sum, invoice) => {
+    if (invoice.status === 'cancelled' || invoice.status === 'draft') return sum
+    return sum + (data.invoiceTotals[invoice.id]?.taxable ?? 0)
+  }, 0)
 
-  if (series.length === 1 && totals.batchCount > 0) {
+  if (series.length === 1 && totals.invoiceCount > 0) {
     out.push({
       id: 'first-day',
       badge: 'إنجاز جديد',
@@ -341,7 +347,7 @@ function buildInsights(
   }
 
   // تحسن الهامش
-  if (previous.batchCount > 0) {
+  if (previous.invoiceCount > 0) {
     const delta = round(totals.marginPercent - previous.marginPercent, 1)
     if (delta >= 1) {
       out.push({

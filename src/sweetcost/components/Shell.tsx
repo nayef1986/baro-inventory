@@ -6,7 +6,14 @@ import type { ReactNode } from 'react'
 
 import { InstallButton } from './InstallButton.tsx'
 
-export type ScreenKey = 'ingredients' | 'suppliers' | 'recipes' | 'production' | 'waste' | 'dashboard'
+export type ScreenKey =
+  | 'ingredients'
+  | 'suppliers'
+  | 'recipes'
+  | 'production'
+  | 'waste'
+  | 'invoices'
+  | 'dashboard'
 
 interface NavItem {
   key: ScreenKey
@@ -93,6 +100,18 @@ export const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    key: 'invoices',
+    label: 'فواتير التوريد',
+    short: 'الفواتير',
+    icon: icon(
+      <>
+        <path d="M6 3h9l3 3v15l-3-1.5L12 21l-3-1.5L6 21z" />
+        <path d="M9.5 9h5" />
+        <path d="M9.5 13h5" />
+      </>,
+    ),
+  },
+  {
     key: 'dashboard',
     label: 'التكلفة والربح',
     short: 'التكلفة',
@@ -110,10 +129,12 @@ export const NAV_ITEMS: NavItem[] = [
 export function Shell({
   screen,
   onNavigate,
+  storeName,
   children,
 }: {
   screen: ScreenKey
   onNavigate: (key: ScreenKey) => void
+  storeName: string
   children: ReactNode
 }) {
   return (
@@ -122,7 +143,7 @@ export function Shell({
       <aside className="hidden lg:flex w-[236px] shrink-0 flex-col gap-7 bg-bark text-[#f1ede0] px-4 py-7 sticky top-0 h-screen">
         <div className="px-1.5">
           <div className="display text-[31px] font-bold leading-tight text-honey">سويت كوست</div>
-          <div className="mt-1.5 text-[10.5px] tracking-[0.18em] text-[#93a683]">SWEET COST</div>
+          <div className="mt-1.5 text-[10.5px] tracking-[0.18em] text-[#93a683]">{storeName}</div>
         </div>
 
         <nav className="flex flex-col gap-0.5">
@@ -158,7 +179,10 @@ export function Shell({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* رأس الجوال */}
         <header className="lg:hidden sticky top-0 z-20 bg-bark text-[#f1ede0] px-4 py-3 flex items-center justify-between gap-3">
-          <div className="display text-[22px] font-bold leading-tight text-honey">سويت كوست</div>
+          <div>
+            <div className="display text-[22px] font-bold leading-tight text-honey">سويت كوست</div>
+            <div className="text-[10.5px] tracking-[0.16em] text-[#93a683] mt-0.5">{storeName}</div>
+          </div>
           <InstallButton />
         </header>
 
@@ -182,7 +206,7 @@ export function Shell({
               }`}
             >
               {item.icon}
-              <span className="text-[9.5px]">{item.short}</span>
+              <span className="text-[9px]">{item.short}</span>
             </button>
           )
         })}

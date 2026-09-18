@@ -4,6 +4,7 @@
 
 import { requireClient } from './supabase.ts'
 import type {
+  Customer,
   Ingredient,
   IngredientLatest,
   IngredientPrice,
@@ -11,8 +12,11 @@ import type {
   ProductionItem,
   Purchase,
   PurchaseItem,
+  InvoiceTotals,
   Recipe,
   RecipeItem,
+  SalesInvoice,
+  SalesInvoiceItem,
   Settings,
   Supplier,
   SweetCostData,
@@ -24,6 +28,13 @@ const DEFAULT_SETTINGS: Settings = {
   weekly_goal: 0,
   monthly_goal: 0,
   currency: 'ر.س',
+  store_name: 'COCO CAKE',
+  store_phone: null,
+  store_address: null,
+  vat_number: null,
+  vat_enabled: false,
+  vat_rate: 15,
+  invoice_prefix: 'CC',
   updated_at: new Date().toISOString(),
 }
 
@@ -49,6 +60,10 @@ export async function loadAll(): Promise<SweetCostData> {
     productions,
     productionItems,
     waste,
+    customers,
+    invoices,
+    invoiceItems,
+    totalsRows,
     settingsRows,
   ] = await Promise.all([
     selectAll<Supplier>('sc_suppliers', { column: 'name', ascending: true }),
@@ -62,11 +77,18 @@ export async function loadAll(): Promise<SweetCostData> {
     selectAll<Production>('sc_productions', { column: 'produced_on', ascending: false }),
     selectAll<ProductionItem>('sc_production_items'),
     selectAll<WasteEntry>('sc_waste', { column: 'wasted_on', ascending: false }),
+    selectAll<Customer>('sc_customers', { column: 'name', ascending: true }),
+    selectAll<SalesInvoice>('sc_sales_invoices', { column: 'issued_on', ascending: false }),
+    selectAll<SalesInvoiceItem>('sc_sales_invoice_items'),
+    selectAll<InvoiceTotals>('sc_invoice_totals'),
     selectAll<Settings>('sc_settings'),
   ])
 
   const latest: Record<string, IngredientLatest> = {}
   for (const row of latestRows) latest[row.id] = row
+
+  const invoiceTotals: Record<string, InvoiceTotals> = {}
+  for (const row of totalsRows) invoiceTotals[row.id] = row
 
   return {
     suppliers,
@@ -80,6 +102,10 @@ export async function loadAll(): Promise<SweetCostData> {
     productions,
     productionItems,
     waste,
+    customers,
+    invoices,
+    invoiceItems,
+    invoiceTotals,
     settings: settingsRows[0] ?? DEFAULT_SETTINGS,
   }
 }
@@ -293,10 +319,116 @@ export async function deleteWaste(id: string): Promise<void> {
 
 // ─── الإعدادات ───────────────────────────────────────────────
 
-export async function saveSettings(
-  input: Pick<Settings, 'weekly_goal' | 'monthly_goal'>,
-): Promise<void> {
+export type SettingsInput = Partial<
+  Pick<
+    Settings,
+    | 'weekly_goal'
+    | 'monthly_goal'
+    | 'store_name'
+    | 'store_phone'
+    | 'store_address'
+    | 'vat_number'
+    | 'vat_enabled'
+    | 'vat_rate'
+    | 'invoice_prefix'
+  >
+>
+
+export async function saveSettings(input: SettingsInput): Promise<void> {
   const sb = requireClient()
   const { error } = await sb.from('sc_settings').upsert({ id: true, ...input })
+  if (error) throw error
+}
+
+// ─── العملاء ─────────────────────────────────────────────────
+
+export type CustomerInput = Pick<
+  Customer,
+  'name' | 'phone' | 'tax_number' | 'address' | 'notes'
+>
+
+export async function saveCustomer(input: CustomerInput, id?: string): Promise<string> {
+  const sb = requireClient()
+  if (id) {
+    const { error } = await sb.from('sc_customers').update(input).eq('id', id)
+    if (error) throw error
+    return id
+  }
+  const { data, error } = await sb.from('sc_customers').insert(input).select('id').single()
+  if (error) throw error
+  return (data as { id: string }).id
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  const sb = requireClient()
+  const { error } = await sb.from('sc_customers').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── فواتير التوريد ──────────────────────────────────────────
+
+export type InvoiceInput = Pick<
+  SalesInvoice,
+  'invoice_no' | 'customer_id' | 'issued_on' | 'due_on' | 'vat_rate' | 'discount' | 'status' | 'notes'
+>
+
+export type InvoiceLineInput = Pick<
+  SalesInvoiceItem,
+  'recipe_id' | 'description' | 'unit_label' | 'quantity' | 'unit_price' | 'unit_cost'
+>
+
+/**
+ * يحفظ الفاتورة وبنودها. عند الإنشاء نحذف الترويسة إذا فشلت
+ * البنود، حتى لا تبقى فاتورة فارغة برقم محجوز.
+ */
+export async function saveInvoice(
+  header: InvoiceInput,
+  lines: InvoiceLineInput[],
+  id?: string,
+): Promise<string> {
+  const sb = requireClient()
+
+  if (id) {
+    const { error } = await sb.from('sc_sales_invoices').update(header).eq('id', id)
+    if (error) throw error
+    const { error: delError } = await sb
+      .from('sc_sales_invoice_items')
+      .delete()
+      .eq('invoice_id', id)
+    if (delError) throw delError
+    if (lines.length > 0) {
+      const { error: insError } = await sb
+        .from('sc_sales_invoice_items')
+        .insert(lines.map((l) => ({ ...l, invoice_id: id })))
+      if (insError) throw insError
+    }
+    return id
+  }
+
+  const { data, error } = await sb.from('sc_sales_invoices').insert(header).select('id').single()
+  if (error) throw error
+  const invoiceId = (data as { id: string }).id
+
+  if (lines.length > 0) {
+    const { error: itemsError } = await sb
+      .from('sc_sales_invoice_items')
+      .insert(lines.map((l) => ({ ...l, invoice_id: invoiceId })))
+    if (itemsError) {
+      await sb.from('sc_sales_invoices').delete().eq('id', invoiceId)
+      throw itemsError
+    }
+  }
+  return invoiceId
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const sb = requireClient()
+  const { error } = await sb.from('sc_sales_invoices').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function setInvoiceStatus(id: string, status: SalesInvoice['status']): Promise<void> {
+  const sb = requireClient()
+  const { error } = await sb.from('sc_sales_invoices').update({ status }).eq('id', id)
   if (error) throw error
 }

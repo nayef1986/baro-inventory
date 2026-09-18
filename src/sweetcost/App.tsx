@@ -12,6 +12,7 @@ import type { SweetCostData } from './types.ts'
 
 import DashboardScreen from './screens/Dashboard.tsx'
 import IngredientsScreen from './screens/Ingredients.tsx'
+import InvoicesScreen from './screens/Invoices.tsx'
 import ProductionScreen from './screens/Production.tsx'
 import RecipesScreen from './screens/Recipes.tsx'
 import SuppliersScreen from './screens/Suppliers.tsx'
@@ -79,10 +80,11 @@ export default function App() {
     recipes: <RecipesScreen {...props} />,
     production: <ProductionScreen {...props} />,
     waste: <WasteScreen {...props} />,
+    invoices: <InvoicesScreen {...props} />,
   }
 
   return (
-    <Shell screen={screen} onNavigate={setScreen}>
+    <Shell screen={screen} onNavigate={setScreen} storeName={data.settings.store_name}>
       <div className="flex flex-col gap-5">
         {error ? <ErrorBanner message={error} onDismiss={() => setError(null)} /> : null}
         {SCREENS[screen]}

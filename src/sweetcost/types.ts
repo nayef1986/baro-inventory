@@ -133,12 +133,74 @@ export interface WasteEntry {
   created_at: string
 }
 
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled'
+
 export interface Settings {
   id: boolean
   weekly_goal: number
   monthly_goal: number
   currency: string
+  store_name: string
+  store_phone: string | null
+  store_address: string | null
+  vat_number: string | null
+  vat_enabled: boolean
+  vat_rate: number
+  invoice_prefix: string
   updated_at: string
+}
+
+export interface Customer {
+  id: string
+  name: string
+  phone: string | null
+  tax_number: string | null
+  address: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SalesInvoice {
+  id: string
+  invoice_no: string
+  customer_id: string | null
+  issued_on: string
+  due_on: string | null
+  /** لقطة نسبة الضريبة وقت الإصدار */
+  vat_rate: number
+  discount: number
+  status: InvoiceStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SalesInvoiceItem {
+  id: string
+  invoice_id: string
+  recipe_id: string | null
+  /** لقطة اسم المنتج — تبقى لو حُذفت الوصفة */
+  description: string
+  unit_label: string
+  quantity: number
+  unit_price: number
+  /** لقطة تكلفة الوحدة وقت الإصدار */
+  unit_cost: number
+  line_total: number
+  created_at: string
+}
+
+/** مجاميع الفاتورة — من العرض sc_invoice_totals */
+export interface InvoiceTotals {
+  id: string
+  subtotal: number
+  discount: number
+  taxable: number
+  vat_amount: number
+  total: number
+  cost: number
+  line_count: number
 }
 
 /** آخر سعر ومتوسط السعر — من العرض sc_ingredient_latest */
@@ -165,5 +227,9 @@ export interface SweetCostData {
   productions: Production[]
   productionItems: ProductionItem[]
   waste: WasteEntry[]
+  customers: Customer[]
+  invoices: SalesInvoice[]
+  invoiceItems: SalesInvoiceItem[]
+  invoiceTotals: Record<string, InvoiceTotals>
   settings: Settings
 }

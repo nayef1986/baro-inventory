@@ -14,18 +14,25 @@ export interface Range {
 }
 
 export interface PeriodTotals {
-  /** المبيعات = الكمية المباعة × سعر البيع وقت الإنتاج */
+  /** المبيعات = مجموع الفواتير غير الملغاة، بدون الضريبة */
   sales: number
+  /** الضريبة المحصّلة — ليست إيراداً، تُعرض ولا تدخل الربح */
+  vat: number
+  /** تكلفة ما بيع فعلاً (لقطات وقت الفوترة) */
+  cogs: number
+  /** تكلفة الدفعات المنتجة في الفترة — للعلم، خارج معادلة الربح */
   productionCost: number
   wasteValue: number
-  /** تكلفة الإنتاج + الهدر */
+  /** تكلفة المبيعات + الهدر */
   totalCost: number
   profit: number
   marginPercent: number
+  invoiceCount: number
   unitsProduced: number
+  /** الكمية المباعة حسب بنود الفواتير */
   unitsSold: number
   batchCount: number
-  /** فرق التكلفة الفعلية عن القياسية */
+  /** فرق التكلفة الفعلية عن القياسية في الإنتاج */
   costVariance: number
 }
 
@@ -72,26 +79,53 @@ function inRange(date: string, range: Range): boolean {
   return d >= range.from && d <= range.to
 }
 
+/** الفواتير المحتسبة: صادرة أو مدفوعة، ضمن الفترة */
+function countedInvoices(data: SweetCostData, range: Range) {
+  return data.invoices.filter(
+    (i) => inRange(i.issued_on, range) && i.status !== 'cancelled' && i.status !== 'draft',
+  )
+}
+
 export function totalsIn(data: SweetCostData, range: Range): PeriodTotals {
   const productions = data.productions.filter((p) => inRange(p.produced_on, range))
   const waste = data.waste.filter((w) => inRange(w.wasted_on, range))
+  const invoices = countedInvoices(data, range)
 
-  const sales = productions.reduce((s, p) => s + p.revenue, 0)
+  let sales = 0
+  let vat = 0
+  let cogs = 0
+  let unitsSold = 0
+
+  for (const invoice of invoices) {
+    const totals = data.invoiceTotals[invoice.id]
+    if (totals) {
+      sales += totals.taxable
+      vat += totals.vat_amount
+      cogs += totals.cost
+    }
+    for (const item of data.invoiceItems) {
+      if (item.invoice_id === invoice.id) unitsSold += item.quantity
+    }
+  }
+
   const productionCost = productions.reduce((s, p) => s + p.actual_cost, 0)
   const standardCost = productions.reduce((s, p) => s + p.standard_cost, 0)
   const wasteValue = waste.reduce((s, w) => s + w.value, 0)
-  const totalCost = productionCost + wasteValue
+  const totalCost = cogs + wasteValue
   const p = profitOf(sales, totalCost)
 
   return {
     sales,
+    vat,
+    cogs,
     productionCost,
     wasteValue,
     totalCost,
     profit: p.profit,
     marginPercent: p.marginPercent,
+    invoiceCount: invoices.length,
     unitsProduced: productions.reduce((s, x) => s + x.produced_units, 0),
-    unitsSold: productions.reduce((s, x) => s + x.sold_units, 0),
+    unitsSold,
     batchCount: productions.length,
     costVariance: productionCost - standardCost,
   }
@@ -107,11 +141,14 @@ export interface DayTotal {
 export function dailySeries(data: SweetCostData): DayTotal[] {
   const map = new Map<string, { sales: number; cost: number }>()
 
-  for (const p of data.productions) {
-    const d = p.produced_on.slice(0, 10)
+  for (const invoice of data.invoices) {
+    if (invoice.status === 'cancelled' || invoice.status === 'draft') continue
+    const totals = data.invoiceTotals[invoice.id]
+    if (!totals) continue
+    const d = invoice.issued_on.slice(0, 10)
     const row = map.get(d) ?? { sales: 0, cost: 0 }
-    row.sales += p.revenue
-    row.cost += p.actual_cost
+    row.sales += totals.taxable
+    row.cost += totals.cost
     map.set(d, row)
   }
   for (const w of data.waste) {

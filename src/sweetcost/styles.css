@@ -59,3 +59,198 @@ input[type="number"] {
 .pb-safe {
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
+
+/* ── فاتورة التوريد: تظهر في الطباعة فقط ─────────────────── */
+.print-root {
+  display: none;
+}
+
+@media print {
+  #sweet-cost-root {
+    display: none !important;
+  }
+  .print-root {
+    display: block !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #1a1a1a;
+  }
+}
+
+.invoice-sheet {
+  font-family: var(--font-sans);
+  color: #1a1a1a;
+  font-size: 11pt;
+  line-height: 1.7;
+}
+
+.invoice-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24pt;
+  padding-bottom: 12pt;
+  border-bottom: 2pt solid #26381f;
+}
+
+.invoice-brand {
+  margin: 0;
+  font-size: 22pt;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #26381f;
+}
+
+.invoice-meta {
+  margin-top: 4pt;
+  font-size: 9.5pt;
+  color: #4a4a40;
+}
+
+.invoice-kind {
+  font-size: 12pt;
+  font-weight: 700;
+  margin-bottom: 6pt;
+  text-align: left;
+}
+
+.invoice-id-table th {
+  text-align: right;
+  font-weight: 500;
+  color: #4a4a40;
+  font-size: 9.5pt;
+  padding: 1pt 0;
+  padding-left: 10pt;
+}
+
+.invoice-id-table td {
+  text-align: left;
+  font-weight: 700;
+  font-size: 10pt;
+  padding: 1pt 0;
+}
+
+.invoice-party {
+  margin-top: 14pt;
+}
+
+.invoice-party h2 {
+  margin: 0 0 4pt;
+  font-size: 9.5pt;
+  font-weight: 600;
+  color: #4a4a40;
+  letter-spacing: 0.06em;
+}
+
+.invoice-party-name {
+  font-size: 13pt;
+  font-weight: 700;
+}
+
+.invoice-lines {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16pt;
+}
+
+.invoice-lines th,
+.invoice-lines td {
+  text-align: right;
+  padding: 7pt 8pt;
+  font-size: 10pt;
+}
+
+.invoice-lines thead th {
+  background: #eae1ce;
+  border-top: 1pt solid #26381f;
+  border-bottom: 1pt solid #26381f;
+  font-weight: 700;
+  font-size: 9.5pt;
+}
+
+.invoice-lines tbody td {
+  border-bottom: 0.5pt solid #d8d2c2;
+}
+
+.invoice-lines .col-idx {
+  width: 7%;
+}
+
+.invoice-lines .col-num {
+  text-align: left;
+  width: 17%;
+  white-space: nowrap;
+}
+
+.invoice-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24pt;
+  margin-top: 14pt;
+}
+
+.invoice-notes {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 10pt;
+}
+
+.invoice-notes h3 {
+  margin: 0 0 3pt;
+  font-size: 9.5pt;
+  font-weight: 600;
+  color: #4a4a40;
+}
+
+.invoice-notes p {
+  margin: 0;
+  color: #4a4a40;
+}
+
+.invoice-totals {
+  width: 46%;
+  border-collapse: collapse;
+}
+
+.invoice-totals th {
+  text-align: right;
+  font-weight: 500;
+  font-size: 10pt;
+  padding: 5pt 0;
+  color: #4a4a40;
+}
+
+.invoice-totals td {
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5pt;
+  padding: 5pt 0;
+  white-space: nowrap;
+}
+
+.invoice-grand th,
+.invoice-grand td {
+  border-top: 1.5pt solid #26381f;
+  padding-top: 8pt;
+  font-size: 13pt;
+  font-weight: 900;
+  color: #26381f;
+}
+
+.invoice-thanks {
+  margin-top: 26pt;
+  padding-top: 8pt;
+  border-top: 0.5pt solid #d8d2c2;
+  font-size: 9.5pt;
+  color: #4a4a40;
+  text-align: center;
+}

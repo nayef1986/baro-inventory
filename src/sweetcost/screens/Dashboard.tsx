@@ -181,9 +181,17 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
         <StatTile
           label="إجمالي المبيعات"
           value={money(totals.sales)}
-          note={salesChange !== null ? `${signedPercent(salesChange)} عن الفترة السابقة` : 'لا مقارنة متاحة'}
+          note={
+            salesChange !== null
+              ? `${signedPercent(salesChange)} عن الفترة السابقة`
+              : `${totals.invoiceCount} فاتورة · بدون الضريبة`
+          }
         />
-        <StatTile label="تكلفة الإنتاج" value={money(totals.productionCost)} note="من مكونات الوصفات الفعلية" />
+        <StatTile
+          label="تكلفة المبيعات"
+          value={money(totals.cogs)}
+          note={`تكلفة الإنتاج في الفترة ${money(totals.productionCost)}`}
+        />
         <StatTile
           label="إجمالي الهدر"
           value={money(totals.wasteValue)}
@@ -274,7 +282,9 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           )}
 
           <p className="m-0 px-5 py-3 text-[12.5px] text-muted bg-cream border-t border-line leading-relaxed">
-            التكلفة محسوبة من آخر أسعار الشراء بعد احتساب نسبة الهدر لكل مكوّن.
+            التكلفة محسوبة من آخر أسعار الشراء بعد احتساب نسبة الهدر لكل مكوّن. المبيعات والربح
+            أعلاه من فواتير التوريد الصادرة والمدفوعة.
+            {totals.vat > 0 ? ` الضريبة المحصّلة في الفترة ${money(totals.vat)} ر.س — ليست إيراداً.` : ''}
           </p>
         </Card>
 
