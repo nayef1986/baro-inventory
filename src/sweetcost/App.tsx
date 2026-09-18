@@ -120,7 +120,7 @@ function SetupNotice() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-xl min-w-0 bg-surface border border-line rounded-2xl p-5 sm:p-6">
-        <h1 className="display m-0 text-[28px] font-bold">سويت كوست</h1>
+        <h1 className="brand m-0 text-[28px] font-bold">Coco Cake</h1>
         <p className="mt-3 mb-4 text-[14px] leading-loose text-soft">
           قاعدة البيانات غير مهيأة بعد. خطوتان فقط:
         </p>

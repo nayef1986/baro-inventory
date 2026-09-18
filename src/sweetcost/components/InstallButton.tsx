@@ -39,7 +39,7 @@ export function InstallButton({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
 
       {showIOS ? (
         <Modal
-          title="تثبيت سويت كوست على الآيفون"
+          title="تثبيت COCO CAKE على الآيفون"
           onClose={() => setShowIOS(false)}
           footer={<Button onClick={() => setShowIOS(false)}>تمام</Button>}
         >
@@ -51,7 +51,7 @@ export function InstallButton({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
               اختر <strong className="text-ink">إضافة إلى الشاشة الرئيسية</strong>.
             </li>
             <li>
-              اضغط <strong className="text-ink">إضافة</strong> — وسيظهر سويت كوست كتطبيق مستقل بأيقونته.
+              اضغط <strong className="text-ink">إضافة</strong> — وسيظهر COCO CAKE كتطبيق مستقل بأيقونته.
             </li>
           </ol>
           <p className="mt-4 mb-0 text-[13px] text-muted leading-relaxed">

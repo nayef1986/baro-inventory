@@ -1,5 +1,5 @@
 // ============================================================
-// sw.js — Service Worker لتطبيق سويت كوست
+// sw.js — Service Worker لتطبيق COCO CAKE
 //
 // الهدف: فتح التطبيق فوراً من الشاشة الرئيسية حتى مع شبكة
 // بطيئة. بيانات Supabase لا تُخزَّن أبداً — الأرقام المالية
@@ -8,7 +8,7 @@
 
 // ارفع الرقم عند تغيير أي أصل ثابت (الأيقونات مثلاً) — activate
 // يحذف الكاش القديم، فيجلب المتصفح النسخة الجديدة بدل المخبّأة.
-const VERSION = 'sweetcost-v2'
+const VERSION = 'sweetcost-v3'
 const SHELL = '/sweet-cost/'
 
 self.addEventListener('install', (event) => {
@@ -81,7 +81,7 @@ function offlineResponse() {
       'background:#2A1D15;color:#f5efe6;font-family:system-ui;text-align:center;padding:24px">' +
       '<div><h1 style="font-size:20px;margin:0 0 8px">لا يوجد اتصال</h1>' +
       '<p style="margin:0;color:#b8a493;font-size:14px;line-height:1.8">' +
-      'سويت كوست يحتاج اتصالاً لقراءة أرقامك من قاعدة البيانات.<br>افتح التطبيق مرة أخرى بعد عودة الشبكة.' +
+      'النظام يحتاج اتصالاً لقراءة أرقامك من قاعدة البيانات.<br>افتح التطبيق مرة أخرى بعد عودة الشبكة.' +
       '</p></div></body></html>',
     { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 },
   )
