@@ -15,6 +15,7 @@ import type {
   InvoiceTotals,
   Recipe,
   RecipeItem,
+  InvoicePayment,
   SalesInvoice,
   SalesInvoiceItem,
   Settings,
@@ -64,6 +65,7 @@ export async function loadAll(): Promise<SweetCostData> {
     customers,
     invoices,
     invoiceItems,
+    invoicePayments,
     totalsRows,
     settingsRows,
   ] = await Promise.all([
@@ -81,6 +83,7 @@ export async function loadAll(): Promise<SweetCostData> {
     selectAll<Customer>('sc_customers', { column: 'name', ascending: true }),
     selectAll<SalesInvoice>('sc_sales_invoices', { column: 'issued_on', ascending: false }),
     selectAll<SalesInvoiceItem>('sc_sales_invoice_items'),
+    selectAll<InvoicePayment>('sc_invoice_payments', { column: 'paid_on', ascending: false }),
     selectAll<InvoiceTotals>('sc_invoice_totals'),
     selectAll<Settings>('sc_settings'),
   ])
@@ -106,6 +109,7 @@ export async function loadAll(): Promise<SweetCostData> {
     customers,
     invoices,
     invoiceItems,
+    invoicePayments,
     invoiceTotals,
     settings: settingsRows[0] ?? DEFAULT_SETTINGS,
   }
@@ -432,5 +436,21 @@ export async function deleteInvoice(id: string): Promise<void> {
 export async function setInvoiceStatus(id: string, status: SalesInvoice['status']): Promise<void> {
   const sb = requireClient()
   const { error } = await sb.from('sc_sales_invoices').update({ status }).eq('id', id)
+  if (error) throw error
+}
+
+// ─── دفعات الفواتير ──────────────────────────────────────────
+
+export type PaymentInput = Pick<InvoicePayment, 'invoice_id' | 'paid_on' | 'amount' | 'method' | 'note'>
+
+export async function savePayment(input: PaymentInput): Promise<void> {
+  const sb = requireClient()
+  const { error } = await sb.from('sc_invoice_payments').insert(input)
+  if (error) throw error
+}
+
+export async function deletePayment(id: string): Promise<void> {
+  const sb = requireClient()
+  const { error } = await sb.from('sc_invoice_payments').delete().eq('id', id)
   if (error) throw error
 }

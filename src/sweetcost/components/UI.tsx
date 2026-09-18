@@ -375,9 +375,10 @@ export function StatTile({
   label: string
   value: string
   note?: string
-  tone?: 'neutral' | 'good' | 'bad'
+  tone?: 'neutral' | 'good' | 'warn' | 'bad'
 }) {
-  const valueTone = tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : 'text-ink'
+  const valueTone =
+    tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : tone === 'warn' ? 'text-warn' : 'text-ink'
   return (
     <div className="flex-1 min-w-0 bg-surface border border-line rounded-2xl p-4">
       <div className="text-[12.5px] text-muted">{label}</div>

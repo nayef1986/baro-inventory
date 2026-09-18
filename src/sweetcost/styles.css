@@ -355,6 +355,15 @@ input[type="number"] {
   border-color: #2a1d15;
 }
 
+/* المتبقي هو الرقم الذي يهمّ الطرفين في فاتورة آجلة، فيبرز بلونه */
+.invoice-balance th,
+.invoice-balance td {
+  font-size: 12pt;
+  font-weight: 900;
+  color: #a33b28;
+  background: #f5e3dd;
+}
+
 /* ── التوقيعات ── */
 
 .invoice-signs {

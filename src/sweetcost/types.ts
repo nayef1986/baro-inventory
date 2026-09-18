@@ -133,7 +133,24 @@ export interface WasteEntry {
   created_at: string
 }
 
-export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled'
+/**
+ * حالة المستند لا حالة السداد. «مدفوعة» ليست حالة هنا — تُشتق من
+ * المدفوع مقابل الإجمالي في lib/dues.ts، لأن السداد قد يكون جزئياً.
+ */
+export type InvoiceStatus = 'draft' | 'issued' | 'cancelled'
+
+export type PaymentMethod = 'cash' | 'transfer' | 'card' | 'other'
+
+/** دفعة على فاتورة — الفاتورة قد تُسدَّد على أكثر من دفعة */
+export interface InvoicePayment {
+  id: string
+  invoice_id: string
+  paid_on: string
+  amount: number
+  method: PaymentMethod
+  note: string | null
+  created_at: string
+}
 
 export interface Settings {
   id: boolean
@@ -202,6 +219,10 @@ export interface InvoiceTotals {
   total: number
   cost: number
   line_count: number
+  /** مجموع الدفعات المسجّلة */
+  paid: number
+  /** الإجمالي − المدفوع. سالب يعني دفعة زائدة */
+  balance: number
 }
 
 /** آخر سعر ومتوسط السعر — من العرض sc_ingredient_latest */
@@ -231,6 +252,7 @@ export interface SweetCostData {
   customers: Customer[]
   invoices: SalesInvoice[]
   invoiceItems: SalesInvoiceItem[]
+  invoicePayments: InvoicePayment[]
   invoiceTotals: Record<string, InvoiceTotals>
   settings: Settings
 }

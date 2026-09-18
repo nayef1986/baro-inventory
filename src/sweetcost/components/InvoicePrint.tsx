@@ -18,15 +18,21 @@ import {
   arabicDate,
   hijriDate,
 } from '../lib/format.ts'
+import { dueOf, type PaymentState } from '../lib/dues.ts'
+import { todayISO } from '../lib/format.ts'
 import type { Customer, InvoiceTotals, SalesInvoice, SalesInvoiceItem, Settings } from '../types.ts'
 import { Wordmark } from './Wordmark.tsx'
 
-const STATUS_TEXT: Record<SalesInvoice['status'], string> = {
+const DUE_TEXT: Record<PaymentState, string> = {
   draft: 'مسودة',
-  issued: 'صادرة',
-  paid: 'مدفوعة',
   cancelled: 'ملغاة',
+  paid: 'مدفوعة بالكامل',
+  partial: 'مدفوعة جزئياً',
+  due: 'بالآجل',
+  overdue: 'متأخرة عن الاستحقاق',
 }
+
+
 
 export function InvoicePrint({
   invoice,
@@ -46,6 +52,7 @@ export function InvoicePrint({
   const total = totals?.total ?? 0
   const showVat = invoice.vat_rate > 0
   const hijri = hijriDate(invoice.issued_on)
+  const due = dueOf(invoice, totals, todayISO())
   const totalQty = items.reduce((sum, item) => sum + item.quantity, 0)
 
   return createPortal(
@@ -92,7 +99,7 @@ export function InvoicePrint({
                 ) : null}
                 <tr>
                   <th>الحالة</th>
-                  <td>{STATUS_TEXT[invoice.status]}</td>
+                  <td>{DUE_TEXT[due.state]}</td>
                 </tr>
               </tbody>
             </table>
@@ -108,9 +115,12 @@ export function InvoicePrint({
             <div className="v num">{fmtQty(totalQty)}</div>
             <div className="l">إجمالي الكمية</div>
           </div>
+          {/* الرقم الذي يهمّ المستلم: المتبقي إن كان، وإلا الإجمالي */}
           <div>
-            <div className="v num">{money(total)}</div>
-            <div className="l">الإجمالي المستحق — {settings.currency}</div>
+            <div className="v num">{money(due.balance > 0 ? due.balance : total)}</div>
+            <div className="l">
+              {due.balance > 0 ? 'المتبقي' : 'الإجمالي'} — {settings.currency}
+            </div>
           </div>
         </section>
 
@@ -180,11 +190,25 @@ export function InvoicePrint({
                 </tr>
               ) : null}
               <tr className="invoice-grand">
-                <th>الإجمالي المستحق</th>
+                <th>الإجمالي</th>
                 <td className="num">
                   {money(total)} {settings.currency}
                 </td>
               </tr>
+              {due.paid > 0 ? (
+                <tr>
+                  <th>المدفوع</th>
+                  <td className="num">{money(due.paid)}</td>
+                </tr>
+              ) : null}
+              {due.balance > 0 ? (
+                <tr className="invoice-balance">
+                  <th>المتبقي</th>
+                  <td className="num">
+                    {money(due.balance)} {settings.currency}
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </section>

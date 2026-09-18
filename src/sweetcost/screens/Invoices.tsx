@@ -31,30 +31,43 @@ import {
 import {
   deleteCustomer,
   deleteInvoice,
+  deletePayment,
   saveCustomer,
   saveInvoice,
+  savePayment,
   saveSettings,
-  setInvoiceStatus,
   type InvoiceLineInput,
 } from '../lib/api.ts'
 import { rangeFor, totalsIn } from '../lib/analytics.ts'
 import { profitOf, round } from '../lib/cost.ts'
+import { dueOf, receivablesOf, type PaymentState } from '../lib/dues.ts'
 import { recipeCostFor } from '../lib/derive.ts'
 import { arabicDateShort, money, percent, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
-import type { Customer, InvoiceStatus, SalesInvoice, SweetCostData } from '../types.ts'
+import type { Customer, PaymentMethod, SalesInvoice, SweetCostData } from '../types.ts'
 
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
+const DUE_LABEL: Record<PaymentState, string> = {
   draft: 'مسودة',
-  issued: 'صادرة',
-  paid: 'مدفوعة',
   cancelled: 'ملغاة',
+  paid: 'مدفوعة',
+  partial: 'مدفوعة جزئياً',
+  due: 'بالآجل',
+  overdue: 'متأخرة',
 }
-const STATUS_TONE: Record<InvoiceStatus, 'good' | 'warn' | 'bad' | 'neutral'> = {
+const DUE_TONE: Record<PaymentState, 'good' | 'warn' | 'bad' | 'neutral'> = {
   draft: 'neutral',
-  issued: 'warn',
+  cancelled: 'neutral',
   paid: 'good',
-  cancelled: 'bad',
+  partial: 'warn',
+  due: 'warn',
+  overdue: 'bad',
+}
+
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+  cash: 'نقداً',
+  transfer: 'تحويل',
+  card: 'شبكة',
+  other: 'أخرى',
 }
 
 /** CC-2026-004 — يعتمد على أعلى رقم مستخدم في السنة الحالية */
@@ -77,6 +90,7 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const [showStore, setShowStore] = useState(false)
   const [showCustomers, setShowCustomers] = useState(false)
   const [printId, setPrintId] = useState<string | null>(null)
+  const [payFor, setPayFor] = useState<SalesInvoice | null>(null)
 
   // الطباعة تبقى مركّبة حتى ينتهي المتصفح منها
   useEffect(() => {
@@ -91,8 +105,11 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   }, [printId])
 
   const monthTotals = useMemo(() => totalsIn(data, rangeFor('month')), [data])
-  const unpaid = data.invoices.filter((i) => i.status === 'issued')
-  const unpaidTotal = unpaid.reduce((s, i) => s + (data.invoiceTotals[i.id]?.total ?? 0), 0)
+  const today = todayISO()
+  const dues = useMemo(
+    () => receivablesOf(data.invoices, data.invoiceTotals, today),
+    [data.invoices, data.invoiceTotals, today],
+  )
 
   const printInvoice = printId ? (data.invoices.find((i) => i.id === printId) ?? null) : null
 
@@ -106,14 +123,6 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
     }
   }
 
-  async function markPaid(invoice: SalesInvoice) {
-    try {
-      await setInvoiceStatus(invoice.id, invoice.status === 'paid' ? 'issued' : 'paid')
-      await reload()
-    } catch (e) {
-      onError(dbErrorMessage(e))
-    }
-  }
 
   return (
     <>
@@ -146,10 +155,14 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
         <StatTile label="ربح الشهر" value={money(monthTotals.profit)} tone="good" note={percent(monthTotals.marginPercent)} />
         <StatTile label="فواتير الشهر" value={String(monthTotals.invoiceCount)} />
         <StatTile
-          label="غير مدفوعة"
-          value={money(unpaidTotal)}
-          note={`${unpaid.length} فاتورة`}
-          tone={unpaid.length > 0 ? 'bad' : 'neutral'}
+          label="لك عند العملاء"
+          value={money(dues.outstanding)}
+          note={
+            dues.overdue > 0
+              ? `منها ${money(dues.overdue)} متأخر — ${dues.overdueCount} فاتورة`
+              : `${dues.openCount} فاتورة بالآجل`
+          }
+          tone={dues.overdue > 0 ? 'bad' : dues.outstanding > 0 ? 'warn' : 'neutral'}
         />
       </section>
 
@@ -173,6 +186,7 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                 <Th>البنود</Th>
                 <Th>الإجمالي</Th>
                 <Th>الربح</Th>
+                <Th>المتبقي</Th>
                 <Th>الحالة</Th>
                 <Th className="pe-5" />
               </tr>
@@ -183,6 +197,7 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                 const customer = data.customers.find((c) => c.id === invoice.customer_id)
                 const p = profitOf(totals?.taxable ?? 0, totals?.cost ?? 0)
                 const cancelled = invoice.status === 'cancelled'
+                const due = dueOf(invoice, totals, today)
 
                 return (
                   <tr key={invoice.id} className={cancelled ? 'opacity-55' : ''}>
@@ -197,8 +212,27 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                         {percent(p.marginPercent)}
                       </span>
                     </Td>
+                    <Td className="num">
+                      {due.balance > 0 ? (
+                        <>
+                          <span className="font-semibold">{money(due.balance)}</span>
+                          {due.paid > 0 ? (
+                            <span className="block text-[11.5px] text-muted mt-0.5">
+                              دُفع {money(due.paid)}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </Td>
                     <Td>
-                      <Pill tone={STATUS_TONE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Pill>
+                      <Pill tone={DUE_TONE[due.state]}>{DUE_LABEL[due.state]}</Pill>
+                      {due.daysLate !== null ? (
+                        <span className="block text-[11.5px] text-bad mt-0.5">
+                          متأخرة {due.daysLate} يوم
+                        </span>
+                      ) : null}
                     </Td>
                     <Td className="pe-5">
                       <div className="flex justify-end">
@@ -209,11 +243,10 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                             onClick={() => setPrintId(invoice.id)}
                           />
                           <ActionButton
-                            icon={
-                              invoice.status === 'paid' ? ACTION_ICONS.unpaid : ACTION_ICONS.paid
-                            }
-                            label={invoice.status === 'paid' ? 'غير مدفوعة' : 'مدفوعة'}
-                            onClick={() => void markPaid(invoice)}
+                            icon={ACTION_ICONS.paid}
+                            label="تسديد"
+                            disabled={cancelled || invoice.status === 'draft'}
+                            onClick={() => setPayFor(invoice)}
                           />
                           <ActionButton
                             icon={ACTION_ICONS.edit}
@@ -265,6 +298,16 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
             setShowStore(false)
             await reload()
           }}
+          onError={onError}
+        />
+      ) : null}
+
+      {payFor ? (
+        <PaymentModal
+          invoice={payFor}
+          data={data}
+          onClose={() => setPayFor(null)}
+          onSaved={reload}
           onError={onError}
         />
       ) : null}
@@ -841,6 +884,163 @@ function CustomersModal({
           </ul>
         )}
       </div>
+    </Modal>
+  )
+}
+
+
+// ─── التسديد ─────────────────────────────────────────────────
+
+function PaymentModal({
+  invoice,
+  data,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  invoice: SalesInvoice
+  data: SweetCostData
+  onClose: () => void
+  onSaved: () => Promise<void>
+  onError: (message: string) => void
+}) {
+  const today = todayISO()
+  const totals = data.invoiceTotals[invoice.id]
+  const due = dueOf(invoice, totals, today)
+  const payments = data.invoicePayments.filter((p) => p.invoice_id === invoice.id)
+
+  const [amount, setAmount] = useState(due.balance > 0 ? String(round(due.balance, 2)) : '')
+  const [paidOn, setPaidOn] = useState(today)
+  const [method, setMethod] = useState<PaymentMethod>('cash')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    const value = Number(amount)
+    if (!Number.isFinite(value) || value <= 0) return setError('المبلغ لازم يكون أكبر من صفر.')
+    if (value > due.balance + 0.005) {
+      return setError(`المبلغ أكبر من المتبقي (${money(due.balance)}). صحّح المبلغ أو عدّل الفاتورة.`)
+    }
+
+    setBusy(true)
+    setError(null)
+    try {
+      await savePayment({
+        invoice_id: invoice.id,
+        paid_on: paidOn,
+        amount: value,
+        method,
+        note: note.trim() || null,
+      })
+      await onSaved()
+      onClose()
+    } catch (e) {
+      const message = dbErrorMessage(e)
+      setError(message)
+      onError(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removePayment(id: string, value: number) {
+    if (!window.confirm(`حذف دفعة ${money(value)}؟`)) return
+    try {
+      await deletePayment(id)
+      await onSaved()
+    } catch (e) {
+      onError(dbErrorMessage(e))
+    }
+  }
+
+  return (
+    <Modal
+      title={`تسديد الفاتورة ${invoice.invoice_no}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            إغلاق
+          </Button>
+          <Button onClick={() => void submit()} disabled={busy || due.balance <= 0}>
+            {busy ? 'جاري الحفظ…' : 'تسجيل الدفعة'}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <ReadOnlyValue label="إجمالي الفاتورة">{money(due.total)}</ReadOnlyValue>
+        <ReadOnlyValue label="المدفوع">{money(due.paid)}</ReadOnlyValue>
+        <ReadOnlyValue label="المتبقي">{money(due.balance)}</ReadOnlyValue>
+      </div>
+
+      {due.balance > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <Field label="المبلغ" htmlFor="pay-amount" hint="سدِّد كله أو جزءاً منه">
+            <NumberInput id="pay-amount" value={amount} onChange={setAmount} step="0.01" />
+          </Field>
+          <Field label="تاريخ السداد" htmlFor="pay-date">
+            <TextInput id="pay-date" type="date" value={paidOn} onChange={setPaidOn} />
+          </Field>
+          <Field label="طريقة السداد" htmlFor="pay-method">
+            <Select
+              id="pay-method"
+              value={method}
+              onChange={(v) => setMethod(v as PaymentMethod)}
+              options={[
+                { value: 'cash', label: 'نقداً' },
+                { value: 'transfer', label: 'تحويل' },
+                { value: 'card', label: 'شبكة' },
+                { value: 'other', label: 'أخرى' },
+              ]}
+            />
+          </Field>
+          <Field label="ملاحظة" htmlFor="pay-note">
+            <TextInput id="pay-note" value={note} onChange={setNote} />
+          </Field>
+        </div>
+      ) : (
+        <p className="mt-4 mb-0 text-[13.5px] text-good font-semibold">
+          هذه الفاتورة مسدَّدة بالكامل.
+        </p>
+      )}
+
+      {payments.length > 0 ? (
+        <div className="mt-5">
+          <CardTitle title="الدفعات المسجّلة" />
+          <div className="mt-2 border border-line rounded-xl overflow-hidden">
+            {payments.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-line-soft last:border-b-0"
+              >
+                <div className="min-w-0">
+                  <div className="num font-semibold text-[14px]">{money(payment.amount)}</div>
+                  <div className="text-[12px] text-muted">
+                    {arabicDateShort(payment.paid_on)} · {METHOD_LABEL[payment.method]}
+                    {payment.note ? ` · ${payment.note}` : ''}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  className="!px-2.5 !text-[13px] !text-bad"
+                  onClick={() => void removePayment(payment.id, payment.amount)}
+                >
+                  حذف
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <p className="mt-4 mb-0 text-[12.5px] text-muted leading-relaxed">
+        السداد لا يغيّر المبيعات ولا الربح — الفاتورة تدخل الحساب يوم إصدارها. الدفعات تبيّن كم لك
+        عند العملاء فقط.
+      </p>
+
+      {error ? <p className="mt-3 mb-0 text-[13px] text-bad">{error}</p> : null}
     </Modal>
   )
 }
