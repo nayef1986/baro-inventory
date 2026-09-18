@@ -21,8 +21,16 @@ const SCALE = 2
 const QUALITY = 0.92
 
 /**
+ * أقصى تصغير مقبول لإدخال الفاتورة في ورقة واحدة. تحته يصير
+ * الخط أصغر من أن يُقرأ، فالتقسيم على صفحتين أرحم من الضغط.
+ */
+const MIN_FIT = 0.62
+
+/**
  * يحوّل عنصر الفاتورة المرسوم في الصفحة إلى ملف PDF بمقاس A4.
- * الفواتير الطويلة تُقسَّم على صفحات تلقائياً.
+ *
+ * الهدف ورقة واحدة: الفاتورة الأطول قليلاً تُصغَّر لتدخل، وما
+ * تجاوز حدّ القراءة يُقسَّم على صفحات.
  */
 export async function invoicePdfBlob(node: HTMLElement): Promise<Blob> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
@@ -42,14 +50,23 @@ export async function invoicePdfBlob(node: HTMLElement): Promise<Blob> {
 
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
   const image = canvas.toDataURL('image/jpeg', QUALITY)
-  const imageHeight = (canvas.height * A4_WIDTH_MM) / canvas.width
+  const naturalHeight = (canvas.height * A4_WIDTH_MM) / canvas.width
 
-  let remaining = imageHeight
+  const fit = A4_HEIGHT_MM / naturalHeight
+  if (fit >= MIN_FIT) {
+    // تدخل ورقة واحدة — بحجمها الطبيعي أو مصغَّرة قليلاً، ومتوسّطة أفقياً
+    const scale = Math.min(fit, 1)
+    const width = A4_WIDTH_MM * scale
+    pdf.addImage(image, 'JPEG', (A4_WIDTH_MM - width) / 2, 0, width, naturalHeight * scale)
+    return pdf.output('blob')
+  }
+
+  let remaining = naturalHeight
   let offset = 0
   while (remaining > 0.5) {
     if (offset > 0) pdf.addPage()
     // إزاحة سالبة: الصورة نفسها تُرسم مرة لكل صفحة، مقصوصة بحدودها
-    pdf.addImage(image, 'JPEG', 0, -offset, A4_WIDTH_MM, imageHeight)
+    pdf.addImage(image, 'JPEG', 0, -offset, A4_WIDTH_MM, naturalHeight)
     remaining -= A4_HEIGHT_MM
     offset += A4_HEIGHT_MM
   }

@@ -138,3 +138,64 @@ function daysBetween(dueOn: string | null, today: string): number | null {
   if (Number.isNaN(due) || Number.isNaN(now)) return null
   return Math.round((now - due) / 86_400_000)
 }
+
+// ─── مدد السداد ──────────────────────────────────────────────
+
+export type TermKey = 'immediate' | 'days7' | 'days15' | 'month' | 'endOfMonth' | 'custom'
+
+export const TERMS: { key: TermKey; label: string }[] = [
+  { key: 'immediate', label: 'عند الاستلام' },
+  { key: 'days7', label: 'بعد أسبوع' },
+  { key: 'days15', label: 'بعد 15 يوم' },
+  { key: 'month', label: 'بعد شهر' },
+  { key: 'endOfMonth', label: 'نهاية الشهر' },
+  { key: 'custom', label: 'تاريخ أحدده' },
+]
+
+/**
+ * تاريخ الاستحقاق المشتقّ من مدة السداد.
+ * `immediate` يعيد null: لا استحقاق مؤجّل، فلا تاريخ.
+ * `custom` يعيد null أيضاً — التاريخ يكتبه صاحب المتجر بنفسه.
+ */
+export function dueDateFor(term: TermKey, issuedOn: string): string | null {
+  if (term === 'immediate' || term === 'custom') return null
+  if (term === 'days7') return shiftDays(issuedOn, 7)
+  if (term === 'days15') return shiftDays(issuedOn, 15)
+  if (term === 'month') return shiftMonths(issuedOn, 1)
+  return endOfMonth(issuedOn)
+}
+
+/** يستنتج المدة من تاريخي الإصدار والاستحقاق — لفتح فاتورة محفوظة */
+export function termOf(issuedOn: string, dueOn: string | null): TermKey {
+  if (!dueOn) return 'immediate'
+  for (const { key } of TERMS) {
+    if (key === 'immediate' || key === 'custom') continue
+    if (dueDateFor(key, issuedOn) === dueOn) return key
+  }
+  return 'custom'
+}
+
+function shiftDays(iso: string, days: number): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * الشهر التالي بنفس اليوم. 31 يناير + شهر = 28/29 فبراير لا 3 مارس:
+ * نضبط اليوم يدوياً لأن setUTCMonth يتجاوز إلى الشهر الذي يليه.
+ */
+function shiftMonths(iso: string, months: number): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  const day = d.getUTCDate()
+  d.setUTCDate(1)
+  d.setUTCMonth(d.getUTCMonth() + months)
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()
+  d.setUTCDate(Math.min(day, lastDay))
+  return d.toISOString().slice(0, 10)
+}
+
+function endOfMonth(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10)
+}

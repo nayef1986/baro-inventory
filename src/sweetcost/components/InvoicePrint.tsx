@@ -101,24 +101,6 @@ export function InvoiceSheet({ invoice, items, totals, customer, settings }: She
           </div>
         </header>
 
-        <section className="invoice-sum">
-          <div>
-            <div className="v num">{integer(items.length)}</div>
-            <div className="l">عدد البنود</div>
-          </div>
-          <div>
-            <div className="v num">{fmtQty(totalQty)}</div>
-            <div className="l">إجمالي الكمية</div>
-          </div>
-          {/* الرقم الذي يهمّ المستلم: المتبقي إن كان، وإلا الإجمالي */}
-          <div>
-            <div className="v num">{money(due.balance > 0 ? due.balance : total)}</div>
-            <div className="l">
-              {due.balance > 0 ? 'المتبقي' : 'الإجمالي'} — {settings.currency}
-            </div>
-          </div>
-        </section>
-
         <section className="invoice-party">
           <h2>فاتورة إلى</h2>
           <div className="invoice-party-name">{customer?.name ?? 'عميل نقدي'}</div>
@@ -153,6 +135,10 @@ export function InvoiceSheet({ invoice, items, totals, customer, settings }: She
             ))}
           </tbody>
         </table>
+
+        <p className="invoice-count num">
+          {integer(items.length)} بنود · إجمالي الكمية {fmtQty(totalQty)}
+        </p>
 
         <section className="invoice-foot">
           <div className="invoice-notes">

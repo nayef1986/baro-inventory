@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { dueOf, duesByCustomer, receivablesOf } from './dues.ts'
+import { dueDateFor, dueOf, duesByCustomer, receivablesOf, termOf } from './dues.ts'
 import type { InvoiceTotals, SalesInvoice } from '../types.ts'
 
 const TODAY = '2026-09-18'
@@ -149,4 +149,33 @@ test('الذمم لكل عميل مرتّبة تنازلياً، وبلا من �
       ['c1', 300, 0, 2],
     ],
   )
+})
+
+// ─── مدد السداد ──────────────────────────────────────────────
+
+test('المدد تشتقّ تاريخ الاستحقاق من تاريخ الإصدار', () => {
+  assert.equal(dueDateFor('immediate', '2026-09-18'), null)
+  assert.equal(dueDateFor('custom', '2026-09-18'), null)
+  assert.equal(dueDateFor('days7', '2026-09-18'), '2026-09-25')
+  assert.equal(dueDateFor('days15', '2026-09-18'), '2026-10-03')
+  assert.equal(dueDateFor('month', '2026-09-18'), '2026-10-18')
+  assert.equal(dueDateFor('endOfMonth', '2026-09-18'), '2026-09-30')
+})
+
+test('«بعد شهر» لا يتجاوز نهاية الشهر القصير', () => {
+  assert.equal(dueDateFor('month', '2026-01-31'), '2026-02-28')
+  assert.equal(dueDateFor('month', '2024-01-31'), '2024-02-29') // سنة كبيسة
+  assert.equal(dueDateFor('month', '2026-03-31'), '2026-04-30')
+})
+
+test('نهاية الشهر تصيب آخر يوم فعلاً', () => {
+  assert.equal(dueDateFor('endOfMonth', '2026-02-05'), '2026-02-28')
+  assert.equal(dueDateFor('endOfMonth', '2026-12-01'), '2026-12-31')
+})
+
+test('المدة تُستنتج من فاتورة محفوظة', () => {
+  assert.equal(termOf('2026-09-18', null), 'immediate')
+  assert.equal(termOf('2026-09-18', '2026-10-18'), 'month')
+  assert.equal(termOf('2026-09-18', '2026-09-30'), 'endOfMonth')
+  assert.equal(termOf('2026-09-18', '2026-11-02'), 'custom')
 })

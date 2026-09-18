@@ -40,7 +40,15 @@ import {
 } from '../lib/api.ts'
 import { rangeFor, totalsIn } from '../lib/analytics.ts'
 import { profitOf, round } from '../lib/cost.ts'
-import { dueOf, receivablesOf, type PaymentState } from '../lib/dues.ts'
+import {
+  dueDateFor,
+  dueOf,
+  receivablesOf,
+  termOf,
+  TERMS,
+  type PaymentState,
+  type TermKey,
+} from '../lib/dues.ts'
 import { invoiceMessage, normalizePhone, whatsappUrl } from '../lib/whatsapp.ts'
 import { invoiceFileName, invoicePdfBlob } from '../lib/invoicePdf.ts'
 import { canShareFile, downloadFile, shareFile } from '../lib/share.ts'
@@ -465,6 +473,16 @@ function InvoiceForm({
   const [customerId, setCustomerId] = useState(invoice?.customer_id ?? '')
   const [issuedOn, setIssuedOn] = useState(invoice?.issued_on ?? todayISO())
   const [dueOn, setDueOn] = useState(invoice?.due_on ?? '')
+  const [term, setTerm] = useState<TermKey>(
+    invoice ? termOf(invoice.issued_on, invoice.due_on) : 'immediate',
+  )
+
+  /** المدة تُحدّد التاريخ. «تاريخ أحدده» وحدها تترك الحقل لصاحب المتجر. */
+  function applyTerm(next: TermKey, issued = issuedOn) {
+    setTerm(next)
+    if (next === 'custom') return
+    setDueOn(dueDateFor(next, issued) ?? '')
+  }
   const [discount, setDiscount] = useState(String(invoice?.discount ?? '0'))
   const [vatRate, setVatRate] = useState(
     String(invoice ? invoice.vat_rate : data.settings.vat_enabled ? data.settings.vat_rate : 0),
@@ -611,10 +629,38 @@ function InvoiceForm({
           />
         </Field>
         <Field label="تاريخ الإصدار" htmlFor="in-date">
-          <TextInput id="in-date" type="date" value={issuedOn} onChange={setIssuedOn} />
+          <TextInput
+            id="in-date"
+            type="date"
+            value={issuedOn}
+            onChange={(v) => {
+              setIssuedOn(v)
+              if (term !== 'custom') setDueOn(dueDateFor(term, v) ?? '')
+            }}
+          />
         </Field>
-        <Field label="تاريخ الاستحقاق" htmlFor="in-due" hint="اختياري">
-          <TextInput id="in-due" type="date" value={dueOn} onChange={setDueOn} />
+        <Field label="مدة السداد" htmlFor="in-term">
+          <Select
+            id="in-term"
+            value={term}
+            onChange={(v) => applyTerm(v as TermKey)}
+            options={TERMS.map((t) => ({ value: t.key, label: t.label }))}
+          />
+        </Field>
+        <Field
+          label="تاريخ الاستحقاق"
+          htmlFor="in-due"
+          hint={term === 'custom' ? 'اكتبه بنفسك' : 'يُحسب من المدة'}
+        >
+          <TextInput
+            id="in-due"
+            type="date"
+            value={dueOn}
+            onChange={(v) => {
+              setDueOn(v)
+              setTerm('custom')
+            }}
+          />
         </Field>
         <Field label="الخصم" htmlFor="in-disc" hint="بالريال">
           <NumberInput id="in-disc" value={discount} onChange={setDiscount} step="0.01" />

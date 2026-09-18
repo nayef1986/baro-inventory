@@ -100,8 +100,10 @@ export function Button({
 // ─── أزرار الإجراءات في صفوف الجداول ─────────────────────────
 //
 // إطار واحد مقسّم بفواصل: الأزرار تُقرأ كمجموعة مرتّبة لا كنصوص
-// متناثرة، ولكل خانة رمز واسم تحته فلا لبس في وظيفتها. الارتفاع
-// 46 بكسل — فوق الحد الأدنى المريح للضغط بالإصبع.
+// متناثرة، ولكل خانة رمز واسم تحته فلا لبس في وظيفتها.
+//
+// المقاسات مضبوطة على 44 بكسل ارتفاعاً — الحدّ الأدنى المريح
+// للضغط بالإصبع، لا أكبر. تكبيرها يبتلع عرض الصف بلا فائدة.
 
 export function ActionGroup({ children }: { children: ReactNode }) {
   return (
@@ -131,20 +133,20 @@ export function ActionButton({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`flex flex-col items-center justify-center gap-0.5 min-w-14 px-2.5 py-1.5 min-h-[46px] cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
+      className={`flex flex-col items-center justify-center gap-0.5 min-w-[50px] px-2 py-1 min-h-11 cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
         tone === 'danger' ? 'text-bad hover:bg-bad-soft' : 'text-soft hover:bg-sand hover:text-ink'
       }`}
     >
       {icon}
-      <span className="text-[10.5px] font-semibold leading-none">{label}</span>
+      <span className="text-[10px] font-semibold leading-none">{label}</span>
     </button>
   )
 }
 
 const actionIcon = (paths: ReactNode) => (
   <svg
-    width="17"
-    height="17"
+    width="15"
+    height="15"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
