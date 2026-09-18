@@ -2,7 +2,7 @@
 // Suppliers.tsx — الموردين والمشتريات
 // ============================================================
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import type { ScreenProps } from '../App.tsx'
 import {
@@ -29,6 +29,12 @@ import {
   type PurchaseLineInput,
 } from '../lib/api.ts'
 import { round } from '../lib/cost.ts'
+import {
+  draftLineFrom,
+  fileToDataUrl,
+  matchIngredient,
+  scanInvoice,
+} from '../lib/invoiceScan.ts'
 import { arabicDateShort, money, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
 import { BASE_UNIT_LABELS, UNIT_LABELS, baseToPackageSize, packageSizeToBase } from '../lib/units.ts'
@@ -337,6 +343,56 @@ function PurchaseModal({
   ])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [scanNote, setScanNote] = useState<string | null>(null)
+  const fileInput = useRef<HTMLInputElement | null>(null)
+
+  /**
+   * يقرأ صورة الفاتورة ويملأ النموذج بما فُهم منها.
+   * لا يحفظ شيئاً: القراءة الآلية تخطئ، والمراجعة قبل الحفظ هي
+   * ما يمنع سعراً خاطئاً من إفساد كل تكلفة بعده.
+   */
+  async function readPhoto(file: File) {
+    setScanning(true)
+    setError(null)
+    setScanNote(null)
+    try {
+      const scan = await scanInvoice(await fileToDataUrl(file))
+
+      if (scan.items.length === 0) {
+        setScanNote('ما قدرت أقرأ بنوداً من الصورة. جرّب صورة أوضح، أو اكتبها يدوياً.')
+        return
+      }
+
+      if (scan.invoiceNo) setInvoiceNo(scan.invoiceNo)
+      if (scan.purchasedOn) setDate(scan.purchasedOn)
+      if (scan.supplierName) {
+        const supplier = data.suppliers.find((s) =>
+          s.name.trim().toLowerCase().includes(scan.supplierName!.trim().toLowerCase()),
+        )
+        if (supplier) setSupplierId(supplier.id)
+      }
+
+      const drafts = scan.items.map((item) =>
+        draftLineFrom(item, matchIngredient(item.name, data.ingredients)),
+      )
+      setLines(drafts)
+
+      const unmatched = scan.items.filter((_, i) => !drafts[i]?.ingredientId)
+      setScanNote(
+        unmatched.length === 0
+          ? `قرأت ${scan.items.length} بنداً وطابقتها كلها. راجع الأرقام قبل الحفظ.`
+          : `قرأت ${scan.items.length} بنداً. ${unmatched.length} منها بلا مكوّن مطابق — اخترها بنفسك: ${unmatched
+              .map((u) => u.name)
+              .join('، ')}`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'تعذّرت قراءة الصورة.')
+    } finally {
+      setScanning(false)
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
@@ -421,6 +477,35 @@ function PurchaseModal({
         </>
       }
     >
+      <div className="mb-4 p-3 border border-line rounded-xl bg-cream">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => fileInput.current?.click()}
+            disabled={scanning || busy || data.ingredients.length === 0}
+          >
+            {scanning ? 'جاري القراءة…' : '📷 صوّر الفاتورة'}
+          </Button>
+          <span className="text-[12.5px] text-muted leading-relaxed min-w-0">
+            تُملأ البنود تلقائياً من الصورة — ثم راجعها واحفظ بنفسك.
+          </span>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void readPhoto(file)
+          }}
+        />
+        {scanNote ? (
+          <p className="m-0 mt-2.5 text-[12.5px] text-accent leading-relaxed">{scanNote}</p>
+        ) : null}
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Field label="المورد" htmlFor="pu-supplier">
           <Select
