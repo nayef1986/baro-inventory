@@ -34,19 +34,15 @@ const DUE_TEXT: Record<PaymentState, string> = {
 
 
 
-export function InvoicePrint({
-  invoice,
-  items,
-  totals,
-  customer,
-  settings,
-}: {
+export interface SheetProps {
   invoice: SalesInvoice
   items: SalesInvoiceItem[]
   totals: InvoiceTotals | undefined
   customer: Customer | null
   settings: Settings
-}) {
+}
+
+export function InvoiceSheet({ invoice, items, totals, customer, settings }: SheetProps) {
   const subtotal = totals?.subtotal ?? 0
   const vatAmount = totals?.vat_amount ?? 0
   const total = totals?.total ?? 0
@@ -55,9 +51,8 @@ export function InvoicePrint({
   const due = dueOf(invoice, totals, todayISO())
   const totalQty = items.reduce((sum, item) => sum + item.quantity, 0)
 
-  return createPortal(
-    <div className="print-root" dir="rtl" lang="ar">
-      <article className="invoice-sheet">
+  return (
+    <article className="invoice-sheet">
         <header className="invoice-head">
           <div className="invoice-identity">
             <Wordmark className="invoice-logo" />
@@ -225,7 +220,48 @@ export function InvoicePrint({
         </section>
 
         <footer className="invoice-thanks">شكراً لتعاملكم مع {settings.store_name}.</footer>
-      </article>
+    </article>
+  )
+}
+
+// ─── الغلافان: للطباعة، وللتصوير خارج الشاشة ─────────────────
+
+/** يظهر في الطباعة فقط — عبر @media print في styles.css */
+export function InvoicePrint(props: SheetProps) {
+  return createPortal(
+    <div className="print-root" dir="rtl" lang="ar">
+      <InvoiceSheet {...props} />
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * نسخة مرئية خارج حدود الشاشة، لتصويرها إلى PDF.
+ * لا تُخفى بـdisplay:none — المخفيّ لا يُصوَّر. العرض 794 بكسل
+ * وهو عرض A4 عند 96 نقطة/بوصة، فيطابق ما يخرج من الطباعة.
+ */
+export function InvoiceCapture({
+  nodeRef,
+  ...props
+}: SheetProps & { nodeRef: (node: HTMLDivElement | null) => void }) {
+  return createPortal(
+    <div
+      ref={nodeRef}
+      dir="rtl"
+      lang="ar"
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        insetInlineStart: '-10000px',
+        top: 0,
+        width: '794px',
+        padding: '40px',
+        background: '#ffffff',
+        pointerEvents: 'none',
+      }}
+    >
+      <InvoiceSheet {...props} />
     </div>,
     document.body,
   )

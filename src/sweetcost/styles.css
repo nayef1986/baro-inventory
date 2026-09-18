@@ -132,6 +132,8 @@ input[type="number"] {
   color: #2a1d15;
 }
 
+/* التباعد هنا مقصود ومقبول: النص لاتيني. لا تضعه على نص عربي —
+   letter-spacing يفكّ اتصال الحروف فتخرج «فاتورة» بحروف منفصلة. */
 .invoice-tagline {
   margin-top: 5pt;
   font-size: 9pt;
@@ -228,7 +230,6 @@ input[type="number"] {
   font-size: 9pt;
   font-weight: 600;
   color: #6e5b4b;
-  letter-spacing: 0.06em;
 }
 
 .invoice-party-name {

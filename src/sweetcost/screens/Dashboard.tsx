@@ -119,7 +119,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
       {/* ── رسالتك اليوم ─────────────────────────────────── */}
       <section className="bg-bark rounded-2xl p-6 sm:p-7 text-[#ede3d7] flex flex-col lg:flex-row gap-7">
         <div className="flex-1 min-w-0 flex flex-col gap-3">
-          <div className="flex items-center gap-2.5 text-[11.5px] tracking-[0.12em] text-[#c9a177]">
+          <div className="flex items-center gap-2.5 text-[11.5px] text-[#c9a177]">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
               <path d="M12 3v2" /><path d="M12 19v2" /><path d="M5 12H3" /><path d="M21 12h-2" />
               <circle cx="12" cy="12" r="4.5" />
@@ -302,7 +302,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
                       index === 0 ? 'bg-[#f2e7d8] border-[#e1d3c2]' : 'bg-surface border-line'
                     }`}
                   >
-                    <div className="flex items-center gap-2 text-[11.5px] font-semibold text-warn tracking-wide">
+                    <div className="flex items-center gap-2 text-[11.5px] font-semibold text-warn">
                       {index === 0 ? (
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <circle cx="12" cy="9" r="6" />

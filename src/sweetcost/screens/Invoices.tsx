@@ -3,10 +3,10 @@
 // الفاتورة هي مصدر المبيعات في لوحة المتابعة.
 // ============================================================
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ScreenProps } from '../App.tsx'
-import { InvoicePrint } from '../components/InvoicePrint.tsx'
+import { InvoiceCapture, InvoicePrint } from '../components/InvoicePrint.tsx'
 import {
   ACTION_ICONS,
   ActionButton,
@@ -42,6 +42,8 @@ import { rangeFor, totalsIn } from '../lib/analytics.ts'
 import { profitOf, round } from '../lib/cost.ts'
 import { dueOf, receivablesOf, type PaymentState } from '../lib/dues.ts'
 import { invoiceMessage, normalizePhone, whatsappUrl } from '../lib/whatsapp.ts'
+import { invoiceFileName, invoicePdfBlob } from '../lib/invoicePdf.ts'
+import { canShareFile, downloadFile, shareFile } from '../lib/share.ts'
 import { recipeCostFor } from '../lib/derive.ts'
 import { arabicDateShort, arabicDays, money, percent, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
@@ -92,6 +94,9 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const [showCustomers, setShowCustomers] = useState(false)
   const [printId, setPrintId] = useState<string | null>(null)
   const [payFor, setPayFor] = useState<SalesInvoice | null>(null)
+  // الفاتورة التي تُصوَّر الآن إلى PDF، والعقدة التي تحمل رسمها
+  const [sendId, setSendId] = useState<string | null>(null)
+  const captureNode = useRef<HTMLDivElement | null>(null)
 
   // الطباعة تبقى مركّبة حتى ينتهي المتصفح منها
   useEffect(() => {
@@ -115,26 +120,76 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const printInvoice = printId ? (data.invoices.find((i) => i.id === printId) ?? null) : null
 
   /**
-   * يفتح واتساب برسالة الفاتورة. رابط wa.me يحمل نصاً فقط —
-   * لا يُرفق PDF، فالرسالة نفسها كاملة المبالغ.
+   * يرسل الفاتورة كملف PDF عبر لوحة مشاركة الجوال — ومنها واتساب.
+   *
+   * التصوير يحتاج العنصر مرسوماً في الصفحة فعلاً، فنركّب نسخة خارج
+   * حدود الشاشة أولاً (setSendId)، ثم يكمل التأثير أدناه بعد رسمها.
+   * على الكمبيوتر حيث لا مشاركة ملفات: نُنزّل الملف ونفتح واتساب
+   * بالنص، ليُرفق يدوياً.
    */
   function sendWhatsApp(invoice: SalesInvoice) {
     const customer = data.customers.find((c) => c.id === invoice.customer_id) ?? null
-    const phone = normalizePhone(customer?.phone)
-    if (!phone) {
+    if (!normalizePhone(customer?.phone)) {
       onError('لا يوجد رقم جوال صالح لهذا العميل. أضفه من «العملاء».')
       return
     }
-
-    const message = invoiceMessage({
-      invoice,
-      items: data.invoiceItems.filter((i) => i.invoice_id === invoice.id),
-      due: dueOf(invoice, data.invoiceTotals[invoice.id], today),
-      settings: data.settings,
-      customerName: customer?.name ?? null,
-    })
-    window.open(whatsappUrl(phone, message), '_blank', 'noopener')
+    setSendId(invoice.id)
   }
+
+  const sendInvoice = sendId ? (data.invoices.find((i) => i.id === sendId) ?? null) : null
+
+  useEffect(() => {
+    if (!sendInvoice) return
+    let cancelled = false
+
+    // إطاران: الأول ليُركَّب العنصر، والثاني ليكتمل تخطيطه
+    const timer = setTimeout(() => {
+      void (async () => {
+        const node = captureNode.current
+        if (!node || cancelled) return
+
+        const customer = data.customers.find((c) => c.id === sendInvoice.customer_id) ?? null
+        const phone = normalizePhone(customer?.phone)
+        const message = invoiceMessage({
+          invoice: sendInvoice,
+          items: data.invoiceItems.filter((i) => i.invoice_id === sendInvoice.id),
+          due: dueOf(sendInvoice, data.invoiceTotals[sendInvoice.id], today),
+          settings: data.settings,
+          customerName: customer?.name ?? null,
+        })
+
+        try {
+          const blob = await invoicePdfBlob(node)
+          if (cancelled) return
+          const file = new File([blob], invoiceFileName(sendInvoice.invoice_no), {
+            type: 'application/pdf',
+          })
+
+          if (canShareFile(file)) {
+            const outcome = await shareFile(file, message, `فاتورة ${sendInvoice.invoice_no}`)
+            if (outcome === 'unsupported' && phone) {
+              downloadFile(file)
+              window.open(whatsappUrl(phone, message), '_blank', 'noopener')
+            }
+          } else {
+            downloadFile(file)
+            if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
+          }
+        } catch {
+          onError('تعذّر تجهيز ملف الفاتورة. جرّب زر PDF للطباعة.')
+        } finally {
+          if (!cancelled) setSendId(null)
+        }
+      })()
+    }, 120)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // التأثير يعتمد على sendInvoice وحدها عمداً: data تتغيّر مع كل
+    // تحميل، وإعادة التشغيل معها تُلغي التصوير في منتصفه.
+  }, [sendInvoice])
 
   async function remove(invoice: SalesInvoice) {
     if (!window.confirm(`حذف الفاتورة ${invoice.invoice_no}؟ لا يمكن التراجع.`)) return
@@ -267,8 +322,10 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                           />
                           <ActionButton
                             icon={ACTION_ICONS.whatsapp}
-                            label="واتساب"
-                            disabled={cancelled || !normalizePhone(customer?.phone)}
+                            label={sendId === invoice.id ? 'جاري…' : 'واتساب'}
+                            disabled={
+                              cancelled || sendId !== null || !normalizePhone(customer?.phone)
+                            }
                             onClick={() => sendWhatsApp(invoice)}
                           />
                           <ActionButton
@@ -347,6 +404,19 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
           onClose={() => setShowCustomers(false)}
           onChanged={reload}
           onError={onError}
+        />
+      ) : null}
+
+      {sendInvoice ? (
+        <InvoiceCapture
+          nodeRef={(node) => {
+            captureNode.current = node
+          }}
+          invoice={sendInvoice}
+          items={data.invoiceItems.filter((i) => i.invoice_id === sendInvoice.id)}
+          totals={data.invoiceTotals[sendInvoice.id]}
+          customer={data.customers.find((c) => c.id === sendInvoice.customer_id) ?? null}
+          settings={data.settings}
         />
       ) : null}
 
