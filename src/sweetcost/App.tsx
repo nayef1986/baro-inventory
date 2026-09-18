@@ -4,10 +4,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { Login } from './components/Login.tsx'
 import { Shell, type ScreenKey } from './components/Shell.tsx'
 import { ErrorBanner, Spinner } from './components/UI.tsx'
 import { loadAll } from './lib/api.ts'
-import { dbErrorMessage, isConfigured } from './lib/supabase.ts'
+import { dbErrorMessage, isConfigured, requireAuth, supabase } from './lib/supabase.ts'
 import type { SweetCostData } from './types.ts'
 
 import DashboardScreen from './screens/Dashboard.tsx'
@@ -31,6 +32,8 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [screen, setScreen] = useState<ScreenKey>('dashboard')
+  const [signedIn, setSignedIn] = useState(!requireAuth)
+  const [authReady, setAuthReady] = useState(!requireAuth)
 
   const reload = useCallback(async () => {
     try {
@@ -41,15 +44,35 @@ export default function App() {
     }
   }, [])
 
+  // حالة الجلسة — تُتابَع فقط عندما يكون الدخول مطلوباً
   useEffect(() => {
-    if (!isConfigured) {
+    if (!requireAuth || !supabase) return
+    const sb = supabase
+
+    void sb.auth.getSession().then(({ data }) => {
+      setSignedIn(Boolean(data.session))
+      setAuthReady(true)
+    })
+
+    const { data: listener } = sb.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(Boolean(session))
+      setAuthReady(true)
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!isConfigured || !signedIn) {
       setLoading(false)
       return
     }
+    setLoading(true)
     void reload().finally(() => setLoading(false))
-  }, [reload])
+  }, [reload, signedIn])
 
   if (!isConfigured) return <SetupNotice />
+  if (!authReady) return <Spinner label="جاري التحقّق…" />
+  if (!signedIn) return <Login storeName="COCO CAKE" />
   if (loading) return <Spinner />
 
   if (fatal && !data) {

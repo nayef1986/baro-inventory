@@ -477,9 +477,11 @@ function InvoiceForm({
         <Field label="الخصم" htmlFor="in-disc" hint="بالريال">
           <NumberInput id="in-disc" value={discount} onChange={setDiscount} step="0.01" />
         </Field>
-        <Field label="نسبة الضريبة %" htmlFor="in-vat" hint="صفر = بلا ضريبة">
-          <NumberInput id="in-vat" value={vatRate} onChange={setVatRate} step="0.5" />
-        </Field>
+        {data.settings.vat_enabled ? (
+          <Field label="نسبة الضريبة %" htmlFor="in-vat" hint="صفر = بلا ضريبة">
+            <NumberInput id="in-vat" value={vatRate} onChange={setVatRate} step="0.5" />
+          </Field>
+        ) : null}
       </div>
 
       <h3 className="mt-6 mb-3 text-[14.5px] font-bold">البنود</h3>

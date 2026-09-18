@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react'
 
+import { requireAuth, signOut } from '../lib/supabase.ts'
 import { InstallButton } from './InstallButton.tsx'
 
 export type ScreenKey =
@@ -170,6 +171,15 @@ export function Shell({
 
         <div className="mt-auto flex flex-col gap-4">
           <InstallButton tone="dark" />
+          {requireAuth ? (
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="min-h-11 px-4 rounded-xl text-[13.5px] font-semibold cursor-pointer bg-transparent border border-[#45593a] text-[#b7c4a6] hover:bg-bark-2"
+            >
+              تسجيل الخروج
+            </button>
+          ) : null}
           <p className="m-0 border-t border-bark-3 pt-4 text-[11.5px] leading-relaxed text-[#93a683]">
             كل التكاليف تُحسب من آخر سعر شراء مسجّل. لا تُدخل تكلفة يدوياً.
           </p>
