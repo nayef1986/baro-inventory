@@ -41,8 +41,9 @@ import {
 import { rangeFor, totalsIn } from '../lib/analytics.ts'
 import { profitOf, round } from '../lib/cost.ts'
 import { dueOf, receivablesOf, type PaymentState } from '../lib/dues.ts'
+import { invoiceMessage, normalizePhone, whatsappUrl } from '../lib/whatsapp.ts'
 import { recipeCostFor } from '../lib/derive.ts'
-import { arabicDateShort, money, percent, todayISO } from '../lib/format.ts'
+import { arabicDateShort, arabicDays, money, percent, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
 import type { Customer, PaymentMethod, SalesInvoice, SweetCostData } from '../types.ts'
 
@@ -112,6 +113,28 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   )
 
   const printInvoice = printId ? (data.invoices.find((i) => i.id === printId) ?? null) : null
+
+  /**
+   * يفتح واتساب برسالة الفاتورة. رابط wa.me يحمل نصاً فقط —
+   * لا يُرفق PDF، فالرسالة نفسها كاملة المبالغ.
+   */
+  function sendWhatsApp(invoice: SalesInvoice) {
+    const customer = data.customers.find((c) => c.id === invoice.customer_id) ?? null
+    const phone = normalizePhone(customer?.phone)
+    if (!phone) {
+      onError('لا يوجد رقم جوال صالح لهذا العميل. أضفه من «العملاء».')
+      return
+    }
+
+    const message = invoiceMessage({
+      invoice,
+      items: data.invoiceItems.filter((i) => i.invoice_id === invoice.id),
+      due: dueOf(invoice, data.invoiceTotals[invoice.id], today),
+      settings: data.settings,
+      customerName: customer?.name ?? null,
+    })
+    window.open(whatsappUrl(phone, message), '_blank', 'noopener')
+  }
 
   async function remove(invoice: SalesInvoice) {
     if (!window.confirm(`حذف الفاتورة ${invoice.invoice_no}؟ لا يمكن التراجع.`)) return
@@ -230,7 +253,7 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                       <Pill tone={DUE_TONE[due.state]}>{DUE_LABEL[due.state]}</Pill>
                       {due.daysLate !== null ? (
                         <span className="block text-[11.5px] text-bad mt-0.5">
-                          متأخرة {due.daysLate} يوم
+                          متأخرة {arabicDays(due.daysLate)}
                         </span>
                       ) : null}
                     </Td>
@@ -241,6 +264,12 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                             icon={ACTION_ICONS.print}
                             label="PDF"
                             onClick={() => setPrintId(invoice.id)}
+                          />
+                          <ActionButton
+                            icon={ACTION_ICONS.whatsapp}
+                            label="واتساب"
+                            disabled={cancelled || !normalizePhone(customer?.phone)}
+                            onClick={() => sendWhatsApp(invoice)}
                           />
                           <ActionButton
                             icon={ACTION_ICONS.paid}
@@ -821,7 +850,11 @@ function CustomersModal({
         <Field label="اسم العميل" htmlFor="cu-name">
           <TextInput id="cu-name" value={name} onChange={setName} />
         </Field>
-        <Field label="رقم التواصل" htmlFor="cu-phone">
+        <Field
+          label="رقم الجوال"
+          htmlFor="cu-phone"
+          hint="لإرسال الفاتورة بالواتساب — 05… أو ‎+966…"
+        >
           <TextInput id="cu-phone" type="tel" value={phone} onChange={setPhone} />
         </Field>
         <Field label="الرقم الضريبي" htmlFor="cu-tax" hint="اختياري">

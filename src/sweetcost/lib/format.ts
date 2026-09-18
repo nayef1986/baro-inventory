@@ -79,6 +79,19 @@ export function arabicDateShort(iso: string): string {
   return `${d.getDate()} ${AR_MONTHS[d.getMonth()] ?? ''}`
 }
 
+/**
+ * صياغة الأيام بتمييز صحيح: يوم / يومين / 3 أيام / 11 يوماً.
+ * العدد في العربية يغيّر تمييزه، و«7 يوم» خطأ يلفت النظر في رسالة
+ * تذهب لعميل.
+ */
+export function arabicDays(count: number): string {
+  const n = Math.abs(Math.round(count))
+  if (n === 1) return 'يوم واحد'
+  if (n === 2) return 'يومين'
+  if (n >= 3 && n <= 10) return `${n} أيام`
+  return `${n} يوماً`
+}
+
 /** 2026-09-17 ← 6 ربيع الأول 1448 — يُستعمل في ترويسة الفاتورة */
 export function hijriDate(iso: string): string {
   const d = parseISO(iso)
