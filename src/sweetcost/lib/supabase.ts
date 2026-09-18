@@ -14,9 +14,9 @@ const key = import.meta.env['VITE_SWEETCOST_SUPABASE_ANON_KEY'] as string | unde
 export const isConfigured = Boolean(url && key)
 
 /**
- * يطلب تسجيل دخول قبل فتح النظام.
- * أطفئه محلياً، وفعّله قبل أي نشر على رابط عام — وإلا كانت
- * القاعدة مفتوحة لمن يحصل على مفتاح anon من حزمة المتصفح.
+ * بوابة الدخول. مطفأة حالياً بطلب صاحب المتجر: التطبيق يفتح مباشرة
+ * بلا حساب. القاعدة عندها مفتوحة للدور anon — الرابط وحده يحميها.
+ * لتفعيلها: اجعل القيمة true وشغّل 0005_require_auth.sql.
  */
 export const requireAuth =
   (import.meta.env['VITE_SWEETCOST_REQUIRE_AUTH'] as string | undefined) === 'true'
