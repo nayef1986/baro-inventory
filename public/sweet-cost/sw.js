@@ -6,7 +6,9 @@
 // يجب أن تكون حيّة، لا نسخة قديمة من الكاش.
 // ============================================================
 
-const VERSION = 'sweetcost-v1'
+// ارفع الرقم عند تغيير أي أصل ثابت (الأيقونات مثلاً) — activate
+// يحذف الكاش القديم، فيجلب المتصفح النسخة الجديدة بدل المخبّأة.
+const VERSION = 'sweetcost-v2'
 const SHELL = '/sweet-cost/'
 
 self.addEventListener('install', (event) => {
