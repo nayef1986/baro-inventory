@@ -205,7 +205,6 @@ export function InvoiceSheet({ invoice, items, totals, customer, settings }: She
           </div>
         </section>
 
-        <footer className="invoice-thanks">شكراً لتعاملكم مع {settings.store_name}.</footer>
     </article>
   )
 }

@@ -188,7 +188,6 @@ export function StatementSheet({
         </div>
       </section>
 
-      <footer className="invoice-thanks">شكراً لتعاملكم مع {settings.store_name}.</footer>
     </article>
   )
 }

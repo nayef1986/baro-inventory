@@ -382,11 +382,3 @@ input[type="number"] {
   margin-bottom: 3pt;
 }
 
-.invoice-thanks {
-  margin-top: 12pt;
-  padding-top: 5pt;
-  border-top: 0.75pt solid #d9c9b6;
-  font-size: 8.5pt;
-  color: #6e5b4b;
-  text-align: center;
-}
