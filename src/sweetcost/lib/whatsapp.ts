@@ -11,6 +11,7 @@
 // ============================================================
 
 import { money, quantity as fmtQty, arabicDate, arabicDays } from './format.ts'
+import { invoiceTitle, statementTitle } from './invoicePdf.ts'
 import type { Due } from './dues.ts'
 import type { SalesInvoice, SalesInvoiceItem, Settings } from '../types.ts'
 
@@ -81,7 +82,10 @@ export function invoiceMessage({
   lines.push('')
 
   if (customerName) lines.push(`أهلاً ${customerName} 👋`)
-  lines.push(`فاتورة توريد رقم *${invoice.invoice_no}*`)
+  // العنوان من نفس دالة اسم الملف: ما يقرأه التاجر في الرسالة هو
+  // ما يراه مكتوباً على المرفق، فلا يحتار أيّهما يخصّ الآخر.
+  lines.push(`*${invoiceTitle(settings.store_name, invoice.issued_on)}*`)
+  lines.push(`رقم الفاتورة: ${invoice.invoice_no}`)
   lines.push(`بتاريخ ${arabicDate(invoice.issued_on)}`)
   lines.push('')
 
@@ -124,12 +128,13 @@ export function invoiceMessage({
 /** نص كشف الحساب الشهري — ملخّص يرافق ملف الـPDF */
 export function statementMessage({
   statement,
-  monthText,
+  month,
   settings,
   customerName,
 }: {
   statement: { opening: number; charges: number; payments: number; closing: number; lines: unknown[] }
-  monthText: string
+  /** الشهر بصيغة YYYY-MM — منه يُبنى العنوان كما يُبنى اسم الملف */
+  month: string
   settings: Settings
   customerName: string | null
 }): string {
@@ -139,7 +144,7 @@ export function statementMessage({
   lines.push('')
 
   if (customerName) lines.push(`أهلاً ${customerName} 👋`)
-  lines.push(`*كشف حساب ${monthText}*`)
+  lines.push(`*${statementTitle(customerName ?? 'نقدي', month)}*`)
   lines.push('')
 
   lines.push(`رصيد ما قبل الشهر: ${money(statement.opening)} ${c}`)

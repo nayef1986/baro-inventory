@@ -77,23 +77,34 @@ export async function invoicePdfBlob(node: HTMLElement): Promise<Blob> {
 }
 
 /**
- * اسم الملف كما يظهر في الواتساب: «فاتورة COCO CAKE لشهر أكتوبر.pdf».
- * الشهر من تاريخ الإصدار لا من اليوم — الفاتورة قد تُرسل بعد شهرها.
+ * عنوان المستند. مصدرٌ واحد لاسم الملف ولسطر العنوان في رسالة
+ * الواتساب معاً — لو بُنيا في مكانين لافترقا عند أول تعديل.
+ * الشهر من تاريخ الإصدار لا من اليوم: الفاتورة قد تُرسل بعد شهرها.
  */
-export function invoiceFileName(storeName: string, issuedOn: string): string {
-  return pdfName(`فاتورة ${storeName} لشهر ${arabicMonth(issuedOn)}`)
+export function invoiceTitle(storeName: string, issuedOn: string): string {
+  return clean(`فاتورة ${storeName} لشهر ${arabicMonth(issuedOn)}`)
 }
 
 /**
- * «كشف حساب مقهى الرصيف لشهر أكتوبر.pdf».
+ * «كشف حساب مقهى الرصيف لشهر أكتوبر».
  * هنا الاسم اسم العميل لا المتجر: الكشف يخصّ تاجراً بعينه، ولو
  * حمل اسم المتجر لتشابهت كشوف كل العملاء في شهر واحد.
  */
-export function statementFileName(customerName: string, month: string): string {
-  return pdfName(`كشف حساب ${customerName} لشهر ${arabicMonth(`${month}-01`)}`)
+export function statementTitle(customerName: string, month: string): string {
+  return clean(`كشف حساب ${customerName} لشهر ${arabicMonth(`${month}-01`)}`)
 }
 
-/** يحذف ما لا يصلح في أسماء الملفات ويضيف الامتداد */
-function pdfName(text: string): string {
-  return `${text.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim()}.pdf`
+/** «فاتورة COCO CAKE لشهر أكتوبر.pdf» */
+export function invoiceFileName(storeName: string, issuedOn: string): string {
+  return `${invoiceTitle(storeName, issuedOn)}.pdf`
+}
+
+/** «كشف حساب مقهى الرصيف لشهر أكتوبر.pdf» */
+export function statementFileName(customerName: string, month: string): string {
+  return `${statementTitle(customerName, month)}.pdf`
+}
+
+/** يحذف ما لا يصلح في أسماء الملفات ويوحّد المسافات */
+function clean(text: string): string {
+  return text.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim()
 }

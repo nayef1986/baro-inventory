@@ -1316,7 +1316,7 @@ function StatementModal({
       const phone = normalizePhone(customer?.phone)
       const message = statementMessage({
         statement,
-        monthText: monthLabel(month),
+        month,
         settings: data.settings,
         customerName: customer?.name ?? null,
       })
