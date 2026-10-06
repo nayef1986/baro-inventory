@@ -1,13 +1,36 @@
 {
-  "redirects": [{ "source": "/", "destination": "/sweet-cost/", "permanent": false }],
-  "rewrites": [{ "source": "/sweet-cost", "destination": "/sweet-cost/index.html" }],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/sweet-cost/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/sweet-cost",
+      "destination": "/sweet-cost/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/sweet-cost/sw.js",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/sweet-cost/" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/sweet-cost/"
+        }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/ping",
+      "schedule": "0 3 * * *"
     }
   ]
 }
