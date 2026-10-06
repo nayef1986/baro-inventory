@@ -15,6 +15,12 @@
 //
 // والمشاركة بالملف وحده بلا نص: واتساب على الآيفون قد يُسقط
 // المرفق إذا رافقه نص. النص يُنسخ بزرّ مستقل ليُلصق إن أراد.
+//
+// ⚠️ ولا يظهر زرّ «تنزيل» حيث تعمل المشاركة: التنزيل هو الفخّ
+//    نفسه. سفاري على الآيفون يفتح الـblob في لسان بدل حفظه،
+//    فإن شاركه صاحب المتجر من هناك وصل التاجرَ **رابطٌ مؤقّت**
+//    مثل blob:…/bb8abb8c لا ملفٌ — وهذا ما حدث فعلاً. ولوحة
+//    المشاركة فيها «حفظ في الملفات» أصلاً، فلا شيء يفوته.
 // ============================================================
 
 import { useState } from 'react'
@@ -46,7 +52,7 @@ export function PdfReadyModal({
       .catch((e: unknown) => {
         // إغلاق اللوحة ليس خطأً
         if (e instanceof DOMException && e.name === 'AbortError') return
-        setNote('تعذّرت المشاركة. استخدم «تنزيل الملف».')
+        setNote('تعذّرت المشاركة. أعد المحاولة، أو استخدم زر «طباعة».')
       })
   }
 
@@ -67,17 +73,18 @@ export function PdfReadyModal({
           <Button variant="secondary" onClick={onClose}>
             إغلاق
           </Button>
-          <Button variant="secondary" onClick={() => downloadFile(file)}>
-            تنزيل الملف
-          </Button>
-          {shareable ? <Button onClick={share}>مشاركة</Button> : null}
+          {shareable ? (
+            <Button onClick={share}>مشاركة الملف</Button>
+          ) : (
+            <Button onClick={() => downloadFile(file)}>تنزيل الملف</Button>
+          )}
         </>
       }
     >
       <p className="m-0 text-[14px] font-semibold break-all">{file.name}</p>
       <p className="mt-2 mb-0 text-[13px] text-muted leading-relaxed">
         {shareable
-          ? 'اضغط «مشاركة» لتفتح لوحة الجهاز — ومنها واتساب أو الحفظ في «الملفات».'
+          ? 'اضغط «مشاركة الملف» لتفتح لوحة الجهاز — ومنها واتساب مباشرة، أو الحفظ في «الملفات».'
           : 'اضغط «تنزيل الملف» ليُحفظ على الجهاز، ثم أرفقه من واتساب.'}
       </p>
 
