@@ -72,6 +72,12 @@ export function arabicDate(iso: string): string {
   return `${d.getDate()} ${AR_MONTHS[d.getMonth()] ?? ''} ${d.getFullYear()}`
 }
 
+/** 2026-10-01 ← أكتوبر */
+export function arabicMonth(iso: string): string {
+  const d = parseISO(iso)
+  return d ? (AR_MONTHS[d.getMonth()] ?? '') : ''
+}
+
 /** 2026-09-17 ← 17 سبتمبر */
 export function arabicDateShort(iso: string): string {
   const d = parseISO(iso)

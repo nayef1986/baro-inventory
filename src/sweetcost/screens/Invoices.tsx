@@ -172,12 +172,12 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
         try {
           const blob = await invoicePdfBlob(node)
           if (cancelled) return
-          const file = new File([blob], invoiceFileName(sendInvoice.invoice_no), {
+          const file = new File([blob], invoiceFileName(data.settings.store_name, sendInvoice.issued_on), {
             type: 'application/pdf',
           })
 
           if (canShareFile(file)) {
-            const outcome = await shareFile(file, message, `فاتورة ${sendInvoice.invoice_no}`)
+            const outcome = await shareFile(file, message, file.name.replace(/\.pdf$/, ''))
             if (outcome === 'unsupported' && phone) {
               downloadFile(file)
               window.open(whatsappUrl(phone, message), '_blank', 'noopener')
@@ -1289,7 +1289,7 @@ function StatementModal({
       })
 
       if (canShareFile(file)) {
-        const outcome = await shareFile(file, message, `كشف ${monthLabel(month)}`)
+        const outcome = await shareFile(file, message, file.name.replace(/\.pdf$/, ''))
         if (outcome === 'unsupported') {
           downloadFile(file)
           if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')

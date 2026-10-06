@@ -10,6 +10,8 @@
 // حزمة الإقلاع ولا تبطّئان فتح التطبيق.
 // ============================================================
 
+import { arabicMonth } from './format.ts'
+
 /** عرض A4 بالمليمتر */
 const A4_WIDTH_MM = 210
 const A4_HEIGHT_MM = 297
@@ -74,13 +76,24 @@ export async function invoicePdfBlob(node: HTMLElement): Promise<Blob> {
   return pdf.output('blob')
 }
 
-/** coco-cake-CC-2026-001.pdf */
-export function invoiceFileName(invoiceNo: string): string {
-  return `${invoiceNo.replace(/[^\w-]+/g, '-')}.pdf`
+/**
+ * اسم الملف كما يظهر في الواتساب: «فاتورة COCO CAKE لشهر أكتوبر.pdf».
+ * الشهر من تاريخ الإصدار لا من اليوم — الفاتورة قد تُرسل بعد شهرها.
+ */
+export function invoiceFileName(storeName: string, issuedOn: string): string {
+  return pdfName(`فاتورة ${storeName} لشهر ${arabicMonth(issuedOn)}`)
 }
 
-/** كشف-مقهى-الرصيف-2026-09.pdf */
+/**
+ * «كشف حساب مقهى الرصيف لشهر أكتوبر.pdf».
+ * هنا الاسم اسم العميل لا المتجر: الكشف يخصّ تاجراً بعينه، ولو
+ * حمل اسم المتجر لتشابهت كشوف كل العملاء في شهر واحد.
+ */
 export function statementFileName(customerName: string, month: string): string {
-  const name = customerName.trim().replace(/\s+/g, '-').replace(/[\\/:*?"<>|]+/g, '')
-  return `كشف-${name}-${month}.pdf`
+  return pdfName(`كشف حساب ${customerName} لشهر ${arabicMonth(`${month}-01`)}`)
+}
+
+/** يحذف ما لا يصلح في أسماء الملفات ويضيف الامتداد */
+function pdfName(text: string): string {
+  return `${text.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim()}.pdf`
 }

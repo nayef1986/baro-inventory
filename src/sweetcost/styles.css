@@ -88,9 +88,16 @@ input[type="number"] {
     display: block !important;
   }
 
+  /* الهامش صفر عمداً: المتصفح يطبع رابط الصفحة وتاريخها في
+     الهامش، ولا سبيل لإخفائهما إلا بإلغائه. الهامش نفسه ننقله
+     إلى حشو الورقة، فيخرج المستند بمقاسه ونظيفاً من الرابط. */
   @page {
     size: A4;
-    margin: 14mm;
+    margin: 0;
+  }
+
+  .print-root .invoice-sheet {
+    padding: 14mm;
   }
 
   html,
