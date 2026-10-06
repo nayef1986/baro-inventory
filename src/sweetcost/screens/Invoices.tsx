@@ -51,7 +51,12 @@ import {
   type TermKey,
 } from '../lib/dues.ts'
 import { invoiceMessage, normalizePhone, statementMessage, whatsappUrl } from '../lib/whatsapp.ts'
-import { invoiceFileName, invoicePdfBlob, statementFileName } from '../lib/invoicePdf.ts'
+import {
+  invoiceFileName,
+  invoicePdfBlob,
+  invoiceSequence,
+  statementFileName,
+} from '../lib/invoicePdf.ts'
 import { buildStatement, currentMonth, monthLabel, monthRange } from '../lib/statement.ts'
 import { canShareFile, downloadFile, shareFile } from '../lib/share.ts'
 import { recipeCostFor } from '../lib/derive.ts'
@@ -174,18 +179,21 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
 
         const customer = data.customers.find((c) => c.id === invoice.customer_id) ?? null
         const phone = normalizePhone(customer?.phone)
+        // التسلسل مرة واحدة: العنوان في الرسالة واسم المرفق سواء
+        const sequence = invoiceSequence(invoice, data.invoices)
         const message = invoiceMessage({
           invoice: invoice,
           items: data.invoiceItems.filter((i) => i.invoice_id === invoice.id),
           due: dueOf(invoice, data.invoiceTotals[invoice.id], today),
           settings: data.settings,
           customerName: customer?.name ?? null,
+          sequence,
         })
 
         try {
           const blob = await invoicePdfBlob(node)
           if (cancelled) return
-          const file = new File([blob], invoiceFileName(data.settings.store_name, invoice.issued_on), {
+          const file = new File([blob], invoiceFileName(data.settings.store_name, invoice.issued_on, sequence), {
             type: 'application/pdf',
           })
 

@@ -76,27 +76,60 @@ export async function invoicePdfBlob(node: HTMLElement): Promise<Blob> {
   return pdf.output('blob')
 }
 
+/** أقلّ ما نحتاجه لترتيب الفواتير — لا الكائن كاملاً */
+interface Dated {
+  id: string
+  invoice_no: string
+  issued_on: string
+}
+
+/**
+ * ترتيب الفاتورة بين فواتير شهرها، بدءاً من ١.
+ *
+ * الاسم وحده لا يكفي حين تُرسل أكثر من فاتورة في الشهر: الملفات
+ * تتشابه في جوال التاجر فلا يعرف أيّها أيّ. فالثانية تحمل ٢
+ * والثالثة ٣، والأولى تبقى بلا رقم — فلا يتغيّر اسمها حين تُصدَر
+ * فاتورة بعدها.
+ *
+ * الترتيب بالتاريخ ثم بالرقم ثم بالمعرّف: ترتيبٌ تامّ لا يتأرجح،
+ * فتحمل الفاتورة الواحدة الرقم نفسه كلما أُرسلت.
+ */
+export function invoiceSequence(invoice: Dated, invoices: Dated[]): number {
+  const month = invoice.issued_on.slice(0, 7)
+  const key = (i: Dated) => `${i.issued_on}|${i.invoice_no}|${i.id}`
+  const mine = key(invoice)
+
+  let before = 0
+  for (const other of invoices) {
+    if (other.issued_on.slice(0, 7) !== month) continue
+    if (key(other) < mine) before += 1
+  }
+  return before + 1
+}
+
 /**
  * عنوان المستند. مصدرٌ واحد لاسم الملف ولسطر العنوان في رسالة
  * الواتساب معاً — لو بُنيا في مكانين لافترقا عند أول تعديل.
  * الشهر من تاريخ الإصدار لا من اليوم: الفاتورة قد تُرسل بعد شهرها.
  */
-export function invoiceTitle(storeName: string, issuedOn: string): string {
-  return clean(`فاتورة ${storeName} لشهر ${arabicMonth(issuedOn)}`)
+export function invoiceTitle(storeName: string, issuedOn: string, sequence = 1): string {
+  const suffix = sequence > 1 ? ` ${sequence}` : ''
+  return clean(`فاتورة ${storeName} لشهر ${arabicMonth(issuedOn)}${suffix}`)
 }
 
 /**
  * «كشف حساب مقهى الرصيف لشهر أكتوبر».
  * هنا الاسم اسم العميل لا المتجر: الكشف يخصّ تاجراً بعينه، ولو
- * حمل اسم المتجر لتشابهت كشوف كل العملاء في شهر واحد.
+ * حمل اسم المتجر لتشابهت كشوف كل العملاء في شهر واحد. ولا يحتاج
+ * تسلسلاً: كشف واحد لكل عميل في كل شهر.
  */
 export function statementTitle(customerName: string, month: string): string {
   return clean(`كشف حساب ${customerName} لشهر ${arabicMonth(`${month}-01`)}`)
 }
 
 /** «فاتورة COCO CAKE لشهر أكتوبر.pdf» */
-export function invoiceFileName(storeName: string, issuedOn: string): string {
-  return `${invoiceTitle(storeName, issuedOn)}.pdf`
+export function invoiceFileName(storeName: string, issuedOn: string, sequence = 1): string {
+  return `${invoiceTitle(storeName, issuedOn, sequence)}.pdf`
 }
 
 /** «كشف حساب مقهى الرصيف لشهر أكتوبر.pdf» */

@@ -67,12 +67,15 @@ export function invoiceMessage({
   due,
   settings,
   customerName,
+  sequence = 1,
 }: {
   invoice: SalesInvoice
   items: SalesInvoiceItem[]
   due: Due
   settings: Settings
   customerName: string | null
+  /** ترتيب الفاتورة في شهرها — ليطابق العنوانُ اسمَ المرفق */
+  sequence?: number
 }): string {
   const lines: string[] = []
   const currency = settings.currency
@@ -84,7 +87,7 @@ export function invoiceMessage({
   if (customerName) lines.push(`أهلاً ${customerName} 👋`)
   // العنوان من نفس دالة اسم الملف: ما يقرأه التاجر في الرسالة هو
   // ما يراه مكتوباً على المرفق، فلا يحتار أيّهما يخصّ الآخر.
-  lines.push(`*${invoiceTitle(settings.store_name, invoice.issued_on)}*`)
+  lines.push(`*${invoiceTitle(settings.store_name, invoice.issued_on, sequence)}*`)
   lines.push(`رقم الفاتورة: ${invoice.invoice_no}`)
   lines.push(`بتاريخ ${arabicDate(invoice.issued_on)}`)
   lines.push('')

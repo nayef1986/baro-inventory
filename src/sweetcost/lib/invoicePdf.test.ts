@@ -3,6 +3,7 @@ import { test } from 'node:test'
 
 import {
   invoiceFileName,
+  invoiceSequence,
   invoiceTitle,
   statementFileName,
   statementTitle,
@@ -46,4 +47,38 @@ test('اسم الملف هو العنوان نفسه زائد الامتداد',
 test('العنوان بلا امتداد — ليُكتب في الرسالة كما هو', () => {
   assert.equal(invoiceTitle('COCO CAKE', '2026-10-01'), 'فاتورة COCO CAKE لشهر أكتوبر')
   assert.equal(statementTitle('مقهى الرصيف', '2026-10'), 'كشف حساب مقهى الرصيف لشهر أكتوبر')
+})
+
+// ─── التسلسل داخل الشهر ──────────────────────────────────────
+
+function inv(id: string, no: string, on: string) {
+  return { id, invoice_no: no, issued_on: on }
+}
+
+const OCT = [
+  inv('a', 'CC-001', '2026-10-01'),
+  inv('b', 'CC-002', '2026-10-09'),
+  inv('c', 'CC-003', '2026-10-20'),
+  inv('d', 'CC-004', '2026-11-02'), // شهر آخر
+]
+
+test('الأولى في الشهر بلا رقم، وما بعدها بالتسلسل', () => {
+  assert.equal(invoiceSequence(OCT[0]!, OCT), 1)
+  assert.equal(invoiceSequence(OCT[1]!, OCT), 2)
+  assert.equal(invoiceSequence(OCT[2]!, OCT), 3)
+})
+
+test('كل شهر يبدأ العدّ من جديد', () => {
+  assert.equal(invoiceSequence(OCT[3]!, OCT), 1)
+})
+
+test('ترتيب المصفوفة لا يغيّر الرقم', () => {
+  const shuffled = [OCT[2]!, OCT[0]!, OCT[3]!, OCT[1]!]
+  assert.equal(invoiceSequence(OCT[1]!, shuffled), 2)
+})
+
+test('الاسم يحمل الرقم من الثانية فصاعداً', () => {
+  assert.equal(invoiceFileName('COCO CAKE', '2026-10-09', 1), 'فاتورة COCO CAKE لشهر أكتوبر.pdf')
+  assert.equal(invoiceFileName('COCO CAKE', '2026-10-09', 2), 'فاتورة COCO CAKE لشهر أكتوبر 2.pdf')
+  assert.equal(invoiceFileName('COCO CAKE', '2026-10-20', 3), 'فاتورة COCO CAKE لشهر أكتوبر 3.pdf')
 })
