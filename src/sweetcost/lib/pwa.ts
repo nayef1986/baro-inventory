@@ -14,6 +14,23 @@ export function registerServiceWorker(): void {
   if (!import.meta.env.PROD) return
   if (!('serviceWorker' in navigator)) return
 
+  // التطبيق المثبّت على الشاشة الرئيسية قد يبقى مفتوحاً أياماً،
+  // فيظلّ يشغّل نسخة قديمة من الكود بعد نشر تحديث. هنا نعيد
+  // التحميل لحظة استلام النسخة الجديدة — إلا إن كان صاحب المتجر
+  // يكتب في نموذج، فإعادة التحميل تضيّع ما كتبه. وقتها ينتظر
+  // التحديث فتحةً قادمة.
+  let typed = false
+  document.addEventListener('input', () => {
+    typed = true
+  })
+
+  let reloading = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading || typed) return
+    reloading = true
+    window.location.reload()
+  })
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sweet-cost/sw.js', { scope: '/sweet-cost/' }).catch(() => {
       // فشل التسجيل لا يمنع التطبيق من العمل
