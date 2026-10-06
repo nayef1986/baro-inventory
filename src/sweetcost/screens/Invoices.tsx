@@ -97,6 +97,16 @@ function nextInvoiceNo(data: SweetCostData): string {
   return `${head}${String(max + 1).padStart(3, '0')}`
 }
 
+/**
+ * مهمة تصوير فاتورة إلى PDF ووجهتها.
+ * المسار واحد — تُركَّب نسخة خارج الشاشة وتُصوَّر — والنهاية تختلف:
+ * `download` يحفظ الملف، و`share` يفتح لوحة المشاركة ومنها واتساب.
+ */
+interface PdfJob {
+  id: string
+  mode: 'download' | 'share'
+}
+
 export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const [editing, setEditing] = useState<SalesInvoice | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -105,8 +115,9 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const [showStatement, setShowStatement] = useState(false)
   const [printId, setPrintId] = useState<string | null>(null)
   const [payFor, setPayFor] = useState<SalesInvoice | null>(null)
-  // الفاتورة التي تُصوَّر الآن إلى PDF، والعقدة التي تحمل رسمها
-  const [sendId, setSendId] = useState<string | null>(null)
+  // الفاتورة التي تُصوَّر الآن إلى PDF، ووجهتها، والعقدة التي تحمل
+  // رسمها. المسار واحد والنهاية تختلف: ملف يُنزَّل، أو ملف يُشارَك.
+  const [pdfJob, setPdfJob] = useState<PdfJob | null>(null)
   const captureNode = useRef<HTMLDivElement | null>(null)
 
   // الطباعة تبقى مركّبة حتى ينتهي المتصفح منها
@@ -134,7 +145,7 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
    * يرسل الفاتورة كملف PDF عبر لوحة مشاركة الجوال — ومنها واتساب.
    *
    * التصوير يحتاج العنصر مرسوماً في الصفحة فعلاً، فنركّب نسخة خارج
-   * حدود الشاشة أولاً (setSendId)، ثم يكمل التأثير أدناه بعد رسمها.
+   * حدود الشاشة أولاً (setPdfJob)، ثم يكمل التأثير أدناه بعد رسمها.
    * على الكمبيوتر حيث لا مشاركة ملفات: نُنزّل الملف ونفتح واتساب
    * بالنص، ليُرفق يدوياً.
    */
@@ -144,13 +155,15 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
       onError('لا يوجد رقم جوال صالح لهذا العميل. أضفه من «العملاء».')
       return
     }
-    setSendId(invoice.id)
+    setPdfJob({ id: invoice.id, mode: 'share' })
   }
 
-  const sendInvoice = sendId ? (data.invoices.find((i) => i.id === sendId) ?? null) : null
+  const pdfInvoice = pdfJob ? (data.invoices.find((i) => i.id === pdfJob.id) ?? null) : null
 
   useEffect(() => {
-    if (!sendInvoice) return
+    if (!pdfJob || !pdfInvoice) return
+    const { mode } = pdfJob
+    const invoice = pdfInvoice
     let cancelled = false
 
     // إطاران: الأول ليُركَّب العنصر، والثاني ليكتمل تخطيطه
@@ -159,12 +172,12 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
         const node = captureNode.current
         if (!node || cancelled) return
 
-        const customer = data.customers.find((c) => c.id === sendInvoice.customer_id) ?? null
+        const customer = data.customers.find((c) => c.id === invoice.customer_id) ?? null
         const phone = normalizePhone(customer?.phone)
         const message = invoiceMessage({
-          invoice: sendInvoice,
-          items: data.invoiceItems.filter((i) => i.invoice_id === sendInvoice.id),
-          due: dueOf(sendInvoice, data.invoiceTotals[sendInvoice.id], today),
+          invoice: invoice,
+          items: data.invoiceItems.filter((i) => i.invoice_id === invoice.id),
+          due: dueOf(invoice, data.invoiceTotals[invoice.id], today),
           settings: data.settings,
           customerName: customer?.name ?? null,
         })
@@ -172,9 +185,15 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
         try {
           const blob = await invoicePdfBlob(node)
           if (cancelled) return
-          const file = new File([blob], invoiceFileName(data.settings.store_name, sendInvoice.issued_on), {
+          const file = new File([blob], invoiceFileName(data.settings.store_name, invoice.issued_on), {
             type: 'application/pdf',
           })
+
+          // التنزيل ينتهي هنا: لا مشاركة ولا نافذة طباعة
+          if (mode === 'download') {
+            downloadFile(file)
+            return
+          }
 
           if (canShareFile(file)) {
             const outcome = await shareFile(file, message, file.name.replace(/\.pdf$/, ''))
@@ -187,9 +206,9 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
             if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
           }
         } catch {
-          onError('تعذّر تجهيز ملف الفاتورة. جرّب زر PDF للطباعة.')
+          onError('تعذّر تجهيز ملف PDF. جرّب زر الطباعة بدلاً منه.')
         } finally {
-          if (!cancelled) setSendId(null)
+          if (!cancelled) setPdfJob(null)
         }
       })()
     }, 120)
@@ -198,9 +217,9 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
       cancelled = true
       clearTimeout(timer)
     }
-    // التأثير يعتمد على sendInvoice وحدها عمداً: data تتغيّر مع كل
+    // التأثير يعتمد على pdfJob وحدها عمداً: data تتغيّر مع كل
     // تحميل، وإعادة التشغيل معها تُلغي التصوير في منتصفه.
-  }, [sendInvoice])
+  }, [pdfJob])
 
   async function remove(invoice: SalesInvoice) {
     if (!window.confirm(`حذف الفاتورة ${invoice.invoice_no}؟ لا يمكن التراجع.`)) return
@@ -334,15 +353,29 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                       <div className="flex justify-end">
                         <ActionGroup>
                           <ActionButton
+                            icon={ACTION_ICONS.download}
+                            label={
+                              pdfJob?.id === invoice.id && pdfJob.mode === 'download'
+                                ? 'جاري…'
+                                : 'PDF'
+                            }
+                            disabled={pdfJob !== null}
+                            onClick={() => setPdfJob({ id: invoice.id, mode: 'download' })}
+                          />
+                          <ActionButton
                             icon={ACTION_ICONS.print}
-                            label="PDF"
+                            label="طباعة"
                             onClick={() => setPrintId(invoice.id)}
                           />
                           <ActionButton
                             icon={ACTION_ICONS.whatsapp}
-                            label={sendId === invoice.id ? 'جاري…' : 'واتساب'}
+                            label={
+                              pdfJob?.id === invoice.id && pdfJob.mode === 'share'
+                                ? 'جاري…'
+                                : 'واتساب'
+                            }
                             disabled={
-                              cancelled || sendId !== null || !normalizePhone(customer?.phone)
+                              cancelled || pdfJob !== null || !normalizePhone(customer?.phone)
                             }
                             onClick={() => sendWhatsApp(invoice)}
                           />
@@ -429,15 +462,15 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
         />
       ) : null}
 
-      {sendInvoice ? (
+      {pdfInvoice ? (
         <InvoiceCapture
           nodeRef={(node) => {
             captureNode.current = node
           }}
-          invoice={sendInvoice}
-          items={data.invoiceItems.filter((i) => i.invoice_id === sendInvoice.id)}
-          totals={data.invoiceTotals[sendInvoice.id]}
-          customer={data.customers.find((c) => c.id === sendInvoice.customer_id) ?? null}
+          invoice={pdfInvoice}
+          items={data.invoiceItems.filter((i) => i.invoice_id === pdfInvoice.id)}
+          totals={data.invoiceTotals[pdfInvoice.id]}
+          customer={data.customers.find((c) => c.id === pdfInvoice.customer_id) ?? null}
           settings={data.settings}
         />
       ) : null}
