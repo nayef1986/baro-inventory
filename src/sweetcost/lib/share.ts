@@ -9,8 +9,6 @@
 // غالباً — هناك نُنزّل الملف ونفتح واتساب بالنص، ليُرفق يدوياً.
 // ============================================================
 
-export type ShareOutcome = 'shared' | 'cancelled' | 'unsupported'
-
 /** هل يستطيع هذا الجهاز مشاركة ملفات فعلاً؟ */
 export function canShareFile(file: File): boolean {
   return (
@@ -22,20 +20,10 @@ export function canShareFile(file: File): boolean {
 }
 
 /**
- * يفتح لوحة المشاركة بالملف والنص.
- * `cancelled` تعني أن صاحب المتجر أغلق اللوحة — ليست خطأ.
+ * المشاركة نفسها لا تمرّ من هنا: navigator.share يشترط ضغطة
+ * المستخدم، وتوليد الملف يستهلكها. فتُنادى مباشرة من زرّ نافذة
+ * «الملف جاهز» — انظر components/PdfReady.tsx.
  */
-export async function shareFile(file: File, text: string, title: string): Promise<ShareOutcome> {
-  if (!canShareFile(file)) return 'unsupported'
-  try {
-    await navigator.share({ files: [file], text, title })
-    return 'shared'
-  } catch (e) {
-    // AbortError = إغلاق اللوحة. أي خطأ آخر نعامله كعدم دعم
-    if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled'
-    return 'unsupported'
-  }
-}
 
 /** ينزّل الملف على الجهاز — الطريق الاحتياطي على الكمبيوتر */
 export function downloadFile(file: File): void {

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ScreenProps } from '../App.tsx'
 import { InvoiceCapture, InvoicePrint } from '../components/InvoicePrint.tsx'
+import { PdfReadyModal } from '../components/PdfReady.tsx'
 import { StatementCapture, StatementPrint } from '../components/StatementPrint.tsx'
 import {
   ACTION_ICONS,
@@ -50,7 +51,12 @@ import {
   type PaymentState,
   type TermKey,
 } from '../lib/dues.ts'
-import { invoiceMessage, normalizePhone, statementMessage, whatsappUrl } from '../lib/whatsapp.ts'
+import {
+  invoiceMessage,
+  normalizePhone,
+  statementMessage,
+  whatsappUrl,
+} from '../lib/whatsapp.ts'
 import {
   invoiceFileName,
   invoicePdfBlob,
@@ -58,7 +64,6 @@ import {
   statementFileName,
 } from '../lib/invoicePdf.ts'
 import { buildStatement, currentMonth, monthLabel, monthRange } from '../lib/statement.ts'
-import { canShareFile, downloadFile, shareFile } from '../lib/share.ts'
 import { recipeCostFor } from '../lib/derive.ts'
 import { arabicDateShort, arabicDays, money, percent, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
@@ -112,6 +117,13 @@ interface PdfJob {
   mode: 'download' | 'share'
 }
 
+/** ملف جاهز ينتظر ضغطة جديدة ليُشارَك — انظر PdfReady.tsx */
+interface Ready {
+  file: File
+  message: string | null
+  whatsapp: string | null
+}
+
 export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   const [editing, setEditing] = useState<SalesInvoice | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -123,6 +135,8 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   // الفاتورة التي تُصوَّر الآن إلى PDF، ووجهتها، والعقدة التي تحمل
   // رسمها. المسار واحد والنهاية تختلف: ملف يُنزَّل، أو ملف يُشارَك.
   const [pdfJob, setPdfJob] = useState<PdfJob | null>(null)
+  // الملف بعد توليده، ينتظر ضغطة جديدة ليُشارَك أو يُنزَّل
+  const [ready, setReady] = useState<Ready | null>(null)
   const captureNode = useRef<HTMLDivElement | null>(null)
 
   // الطباعة تبقى مركّبة حتى ينتهي المتصفح منها
@@ -178,7 +192,6 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
         if (!node || cancelled) return
 
         const customer = data.customers.find((c) => c.id === invoice.customer_id) ?? null
-        const phone = normalizePhone(customer?.phone)
         // التسلسل مرة واحدة: العنوان في الرسالة واسم المرفق سواء
         const sequence = invoiceSequence(invoice, data.invoices)
         const message = invoiceMessage({
@@ -197,22 +210,14 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
             type: 'application/pdf',
           })
 
-          // التنزيل ينتهي هنا: لا مشاركة ولا نافذة طباعة
-          if (mode === 'download') {
-            downloadFile(file)
-            return
-          }
-
-          if (canShareFile(file)) {
-            const outcome = await shareFile(file, message, file.name.replace(/\.pdf$/, ''))
-            if (outcome === 'unsupported' && phone) {
-              downloadFile(file)
-              window.open(whatsappUrl(phone, message), '_blank', 'noopener')
-            }
-          } else {
-            downloadFile(file)
-            if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
-          }
+          // لا نشارك من هنا: ضغطة المستخدم انتهت صلاحيتها أثناء
+          // التوليد، وسفاري يرفض المشاركة بعدها. النافذة تتكفّل.
+          const phone = normalizePhone(customer?.phone)
+          setReady({
+            file,
+            message: mode === 'share' ? message : null,
+            whatsapp: mode === 'share' && phone ? whatsappUrl(phone, message) : null,
+          })
         } catch {
           onError('تعذّر تجهيز ملف PDF. جرّب زر الطباعة بدلاً منه.')
         } finally {
@@ -480,6 +485,15 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
           totals={data.invoiceTotals[pdfInvoice.id]}
           customer={data.customers.find((c) => c.id === pdfInvoice.customer_id) ?? null}
           settings={data.settings}
+        />
+      ) : null}
+
+      {ready ? (
+        <PdfReadyModal
+          file={ready.file}
+          message={ready.message}
+          whatsapp={ready.whatsapp}
+          onClose={() => setReady(null)}
         />
       ) : null}
 
@@ -1265,6 +1279,7 @@ function StatementModal({
   const [month, setMonth] = useState(currentMonth(today))
   const [busy, setBusy] = useState(false)
   const captureNode = useRef<HTMLDivElement | null>(null)
+  const [ready, setReady] = useState<Ready | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [printing, setPrinting] = useState(false)
 
@@ -1302,7 +1317,7 @@ function StatementModal({
     }
   }, [printing])
 
-  /** يولّد الملف ثم يشارك أو ينزّل — نفس مسار الفاتورة */
+  /** يولّد الملف ثم يسلّمه لنافذة «الملف جاهز» — نفس مسار الفاتورة */
   async function makePdf(share: boolean) {
     setBusy(true)
     setCapturing(true)
@@ -1316,29 +1331,19 @@ function StatementModal({
         type: 'application/pdf',
       })
 
-      if (!share) {
-        downloadFile(file)
-        return
-      }
+      const message = share
+        ? statementMessage({
+            statement,
+            month,
+            settings: data.settings,
+            customerName: customer?.name ?? null,
+          })
+        : null
 
+      // لا نشارك هنا: ضغطة المستخدم انتهت أثناء التوليد. النافذة
+      // تتكفّل بضغطة جديدة — انظر PdfReady.tsx
       const phone = normalizePhone(customer?.phone)
-      const message = statementMessage({
-        statement,
-        month,
-        settings: data.settings,
-        customerName: customer?.name ?? null,
-      })
-
-      if (canShareFile(file)) {
-        const outcome = await shareFile(file, message, file.name.replace(/\.pdf$/, ''))
-        if (outcome === 'unsupported') {
-          downloadFile(file)
-          if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
-        }
-      } else {
-        downloadFile(file)
-        if (phone) window.open(whatsappUrl(phone, message), '_blank', 'noopener')
-      }
+      setReady({ file, message, whatsapp: message && phone ? whatsappUrl(phone, message) : null })
     } catch {
       onError('تعذّر تجهيز ملف الكشف. جرّب الطباعة.')
     } finally {
@@ -1432,6 +1437,15 @@ function StatementModal({
       ) : null}
 
       {printing ? <StatementPrint {...sheet} /> : null}
+
+      {ready ? (
+        <PdfReadyModal
+          file={ready.file}
+          message={ready.message}
+          whatsapp={ready.whatsapp}
+          onClose={() => setReady(null)}
+        />
+      ) : null}
     </Modal>
   )
 }
