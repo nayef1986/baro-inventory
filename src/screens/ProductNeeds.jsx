@@ -755,6 +755,82 @@ const FINSUM_CSS = `
   .fs-pr{background:#f5f3ff}.fs-pr b{color:#7c3aed}
 `;
 
+
+// ═══ تقرير التكرار — المتبقي فقط (بدون تفاصيل المبيعات) ═══
+function printRepeatReport(items, images, settings, brandName = "ALBAROO") {
+  const dnum = dateNum();
+  const rows = items.map(x => ({
+    barcode: x.p.barcode,
+    name: x.p.name ?? "",
+    fac: getFactoryCode(x.p.barcode),
+    facName: settings?.factories?.[getFactoryCode(x.p.barcode)] ?? "",
+    cont: x.p.container ?? "",
+    balance: Math.round(x.closing),
+  }));
+  const total = rows.reduce((s,r)=>s+r.balance, 0);
+
+  const body = rows.map((r,i)=>{
+    const img = images?.[r.barcode];
+    const imgCell = img ? `<img src="${img}" class="thumb"/>` : `<div class="noimg">📦</div>`;
+    return `<tr>
+      <td class="num">${i+1}</td>
+      <td class="imgc">${imgCell}</td>
+      <td class="bc">${r.barcode}</td>
+      <td class="desc">${r.name}</td>
+      <td class="fac">${r.fac}${r.facName?`<br><span class="fn">${r.facName}</span>`:""}</td>
+      <td class="bal" data-l="المتبقي">${fmtN(r.balance)}</td>
+    </tr>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير التكرار</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+    *{font-family:'Cairo',sans-serif;box-sizing:border-box}
+    body{margin:0;background:#fff;color:#1a1a1a}
+    .tb{position:fixed;top:0;left:0;right:0;background:#0f172a;padding:10px;display:flex;gap:10px;justify-content:center;z-index:99}
+    .tb button{font-family:'Cairo';font-size:14px;font-weight:700;border:none;border-radius:10px;padding:10px 20px;cursor:pointer}
+    .bk{background:#334155;color:#fff}.pr{background:#2563eb;color:#fff}
+    .w{max-width:900px;margin:0 auto;padding:70px 16px 40px}
+    h1{text-align:center;color:#0f172a;margin-bottom:4px;font-size:23px;font-weight:900}
+    .date{text-align:center;color:#888;font-size:13px;margin-bottom:18px}
+    .sum{display:flex;gap:12px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+    .sc{background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px 24px;text-align:center;min-width:120px}
+    .sv{font-size:26px;font-weight:900;color:#0f172a}
+    .sl{font-size:12px;color:#64748b;margin-top:2px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th{background:#0f172a;color:#fff;padding:11px 6px;font-size:13px;font-weight:700}
+    td{border:1px solid #e2e8f0;padding:9px 6px;text-align:center;vertical-align:middle}
+    td.num{background:#f1f5f9;color:#888;font-weight:900;font-size:12px;width:34px}
+    td.imgc{width:60px;padding:4px}
+    .thumb{width:52px;height:52px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0}
+    .noimg{width:52px;height:52px;display:flex;align-items:center;justify-content:center;background:#f1f5f9;border-radius:7px;font-size:22px}
+    td.bc{font-family:monospace;font-size:16px;font-weight:900;color:#0f172a;letter-spacing:1px}
+    td.desc{text-align:right;font-weight:700;font-size:13px;color:#334155;padding-right:10px}
+    td.fac{font-family:monospace;font-size:13px;color:#2563eb;font-weight:700}
+    td.fac .fn{font-family:'Cairo';font-size:11px;color:#64748b;font-weight:400}
+    td.bal{font-size:26px;font-weight:900;color:#059669}
+    tr:nth-child(even) td{background:#fafbfc}
+    tfoot td{background:#0f172a!important;color:#fff;font-weight:900;font-size:17px;padding:12px}
+    @media print{.tb{display:none}.w{padding:10px}}
+  </style></head><body>
+  <div class="tb"><button class="bk" onclick="window.close();history.back()">← رجوع</button><button class="pr" onclick="window.print()">🖨️ طباعة</button></div>
+  <div class="w">
+    <h1>🔁 تقرير التكرار</h1>
+    <div class="date">📅 ${dnum} · ${brandName}</div>
+    <div class="sum">
+      <div class="sc"><div class="sv">${rows.length}</div><div class="sl">منتج</div></div>
+      <div class="sc"><div class="sv">${fmtN(total)}</div><div class="sl">إجمالي المتبقي</div></div>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>صورة</th><th>الباركود</th><th>اسم المنتج</th><th>المصنع</th><th>المتبقي</th></tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr><td colspan="5">الإجمالي</td><td>${fmtN(total)}</td></tr></tfoot>
+    </table>
+  </div></body></html>`;
+  const w = window.open("", "_blank");
+  if (w){ w.document.write(html); w.document.close(); }
+}
+
 function printSearchResults(results, calcItem, images, settings, query) {
   if (!results || results.length === 0) { alert("لا نتائج للطباعة"); return; }
   const { greg, hijri } = dateEN();
@@ -1583,6 +1659,8 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [showCats, setShowCats] = useState(false);
   const [openCatCode, setOpenCatCode] = useState(null);
   const [catSearch, setCatSearch] = useState("");   // بحث داخل شاشة الفئات
+  const [basket, setBasket] = useState([]);        // باركودات محددة للتكرار (تتجمع عبر عمليات بحث متعددة)
+  const [showBasket, setShowBasket] = useState(false);
   const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
   const [yearBad, setYearBad] = useState(null);           // سنة السيئين المختارة
   const [openHeroCont, setOpenHeroCont] = useState(null);
@@ -1674,6 +1752,80 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
       onBack={()=>{ setContainer(null); restoreScroll(); }} />;
   }
 
+  // ═══ شاشة السلة — المنتجات المحددة للتكرار ═══
+  if (showBasket) {
+    const items = basket.map(bc => {
+      const p = products.find(x => x.barcode === bc);
+      return p ? calcItem(p) : null;
+    }).filter(Boolean);
+    const totalBal = items.reduce((s,x)=>s+Math.round(x.closing), 0);
+    return (
+      <div className="space-y-3">
+        {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
+        <button onClick={()=>setShowBasket(false)} className="text-blue-400 font-bold text-sm">← رجوع للبحث</button>
+        <div className="flex items-center justify-between">
+          <div className="font-black text-slate-100 text-lg">📋 منتجات التكرار</div>
+          {basket.length > 0 && (
+            <button onClick={()=>{ if(confirm("تفضّي كل المحدد؟")) setBasket([]); }}
+              className="text-red-400 text-xs font-bold">🗑️ فضّي الكل</button>
+          )}
+        </div>
+
+        {items.length === 0 ? (
+          <div className="text-center text-slate-500 py-16 leading-loose">
+            ما حددت منتجات بعد.<br/>
+            <span className="text-xs">ارجع للبحث وحدّد بزر ➕ على كل منتج تبيه.</span>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 text-center">
+                <div className="text-2xl font-black text-slate-100">{items.length}</div>
+                <div className="text-[11px] text-slate-500 mt-1">منتج محدد</div>
+              </div>
+              <div className="bg-slate-800 border border-emerald-700/40 rounded-xl p-3 text-center">
+                <div className="text-2xl font-black text-emerald-400">{fmtN(totalBal)}</div>
+                <div className="text-[11px] text-slate-500 mt-1">إجمالي المتبقي</div>
+              </div>
+            </div>
+
+            <button onClick={()=>printRepeatReport(items, images, settings, settings?.brandName ?? "ALBAROO")}
+              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white py-3.5 rounded-xl font-black text-base">
+              🖨️ اطبع تقرير التكرار ({items.length})
+            </button>
+
+            <div className="space-y-2">
+              {items.map(x => {
+                const p = x.p;
+                const fac = getFactoryCode(p.barcode);
+                const facName = settings?.factories?.[fac] ?? "";
+                const img = images?.[p.barcode];
+                return (
+                  <div key={p.barcode} className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-3">
+                    {img
+                      ? <img src={img} alt="" onClick={()=>setHeroViewImg({src:img,name:p.name})} className="w-12 h-12 rounded-lg object-cover shrink-0 cursor-zoom-in" />
+                      : <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-lg shrink-0">📦</div>}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-slate-100 text-sm truncate">{p.name}</div>
+                      <div className="text-sm text-slate-300 font-mono font-black tracking-wide">{p.barcode}</div>
+                      <div className="text-[11px] text-blue-400 truncate">🏭 {fac}{facName ? ` · ${facName}` : ""}</div>
+                    </div>
+                    <div className="text-center shrink-0">
+                      <div className="text-2xl font-black text-emerald-400 leading-none">{fmtN(x.closing)}</div>
+                      <div className="text-[10px] text-slate-500 mt-1">المتبقي</div>
+                    </div>
+                    <button onClick={()=>setBasket(b=>b.filter(y=>y!==p.barcode))}
+                      className="shrink-0 bg-red-900/30 border border-red-700/40 text-red-400 rounded-lg px-3 py-2 text-xs font-bold">✕</button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (showSearch) {
     const q = searchDebounced.trim().toLowerCase();
     let results = q
@@ -1739,6 +1891,22 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           {results.length > 0 && <button onClick={()=>printSearchResults(results, calcItem, images, settings, searchQuery)}
             className="bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black">🖨️ طباعة النتائج</button>}
         </div>}
+
+        {/* حدّد كل النتائج دفعة وحدة — مفيد لو بحثت بمصنع كامل */}
+        {q && results.length > 0 && (()=>{
+          const allIn = results.every(p => basket.includes(p.barcode));
+          return (
+            <button onClick={()=>{
+                const codes = results.map(p=>p.barcode);
+                setBasket(b => allIn ? b.filter(x=>!codes.includes(x)) : [...new Set([...b, ...codes])]);
+              }}
+              className={`w-full py-2.5 rounded-xl text-xs font-black border transition ${
+                allIn ? "bg-slate-700 text-slate-300 border-slate-600"
+                      : "bg-emerald-900/30 text-emerald-300 border-emerald-700/50"}`}>
+              {allIn ? `✕ ألغِ تحديد الكل (${results.length})` : `➕ حدّد كل النتائج (${results.length})`}
+            </button>
+          );
+        })()}
         <div className="space-y-2">
           {results.map(p => {
             const x = calcItem(p);
@@ -1758,6 +1926,18 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                     <div className="text-sm text-slate-300 font-mono font-black tracking-wide">{p.barcode}</div>
                     <div className="text-[11px] text-blue-400 truncate">🏭 {fac}{facName ? ` · ${facName}` : ""}</div>
                   </div>
+                  {/* زر التحديد للتكرار */}
+                  {(()=>{ const inB = basket.includes(p.barcode);
+                    return (
+                      <button onClick={e=>{ e.stopPropagation();
+                          setBasket(b => inB ? b.filter(x=>x!==p.barcode) : [...b, p.barcode]); }}
+                        className={`shrink-0 w-11 h-11 rounded-xl font-black text-lg border transition ${
+                          inB ? "bg-emerald-600 border-emerald-500 text-white"
+                              : "bg-slate-700 border-slate-600 text-slate-400"}`}>
+                        {inB ? "✓" : "➕"}
+                      </button>
+                    );
+                  })()}
                 </div>
                 {/* جاء · باع · باقي */}
                 <div className="grid grid-cols-3 gap-1.5 mt-2">
@@ -1800,6 +1980,20 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           {q && results.length === 0 && <div className="text-center text-slate-500 py-12">لا نتائج لـ "{searchQuery}"</div>}
           {!q && <div className="text-center text-slate-500 py-12">اكتب باركود أو اسم، أو امسح 📷</div>}
         </div>
+
+        {/* مساحة تحت عشان الشريط العائم ما يغطي آخر نتيجة */}
+        {basket.length > 0 && <div style={{height:"72px"}} />}
+
+        {/* شريط السلة العائم — يبقى ظاهر وأنت تبحث وتحدّد */}
+        {basket.length > 0 && (
+          <div className="fixed bottom-20 left-0 right-0 px-4 z-40" style={{maxWidth:"480px",margin:"0 auto"}}>
+            <button onClick={()=>setShowBasket(true)}
+              className="w-full py-3.5 rounded-2xl border-none text-white font-black text-base flex items-center justify-center gap-2"
+              style={{background:"linear-gradient(135deg,#059669,#047857)",boxShadow:"0 8px 24px rgba(0,0,0,0.45)"}}>
+              📋 منتجات التكرار ({basket.length}) ←
+            </button>
+          </div>
+        )}
       </div>
     );
   }
