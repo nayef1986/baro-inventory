@@ -1762,7 +1762,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     return (
       <div className="space-y-3">
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
-        <button onClick={()=>setShowBasket(false)} className="text-blue-400 font-bold text-sm">← رجوع للبحث</button>
+        <button onClick={()=>setShowBasket(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="flex items-center justify-between">
           <div className="font-black text-slate-100 text-lg">📋 منتجات التكرار</div>
           {basket.length > 0 && (
@@ -1774,7 +1774,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {items.length === 0 ? (
           <div className="text-center text-slate-500 py-16 leading-loose">
             ما حددت منتجات بعد.<br/>
-            <span className="text-xs">ارجع للبحث وحدّد بزر ➕ على كل منتج تبيه.</span>
+            <span className="text-xs">حدّد بزر ➕ من 🔍 البحث أو ⭐ الأبطال.</span>
           </div>
         ) : (
           <>
@@ -2384,6 +2384,19 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                 <div onClick={()=>setOpenHeroCont(open?null:cont)} className="flex items-center justify-between p-3.5 cursor-pointer">
                   <div className="font-black text-slate-100">📦 {cont}</div>
                   <div className="flex items-center gap-2">
+                    {(()=>{ const codes = list.map(h=>h.p.barcode);
+                      const allIn = codes.every(x=>basket.includes(x));
+                      return (
+                        <button onClick={e=>{ e.stopPropagation();
+                            setBasket(b => allIn ? b.filter(x=>!codes.includes(x)) : [...new Set([...b, ...codes])]); }}
+                          title={allIn ? "ألغِ تحديد الكل" : "حدّد كل أبطال الكونتينر"}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-bold border ${
+                            allIn ? "bg-emerald-600 text-white border-emerald-500"
+                                  : "bg-slate-700 text-emerald-300 border-slate-600"}`}>
+                          {allIn ? "✓" : "➕"}
+                        </button>
+                      );
+                    })()}
                     <button onClick={e=>{ e.stopPropagation(); printHeroesReport(groups, contNames, images, settings?.brandName ?? "ALBAROO", cont); }}
                       className="text-xs bg-amber-700 text-white px-2.5 py-1 rounded-lg font-bold">🖨️</button>
                     <span className="text-xs font-bold bg-amber-600 text-white px-2.5 py-1 rounded-full">{list.length} بطل</span>
@@ -2405,9 +2418,23 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                             <div className="text-xs text-blue-400 mt-1">🏭 {getFactoryCode(h.p.barcode)}{settings?.factories?.[getFactoryCode(h.p.barcode)]?` · ${settings.factories[getFactoryCode(h.p.barcode)]}`:""} · 🏷️ {getCategoryName(h.p.barcode, settings)}</div>
                             <ContainerQtys product={h.p} />
                           </div>
-                          <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
-                            {h.star ? "⭐" : "☆"}
-                          </button>
+                          <div className="flex flex-col items-center gap-1.5 shrink-0">
+                            <button onClick={()=>toggleStar(h.p.barcode)} style={{fontSize:"24px",background:"none",border:"none",cursor:"pointer"}}>
+                              {h.star ? "⭐" : "☆"}
+                            </button>
+                            {/* تحديد للتكرار */}
+                            {(()=>{ const inB = basket.includes(h.p.barcode);
+                              return (
+                                <button onClick={e=>{ e.stopPropagation();
+                                    setBasket(b => inB ? b.filter(x=>x!==h.p.barcode) : [...b, h.p.barcode]); }}
+                                  className={`w-9 h-9 rounded-lg font-black text-sm border transition ${
+                                    inB ? "bg-emerald-600 border-emerald-500 text-white"
+                                        : "bg-slate-700 border-slate-600 text-slate-400"}`}>
+                                  {inB ? "✓" : "➕"}
+                                </button>
+                              );
+                            })()}
+                          </div>
                         </div>
                         <div className="flex gap-1.5 flex-wrap mt-2">
                           <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-900/30 text-blue-300">جاء {fmtN(h.bought)}</span>
@@ -2426,6 +2453,20 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             );
           })}
         </div>
+
+        {/* مساحة تحت عشان الشريط ما يغطي آخر بطاقة */}
+        {basket.length > 0 && <div style={{height:"72px"}} />}
+
+        {/* شريط السلة العائم */}
+        {basket.length > 0 && (
+          <div className="fixed bottom-20 left-0 right-0 px-4 z-40" style={{maxWidth:"480px",margin:"0 auto"}}>
+            <button onClick={()=>setShowBasket(true)}
+              className="w-full py-3.5 rounded-2xl border-none text-white font-black text-base"
+              style={{background:"linear-gradient(135deg,#059669,#047857)",boxShadow:"0 8px 24px rgba(0,0,0,0.45)"}}>
+              📋 منتجات التكرار ({basket.length}) ←
+            </button>
+          </div>
+        )}
       </div>
     );
   }
