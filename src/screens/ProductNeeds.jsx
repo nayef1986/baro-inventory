@@ -8,6 +8,9 @@ import {
 import { loadBranchCounts, loadTransfers } from "../lib/storage.js";
 import OfferBuilder from "./OfferBuilder.jsx";
 
+// مفتاح حفظ منتجات التكرار في الجهاز
+const BASKET_KEY = "baro_repeat_basket_v1";
+
 // آخر رقمين بنهاية كود الكونتينر = السنة (مثلاً BAR04YW25 → "25")
 function getContainerYear(c){
   const m = String(c||"").match(/(\d{2})$/);
@@ -1659,8 +1662,16 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [showCats, setShowCats] = useState(false);
   const [openCatCode, setOpenCatCode] = useState(null);
   const [catSearch, setCatSearch] = useState("");   // بحث داخل شاشة الفئات
-  const [basket, setBasket] = useState([]);        // باركودات محددة للتكرار (تتجمع عبر عمليات بحث متعددة)
+  // باركودات محددة للتكرار — محفوظة في الجهاز: تبقى حتى لو قفلت النظام، ما تروح إلا بالحذف
+  const [basket, setBasket] = useState(()=>{
+    try { const v = JSON.parse(localStorage.getItem(BASKET_KEY) ?? "[]"); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  });
   const [showBasket, setShowBasket] = useState(false);
+  // أي تغيير في السلة ينحفظ فورًا
+  useEffect(()=>{
+    try { localStorage.setItem(BASKET_KEY, JSON.stringify(basket)); } catch {}
+  }, [basket]);
   const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
   const [yearBad, setYearBad] = useState(null);           // سنة السيئين المختارة
   const [openHeroCont, setOpenHeroCont] = useState(null);
@@ -2481,6 +2492,20 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           <button onClick={()=>setShowHeroes(true)} className="bg-amber-600 text-white py-2.5 rounded-xl text-sm font-bold">⭐ الأبطال</button>
           <button onClick={()=>setShowBad(true)} className="bg-rose-700 text-white py-2.5 rounded-xl text-sm font-bold">⚠️ السيئين</button>
           <button onClick={()=>setShowCats(true)} className="bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-bold">🏷️ الفئات</button>
+        </div>
+
+        {/* 📋 التكرار — مع بقية الأيقونات، والمحدد محفوظ ما يروح إلا بالحذف */}
+        <div className="mt-2">
+          <button onClick={()=>setShowBasket(true)}
+            className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
+            style={{background: basket.length > 0
+              ? "linear-gradient(135deg,#059669,#047857)"
+              : "#334155"}}>
+            <span>📋 التكرار</span>
+            {basket.length > 0 && (
+              <span className="bg-white/25 px-2 py-0.5 rounded-full text-xs font-black">{basket.length}</span>
+            )}
+          </button>
         </div>
       </div>
 
