@@ -5,7 +5,7 @@ import {
   arabicIncludes, num, allContainers, fmtN, fmtM, fmtPct,
   getBranchRemaining, getCategoryCode, getCategoryName,
 } from "../lib/calc.js";
-import { loadBranchCounts, loadTransfers } from "../lib/storage.js";
+import { loadBranchCounts, loadTransfers, loadRepeatBasket, syncRepeatBasket } from "../lib/storage.js";
 import OfferBuilder from "./OfferBuilder.jsx";
 
 // مفتاح حفظ منتجات التكرار في الجهاز
@@ -1662,16 +1662,50 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
   const [showCats, setShowCats] = useState(false);
   const [openCatCode, setOpenCatCode] = useState(null);
   const [catSearch, setCatSearch] = useState("");   // بحث داخل شاشة الفئات
-  // باركودات محددة للتكرار — محفوظة في الجهاز: تبقى حتى لو قفلت النظام، ما تروح إلا بالحذف
+  // ── منتجات التكرار: محفوظة في Supabase فتظهر في كل الأجهزة ──
+  // تبدأ من كاش الجهاز (ظهور فوري) ثم تتحدّث من السحابة
   const [basket, setBasket] = useState(()=>{
     try { const v = JSON.parse(localStorage.getItem(BASKET_KEY) ?? "[]"); return Array.isArray(v) ? v : []; }
     catch { return []; }
   });
   const [showBasket, setShowBasket] = useState(false);
-  // أي تغيير في السلة ينحفظ فورًا
+  const [basketSyncing, setBasketSyncing] = useState(false);
+
+  // نسخة محلية احتياطية لو انقطع النت
   useEffect(()=>{
     try { localStorage.setItem(BASKET_KEY, JSON.stringify(basket)); } catch {}
   }, [basket]);
+
+  // اسحب آخر نسخة من السحابة
+  const pullBasket = async (showSpinner = false) => {
+    if (showSpinner) setBasketSyncing(true);
+    try { const cloud = await loadRepeatBasket(); setBasket(cloud); }
+    catch {}
+    finally { if (showSpinner) setBasketSyncing(false); }
+  };
+
+  // أول تحميل للشاشة + كل مرة يُفتح التكرار
+  useEffect(()=>{ pullBasket(false); }, []);
+  useEffect(()=>{ if (showBasket) pullBasket(true); }, [showBasket]);
+
+  // تعديل السلة: يحدّث الشاشة فورًا، ويدمج مع السحابة بالخلفية
+  // (الدمج يضمن إن جوال ما يمسح اللي أضافه جوال ثاني)
+  const changeBasket = (patch) => {
+    setBasket(prev => {
+      if (patch.clear) return [];
+      const add = patch.add ?? [], remove = patch.remove ?? [];
+      return [...new Set([...prev, ...add])].filter(x => !remove.includes(x));
+    });
+    setBasketSyncing(true);
+    syncRepeatBasket(patch)
+      .then(merged => { if (Array.isArray(merged)) setBasket(merged); })
+      .catch(()=>{})
+      .finally(()=>setBasketSyncing(false));
+  };
+
+  const toggleBasket  = (bc)    => changeBasket(basket.includes(bc) ? {remove:[bc]} : {add:[bc]});
+  const addManyBasket = (codes) => changeBasket({add:codes});
+  const delManyBasket = (codes) => changeBasket({remove:codes});
   const [openBadCont, setOpenBadCont] = useState(null);   // كونتينر السيئين المفتوح
   const [yearBad, setYearBad] = useState(null);           // سنة السيئين المختارة
   const [openHeroCont, setOpenHeroCont] = useState(null);
@@ -1775,11 +1809,23 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
         <button onClick={()=>setShowBasket(false)} className="text-blue-400 font-bold text-sm">← رجوع</button>
         <div className="flex items-center justify-between">
-          <div className="font-black text-slate-100 text-lg">📋 منتجات التكرار</div>
-          {basket.length > 0 && (
-            <button onClick={()=>{ if(confirm("تفضّي كل المحدد؟")) setBasket([]); }}
-              className="text-red-400 text-xs font-bold">🗑️ فضّي الكل</button>
-          )}
+          <div>
+            <div className="font-black text-slate-100 text-lg">📋 منتجات التكرار</div>
+            <div className="text-[11px] mt-0.5" style={{color: basketSyncing ? "#38bdf8" : "#64748b"}}>
+              {basketSyncing ? "⏳ يزامن مع باقي الأجهزة…" : "☁️ مشتركة بين كل أجهزتك"}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={()=>pullBasket(true)} disabled={basketSyncing}
+              title="اسحب آخر تحديث من الأجهزة الثانية"
+              className="text-sky-400 text-xs font-bold bg-slate-800 border border-slate-700 px-2.5 py-1.5 rounded-lg">
+              🔄 حدّث
+            </button>
+            {basket.length > 0 && (
+              <button onClick={()=>{ if(confirm("تفضّي كل المحدد؟ ينحذف من كل الأجهزة.")) changeBasket({clear:true}); }}
+                className="text-red-400 text-xs font-bold bg-slate-800 border border-slate-700 px-2.5 py-1.5 rounded-lg">🗑️ فضّي</button>
+            )}
+          </div>
         </div>
 
         {items.length === 0 ? (
@@ -1825,7 +1871,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                       <div className="text-2xl font-black text-emerald-400 leading-none">{fmtN(x.closing)}</div>
                       <div className="text-[10px] text-slate-500 mt-1">المتبقي</div>
                     </div>
-                    <button onClick={()=>setBasket(b=>b.filter(y=>y!==p.barcode))}
+                    <button onClick={()=>delManyBasket([p.barcode])}
                       className="shrink-0 bg-red-900/30 border border-red-700/40 text-red-400 rounded-lg px-3 py-2 text-xs font-bold">✕</button>
                   </div>
                 );
@@ -1909,7 +1955,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           return (
             <button onClick={()=>{
                 const codes = results.map(p=>p.barcode);
-                setBasket(b => allIn ? b.filter(x=>!codes.includes(x)) : [...new Set([...b, ...codes])]);
+                allIn ? delManyBasket(codes) : addManyBasket(codes);
               }}
               className={`w-full py-2.5 rounded-xl text-xs font-black border transition ${
                 allIn ? "bg-slate-700 text-slate-300 border-slate-600"
@@ -1940,8 +1986,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                   {/* زر التحديد للتكرار */}
                   {(()=>{ const inB = basket.includes(p.barcode);
                     return (
-                      <button onClick={e=>{ e.stopPropagation();
-                          setBasket(b => inB ? b.filter(x=>x!==p.barcode) : [...b, p.barcode]); }}
+                      <button onClick={e=>{ e.stopPropagation(); toggleBasket(p.barcode); }}
                         className={`shrink-0 w-11 h-11 rounded-xl font-black text-lg border transition ${
                           inB ? "bg-emerald-600 border-emerald-500 text-white"
                               : "bg-slate-700 border-slate-600 text-slate-400"}`}>
@@ -2399,7 +2444,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                       const allIn = codes.every(x=>basket.includes(x));
                       return (
                         <button onClick={e=>{ e.stopPropagation();
-                            setBasket(b => allIn ? b.filter(x=>!codes.includes(x)) : [...new Set([...b, ...codes])]); }}
+                            allIn ? delManyBasket(codes) : addManyBasket(codes); }}
                           title={allIn ? "ألغِ تحديد الكل" : "حدّد كل أبطال الكونتينر"}
                           className={`text-xs px-2.5 py-1 rounded-lg font-bold border ${
                             allIn ? "bg-emerald-600 text-white border-emerald-500"
@@ -2436,8 +2481,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
                             {/* تحديد للتكرار */}
                             {(()=>{ const inB = basket.includes(h.p.barcode);
                               return (
-                                <button onClick={e=>{ e.stopPropagation();
-                                    setBasket(b => inB ? b.filter(x=>x!==h.p.barcode) : [...b, h.p.barcode]); }}
+                                <button onClick={e=>{ e.stopPropagation(); toggleBasket(h.p.barcode); }}
                                   className={`w-9 h-9 rounded-lg font-black text-sm border transition ${
                                     inB ? "bg-emerald-600 border-emerald-500 text-white"
                                         : "bg-slate-700 border-slate-600 text-slate-400"}`}>
