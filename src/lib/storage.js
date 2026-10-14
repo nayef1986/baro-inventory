@@ -240,6 +240,24 @@ async function sbGetByPrefix(prefix) {
   } catch { return []; }
 }
 
+// فحص خفيف جداً: بس مفاتيح الفترات وتواريخ آخر تحديث لكل وحدة (بدون بيانات المبيعات الثقيلة) —
+// يستخدم قبل أي تحميل كامل، يوفّر Egress بشكل كبير للفترات المتراكمة
+async function sbGetPeriodsMeta(prefix) {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?key=like.${encodeURIComponent(prefix)}*&select=key,updated_at`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (!res.ok) return null;
+    return await res.json(); // [{key, updated_at}, ...]
+  } catch { return null; }
+}
+function sameMeta(a, b){
+  if (!a || !b || a.length !== b.length) return false;
+  const bMap = new Map(b.map(x => [x.key, x.updated_at]));
+  return a.every(x => bMap.get(x.key) === x.updated_at);
+}
+
 // يحذف كل الصفوف اللي مفتاحها يبدأ بالبادئة (دفعة وحدة، للحذف الكامل)
 async function sbDeleteByPrefix(prefix) {
   try {
@@ -288,6 +306,14 @@ function inflatePeriod(per) {
 }
 
 export async function loadPeriods() {
+  // فحص خفيف أول: بس المفاتيح وتواريخ التحديث — لو ما تغيّر شي، نستخدم الكاش المحلي مباشرة
+  const cached = await idbGet("periods_cache");
+  const cachedMeta = await idbGet("periods_meta");
+  if (cached && cachedMeta) {
+    const remoteMeta = await sbGetPeriodsMeta(PERIOD_PREFIX);
+    if (remoteMeta && sameMeta(cachedMeta, remoteMeta)) return cached; // ما تغيّر شي — صفر تحميل ثقيل
+  }
+
   let rows = await sbGetByPrefix(PERIOD_PREFIX);
   let periods = rows.map(r => r.value);
 
@@ -308,7 +334,13 @@ export async function loadPeriods() {
   if (anyMissing) {
     for (const p of fixed) { if (p && p.id) await sbSet(PERIOD_PREFIX + p.id, p); }
   }
-  return fixed.map(inflatePeriod);
+  const result = fixed.map(inflatePeriod);
+
+  // نحدّث الكاش المحلي (البيانات + بصمة المفاتيح/التواريخ) لخدمة الفحص الخفيف بالمرة الجاية
+  idbSet("periods_cache", result);
+  sbGetPeriodsMeta(PERIOD_PREFIX).then(meta => { if (meta) idbSet("periods_meta", meta); }).catch(()=>{});
+
+  return result;
 }
 
 // توافق للخلف: لو مكان ما نعرفه يستدعيها بمصفوفة كاملة، نحفظ الفرق فقط
@@ -462,6 +494,34 @@ export async function loadTransfers() {
 
 export async function saveTransfers(transfers) {
   return await save(KEYS.TRANSFERS, transfers);
+}
+
+// ─── منتجات التكرار (مشتركة بين كل الأجهزة) ──────────────────
+const REPEAT_BASKET_KEY = "baro_repeat_basket_v1";
+
+export async function loadRepeatBasket() {
+  const v = await load(REPEAT_BASKET_KEY);
+  return Array.isArray(v) ? v : [];
+}
+
+/**
+ * يعدّل سلة التكرار بمنطق دمج: يقرأ المحفوظ في السحابة أول،
+ * ثم يضيف/يحذف عليه — فجوال ما يمسح اللي أضافه جوال ثاني.
+ * يرجّع القائمة النهائية الموحّدة.
+ */
+export async function syncRepeatBasket({ add = [], remove = [], clear = false } = {}) {
+  let cloud = [];
+  try {
+    const v = await sbGet(REPEAT_BASKET_KEY);
+    if (Array.isArray(v)) cloud = v;
+  } catch {}
+
+  const next = clear
+    ? []
+    : [...new Set([...cloud, ...add])].filter(x => !remove.includes(x));
+
+  await save(REPEAT_BASKET_KEY, next);
+  return next;
 }
 
 // ─── جرد المستودع ────────────────────────────────────────────
