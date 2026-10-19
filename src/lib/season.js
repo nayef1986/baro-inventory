@@ -121,11 +121,15 @@ export function rankProducts(products, periods, settings, branch = null) {
   const rows = [];
 
   (products ?? []).forEach(p => {
-    let qty = 0, rev = 0;
+    let qty = 0, rev = 0, allQty = 0;
     ord.forEach(per => {
       const c = cellOf(per, p.barcode, branch);
       qty += c.qty; rev += c.rev;
+      // المبيع في كل الفروع — نحتاجه للدوران حتى لو كنا نحسب فرعًا واحدًا
+      if (branch) allQty += cellOf(per, p.barcode, null).qty;
     });
+    if (!branch) allQty = qty;
+
     // نستبعد اللي ما له أي حركة فقط. الصافي السالب (مرتجعات أكثر من مبيعات)
     // نبقيه عشان مجاميع الفروع تطابق الإجمالي العام — ترتيب "الأفضل مبيعًا"
     // يحطه في الذيل تلقائيًا.
@@ -134,7 +138,10 @@ export function rankProducts(products, periods, settings, branch = null) {
     const buy    = buyPriceOf(p);
     const profit = rev - (qty * buy);
     const bought = totalPurchases(p);
-    const turn   = bought > 0 ? (qty / bought) * 100 : 0;
+    // الدوران = كم باع من وارده. المشتريات مسجّلة على مستوى الشركة مو الفرع،
+    // فلو قسمنا مبيعات فرع واحد على الوارد كله تطلع نسبة تافهة لكل المنتجات
+    // (30 فرع = ~3% لكل واحد) ويُصنّف الجميع ضعيفًا. فالدوران دائمًا شركة كاملة.
+    const turn   = bought > 0 ? (allQty / bought) * 100 : 0;
 
     const fac = getFactoryCode(p.barcode);
     rows.push({
@@ -148,6 +155,7 @@ export function rankProducts(products, periods, settings, branch = null) {
       cont:     p.container ?? "",
       sellPrice: num(p.sellPrice),
       qty, rev, profit,
+      allQty,              // المبيع في كل الفروع (للمقارنة ونسبة الفرع)
       buyPrice: buy,
       bought,
       turnPct:  turn,
@@ -494,10 +502,14 @@ export function recommendForBranch(branchAnalysis, opts = {}, lifecycles = {}) {
       const base = r.qty;
       let tier, color, grow, why;
 
-      // حالة المنتج تسبق حساب الدوران: الدوران وحده يضلل.
-      // منتج نفد دورانه 100% فيطلع "قوي" — صح بس ناقص، الطلب أعلى.
-      // ومنتج ضعف طلبه قد يطلع دورانه معقول فيُقرأ "جيد" وهو عنده بضاعة راكدة.
-      const st = lc?.status ?? "";
+      // دورة الحياة محسوبة على مستوى الشركة (المشتريات ما توزّع على الفروع)،
+      // والصف هنا مبيعات فرع واحد. فنخلط الاثنين بحذر:
+      //  • النفاد مخزون، والمخزون على مستوى الشركة → يطبّق دائمًا
+      //  • الضعف طلب، والطلب يختلف من فرع لفرع → ما نقصّ منتجًا
+      //    لأنه ضعيف عمومًا، إذا كان نجم هذا الفرع
+      const st  = lc?.status ?? "";
+      const cls = classifyForBranch(r, top, opts);
+      const starHere = cls.tier === "قوي" || cls.tier === "متعطش";
 
       if (lc?.soldOut && lc.demandFactor > 1.05) {
         tier  = "نفد — الطلب أعلى";
@@ -512,23 +524,24 @@ export function recommendForBranch(branchAnalysis, opts = {}, lifecycles = {}) {
         grow  = opts.growStalled ?? 1.3;
         why   = lc.note;
 
-      } else if (st === "ضعف طلبه") {
+      } else if (st === "ضعف طلبه" && !starHere) {
         // الطلب نزل وعنده بضاعة باقية → نقلل، والباقي يغطي جزء من الموسم الجاي
         tier  = "ضعف طلبه";
         color = "#f87171";
         grow  = opts.growDeclined ?? 0.6;
         why   = lc.note;
 
-      } else if (st === "حركة ضعيفة" || st === "توقف بيعه") {
+      } else if ((st === "حركة ضعيفة" || st === "توقف بيعه") && !starHere) {
         tier  = st;
         color = st === "حركة ضعيفة" ? "#f59e0b" : "#fb923c";
         grow  = opts.growWeak ?? 0.5;
         why   = lc.note;
 
       } else {
-        const cls = classifyForBranch(r, top, opts);
         tier = cls.tier; color = cls.color; grow = cls.grow;
-        why  = lc?.note ?? "";
+        why  = starHere && st && st !== "مستقر"
+             ? `قوي في هذا الفرع رغم إن حالته عمومًا: ${st}`
+             : (lc?.note ?? "");
       }
 
       const sug = upDozen(base * grow);
