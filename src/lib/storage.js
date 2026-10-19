@@ -225,6 +225,11 @@ export async function saveProducts(products) {
 // مع تراكم الشهور، لأن الحفظ كان يعيد إرسال كل الفترات القديمة في كل مرة)
 const PERIOD_PREFIX = "baro_period_v1_";
 
+/** يبطّل كاش الفترات العادية بعد حذف أو تعديل */
+function bustPeriodsCache() {
+  try { idbSet("periods_meta", null); } catch {}
+}
+
 // يجيب كل الصفوف اللي مفتاحها يبدأ بالبادئة (كل فترة بصف مستقل)
 async function sbGetByPrefix(prefix) {
   try {
@@ -403,7 +408,7 @@ export async function deletePeriod(periodId, periodLabel = null) {
   }
   if (!target) return { ok: true, notFound: true };
   const ok = await sbDelete(PERIOD_PREFIX + target.id); // حذف خانة وحيدة — صغير وسريع
-  try { await updateMeta(); } catch {}
+  if (ok) bustPeriodsCache();
   // نعيد تحميل الصفحة عشان الواجهة تعكس الحذف فوراً (تتجنب مشكلة الحالة القديمة)
   if (ok && typeof window !== "undefined") {
     setTimeout(() => window.location.reload(), 400);
@@ -418,7 +423,7 @@ export async function deletePeriodByIndex(index) {
   const target = periods[index];
   if (!target || !target.id) return { ok: false };
   const ok = await sbDelete(PERIOD_PREFIX + target.id);
-  try { await updateMeta(); } catch {}
+  if (ok) bustPeriodsCache();
   return { ok };
 }
 
@@ -524,7 +529,9 @@ function deflatePeriod(per) {
     for (const bc in per.sales[b]) {
       const v = per.sales[b][bc];
       if (Array.isArray(v)) { sales[b][bc] = v; continue; }
-      sales[b][bc] = [num(v?.qty), Math.round(num(v?.totalPrice) * 100) / 100];
+      const q = Number(v?.qty) || 0;
+      const t = Number(v?.totalPrice) || 0;
+      sales[b][bc] = [q, Math.round(t * 100) / 100];
     }
   }
   return { ...per, sales, _c: 1 };
