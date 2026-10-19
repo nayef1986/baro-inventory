@@ -217,7 +217,9 @@ export function parseSalesFileFromRows(rows, label = "") {
       const qty        = toNum(row[col + 1]);
       const totalPrice = toNum(row[col + 2]);
 
-      if (qty <= 0) return;
+      // الكمية السالبة = مرتجع، وهي بيانات حقيقية لازم تُطرح.
+      // لو تخطيناها تطلع المبيعات منفوخة. نتخطى الخانة الفاضية فقط.
+      if (qty === 0 && totalPrice === 0) return;
 
       if (sales[branchName][barcode]) {
         sales[branchName][barcode].qty        += qty;
@@ -397,7 +399,8 @@ export function parseMonthlyFile(buffer) {
         const qty        = toNum(row[col + 1]);
         const totalPrice = toNum(row[col + 2]);
 
-        if (qty <= 0) return;
+        // الكمية السالبة = مرتجع، بيانات حقيقية لازم تُطرح من المبيعات
+        if (qty === 0 && totalPrice === 0) return;
 
         if (sales[branchName][barcode]) {
           sales[branchName][barcode].qty        += qty;
