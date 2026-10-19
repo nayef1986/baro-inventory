@@ -38,8 +38,8 @@ function Stat({ label, value, color = "#f1f5f9", sub }) {
     <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",
       borderRadius:"14px",padding:"12px",textAlign:"center"}}>
       <div style={{fontSize:"20px",fontWeight:900,color}}>{value}</div>
-      <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>{label}</div>
-      {sub && <div style={{fontSize:"9px",color:"#475569",marginTop:"1px"}}>{sub}</div>}
+      <div style={{fontSize:"12.5px",color:"#64748b",marginTop:"2px"}}>{label}</div>
+      {sub && <div style={{fontSize:"12px",color:"#475569",marginTop:"1px"}}>{sub}</div>}
     </div>
   );
 }
@@ -57,10 +57,10 @@ function Timeline({ points, avg, thr = 20, height = 110, compact = false }) {
     <div>
       {/* القراءة: اليوم المختار أو الأقوى */}
       <div style={{display:"flex",alignItems:"baseline",gap:"8px",marginBottom:"10px"}}>
-        <span style={{fontSize:"26px",fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>
+        <span style={{fontSize:"30px",fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>
           {fmtN(shown.qty)}
         </span>
-        <span style={{fontSize:"12px",color:"#8b97a8"}}>
+        <span style={{fontSize:"14px",color:"#8b97a8"}}>
           قطعة · {shown.label}{sel ? "" : " (الأقوى)"}
         </span>
       </div>
@@ -92,7 +92,7 @@ function Timeline({ points, avg, thr = 20, height = 110, compact = false }) {
       </div>
 
       {!compact && (
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:"12.5px",
           color:"#56637a",marginTop:"7px"}}>
           <span>{points[0]?.label}</span>
           <span>{points[points.length-1]?.label}</span>
@@ -106,8 +106,8 @@ function Timeline({ points, avg, thr = 20, height = 110, compact = false }) {
 function Head({ children, note }) {
   return (
     <div style={{margin:"20px 0 10px"}}>
-      <div style={{fontSize:"14px",fontWeight:900,color:"#e8edf4"}}>{children}</div>
-      {note && <div style={{fontSize:"11px",color:"#6b788c",marginTop:"3px"}}>{note}</div>}
+      <div style={{fontSize:"16px",fontWeight:900,color:"#e8edf4"}}>{children}</div>
+      {note && <div style={{fontSize:"13px",color:"#6b788c",marginTop:"3px"}}>{note}</div>}
     </div>
   );
 }
@@ -116,10 +116,10 @@ function Head({ children, note }) {
 function Line({ label, value, color = "#8b97a8" }) {
   return (
     <div style={{display:"flex",gap:"10px",alignItems:"baseline"}}>
-      <span style={{fontSize:"12px",fontWeight:700,color,flexShrink:0,minWidth:"56px"}}>
+      <span style={{fontSize:"14px",fontWeight:700,color,flexShrink:0,minWidth:"56px"}}>
         {label}
       </span>
-      <span style={{fontSize:"12.5px",color:"#cbd5e1",lineHeight:1.8}}>{value}</span>
+      <span style={{fontSize:"14.5px",color:"#cbd5e1",lineHeight:1.8}}>{value}</span>
     </div>
   );
 }
@@ -132,7 +132,7 @@ function Toggle({ value, onChange, options }) {
       {options.map(([k,l])=>(
         <button key={k} onClick={()=>onChange(k)}
           style={{flex:1,padding:"8px",borderRadius:"8px",border:"none",cursor:"pointer",
-            fontFamily:"Cairo,sans-serif",fontSize:"12px",fontWeight:700,
+            fontFamily:"Cairo,sans-serif",fontSize:"14px",fontWeight:700,
             background: value===k ? "rgba(255,255,255,0.1)" : "transparent",
             color:      value===k ? "#e8edf4" : "#6b788c"}}>
           {l}
@@ -144,7 +144,7 @@ function Toggle({ value, onChange, options }) {
 
 // ─── صورة المنتج ────────────────────────────────────────────
 // الضغط على الصورة يفتحها بحجمها، ولا يفتح تفاصيل البطاقة
-function Thumb({ src, size = 68, onOpen, name }) {
+function Thumb({ src, size = 76, onOpen, name }) {
   if (!src) {
     return (
       <div style={{width:size,height:size,borderRadius:"12px",flexShrink:0,
@@ -174,12 +174,12 @@ function Viewer({ img, onClose }) {
         style={{maxWidth:"100%",maxHeight:"74vh",borderRadius:"16px",
           objectFit:"contain",background:"#fff"}}/>
       {img.name && (
-        <div style={{fontSize:"14px",fontWeight:700,color:"#e8edf4",
+        <div style={{fontSize:"16px",fontWeight:700,color:"#e8edf4",
           textAlign:"center",maxWidth:"90%"}}>{img.name}</div>
       )}
       <button onClick={onClose}
         style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"100px",
-          padding:"11px 30px",color:"#e8edf4",fontSize:"13px",fontWeight:700,
+          padding:"11px 30px",color:"#e8edf4",fontSize:"15px",fontWeight:700,
           cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>إغلاق</button>
     </div>
   );
@@ -198,23 +198,23 @@ function Row({ r, rank, value, unit, color = C.gold, fill = 0,
         marginBottom:"7px",cursor:"pointer",overflow:"hidden",
         border:"1px solid rgba(255,255,255,0.05)"}}>
 
-      <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"11px 12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 13px"}}>
         <Thumb src={images?.[r.barcode]} onOpen={onImg} name={r.name} />
 
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
-            {medal && <span style={{fontSize:"14px"}}>{medal}</span>}
-            <span style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",
+            {medal && <span style={{fontSize:"16px"}}>{medal}</span>}
+            <span style={{fontSize:"16px",fontWeight:700,color:"#f1f5f9",
               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
           </div>
-          {sub && <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>{sub}</div>}
+          {sub && <div style={{fontSize:"13px",color:"#7c8a9e",marginTop:"3px"}}>{sub}</div>}
           {badge}
         </div>
 
-        <div style={{textAlign:"left",flexShrink:0,minWidth:"58px"}}>
-          <div style={{fontSize:"21px",fontWeight:900,color,lineHeight:1.1,
+        <div style={{textAlign:"left",flexShrink:0,minWidth:"70px"}}>
+          <div style={{fontSize:"25px",fontWeight:900,color,lineHeight:1.1,
             letterSpacing:"-0.5px"}}>{value}</div>
-          {unit && <div style={{fontSize:"10px",color:"#5b6878",marginTop:"1px"}}>{unit}</div>}
+          {unit && <div style={{fontSize:"12.5px",color:"#5b6878",marginTop:"1px"}}>{unit}</div>}
         </div>
       </div>
 
@@ -227,9 +227,9 @@ function Row({ r, rank, value, unit, color = C.gold, fill = 0,
 
       {open && (
         <div style={{padding:"11px 12px",background:"rgba(0,0,0,0.22)",
-          fontSize:"11.5px",color:"#94a3b8",lineHeight:2}}>
+          fontSize:"13.5px",color:"#94a3b8",lineHeight:2.1}}>
           <div style={{fontFamily:"monospace",direction:"ltr",textAlign:"right",
-            color:"#cbd5e1",fontSize:"12px",marginBottom:"3px"}}>{r.barcode}</div>
+            color:"#cbd5e1",fontSize:"14px",marginBottom:"3px"}}>{r.barcode}</div>
           <div>المصنع · {r.fac}{r.facName ? ` — ${r.facName}` : ""}</div>
           <div>الكونتينر · {r.cont || "ما له كونتينر"}</div>
           <div>الفئة · {r.catName || r.cat}</div>
@@ -252,14 +252,14 @@ function StatusGroup({ title, hint, color, items, images, right, onImg }) {
           margin:"20px 0 4px"}}>
         <span style={{width:"7px",height:"7px",borderRadius:"50%",background:color,
           flexShrink:0}}/>
-        <span style={{fontSize:"14px",fontWeight:900,color:"#e8edf4",flex:1}}>
+        <span style={{fontSize:"16px",fontWeight:900,color:"#e8edf4",flex:1}}>
           {title}
         </span>
-        <span style={{fontSize:"12px",fontWeight:900,color,background:`${color}1f`,
-          borderRadius:"100px",padding:"2px 9px"}}>{fmtN(items.length)}</span>
-        <span style={{color:"#4a5668",fontSize:"11px"}}>{open?"▲":"▼"}</span>
+        <span style={{fontSize:"14px",fontWeight:900,color,background:`${color}1f`,
+          borderRadius:"100px",padding:"3px 11px"}}>{fmtN(items.length)}</span>
+        <span style={{color:"#4a5668",fontSize:"13px"}}>{open?"▲":"▼"}</span>
       </div>
-      <div style={{fontSize:"11px",color:"#6b788c",marginBottom:"10px"}}>{hint}</div>
+      <div style={{fontSize:"13px",color:"#6b788c",marginBottom:"10px"}}>{hint}</div>
 
       {open && items.map(r=>(
         <Row key={r.barcode} r={r} rank={-1} images={images} onImg={onImg}
@@ -486,7 +486,9 @@ img.th{width:46px;height:46px;object-fit:cover;border-radius:5px;
 <div class="wrap">
   <h1>📊 ${esc(settings?.__seasonName?.trim() || "تقرير الموسم")}</h1>
   <div class="meta">${esc(brand)} · ${esc(A.firstLabel)} ← ${esc(A.lastLabel)} ·
-    ${fmtN(A.periodCount)} فترة · طُبع ${esc(today)}</div>
+    ${fmtN(A.periodCount)} فترة · ${A.years
+      ? `وارد كونتينرات ${esc(A.years.join(" و"))}`
+      : "وارد كل المشتريات"} · طُبع ${esc(today)}</div>
   ${body}
 </div></body></html>`;
 
@@ -514,6 +516,8 @@ export function SeasonReport({ products = [], settings = {},
   const [pickPr,  setPickPr]  = useState(null);      // منتج نتبع زمنه
   const [thr,     setThr]     = useState(20);        // حساسية الانتعاش/الهبوط %
   const [viewImg, setViewImg] = useState(null);      // الصورة المفتوحة بالحجم الكامل
+  // سنوات الكونتينرات المحتسبة في "وارد" و"الدوران" — null = كل المشتريات
+  const [years,   setYears]   = useState(null);
 
   // ── فترات الموسم: مخزن مستقل، ما يمس مبيعاتك العادية ──
   const [periods,  setPeriods]  = useState([]);
@@ -590,8 +594,8 @@ export function SeasonReport({ products = [], settings = {},
   };
 
   const A = useMemo(
-    () => seasonAnalysis(products, periods, settings, { thresholdPct: thr }),
-    [products, periods, settings, thr]
+    () => seasonAnalysis(products, periods, settings, { thresholdPct: thr, years }),
+    [products, periods, settings, thr, years]
   );
 
   // خط زمني للمنتج أو الفئة المختارة
@@ -606,10 +610,10 @@ export function SeasonReport({ products = [], settings = {},
     <div className="space-y-3">
       <div style={{background:"rgba(16,185,129,0.07)",border:"1px solid rgba(16,185,129,0.25)",
         borderRadius:"16px",padding:"14px"}}>
-        <div style={{fontSize:"14px",fontWeight:900,color:"#fff",marginBottom:"4px"}}>
+        <div style={{fontSize:"16px",fontWeight:900,color:"#fff",marginBottom:"4px"}}>
           📤 ارفع مبيعات الموسم
         </div>
-        <div style={{fontSize:"11px",color:"#94a3b8",lineHeight:1.8,marginBottom:"11px"}}>
+        <div style={{fontSize:"13px",color:"#94a3b8",lineHeight:1.8,marginBottom:"11px"}}>
           مخزن مستقل — <b style={{color:C.green}}>مبيعاتك العادية ما تتأثر أبدًا</b>.
           ارفع ملف تقرير نقطة البيع كما هو؛ لو فيه أيام متعددة ينفصلون تلقائيًا
           كل يوم بتاريخه.
@@ -620,13 +624,13 @@ export function SeasonReport({ products = [], settings = {},
           onBlur={()=>saveSeasonMeta(meta)}
           placeholder="اسم الموسم — مثلاً: رمضان 1447"
           style={{width:"100%",background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.12)",
-            color:"#f1f5f9",borderRadius:"11px",padding:"9px 12px",fontSize:"13px",
+            color:"#f1f5f9",borderRadius:"11px",padding:"9px 12px",fontSize:"15px",
             fontFamily:"Cairo,sans-serif",marginBottom:"10px",outline:"none"}}/>
 
         <label style={{display:"block",cursor: uploading?"wait":"pointer",
           background: uploading ? "#334155" : "linear-gradient(135deg,#059669,#047857)",
           color:"#fff",borderRadius:"13px",padding:"14px",textAlign:"center",
-          fontWeight:900,fontSize:"13px"}}>
+          fontWeight:900,fontSize:"15px"}}>
           {uploading ? "⏳ جاري الرفع…" : "📂 اختر ملف المبيعات"}
           <input type="file" accept=".xlsx,.xls" disabled={uploading}
             style={{display:"none"}}
@@ -636,7 +640,7 @@ export function SeasonReport({ products = [], settings = {},
         {log.length > 0 && (
           <div style={{marginTop:"11px",maxHeight:"230px",overflowY:"auto"}}>
             {log.map((l,i)=>(
-              <div key={i} style={{fontSize:"11px",padding:"5px 9px",borderRadius:"8px",
+              <div key={i} style={{fontSize:"13px",padding:"5px 9px",borderRadius:"8px",
                 marginBottom:"3px",lineHeight:1.6,
                 background: l.type==="success" ? "rgba(16,185,129,0.12)"
                           : l.type==="error"   ? "rgba(248,113,113,0.12)"
@@ -657,12 +661,12 @@ export function SeasonReport({ products = [], settings = {},
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
             marginBottom:"9px"}}>
-            <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0"}}>
+            <div style={{fontSize:"15px",fontWeight:900,color:"#e2e8f0"}}>
               📅 الفترات المرفوعة ({fmtN(periods.length)})
             </div>
             <button onClick={removeAll}
               style={{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",
-                borderRadius:"9px",padding:"5px 11px",color:C.red,fontSize:"11px",
+                borderRadius:"9px",padding:"5px 11px",color:C.red,fontSize:"13px",
                 fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
               🗑️ احذف الكل
             </button>
@@ -677,14 +681,14 @@ export function SeasonReport({ products = [], settings = {},
                 padding:"11px",marginBottom:"6px",display:"flex",
                 alignItems:"center",gap:"10px"}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:"13px",fontWeight:700,color:"#e2e8f0"}}>{p.label}</div>
-                  <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>
+                  <div style={{fontSize:"15px",fontWeight:700,color:"#e2e8f0"}}>{p.label}</div>
+                  <div style={{fontSize:"12.5px",color:"#64748b",marginTop:"2px"}}>
                     {fmtN(nb)} فرع · {fmtN(q)} قطعة
                   </div>
                 </div>
                 <button onClick={()=>removeOne(p)}
                   style={{background:"rgba(248,113,113,0.1)",border:"none",borderRadius:"8px",
-                    padding:"7px 10px",color:C.red,fontSize:"13px",cursor:"pointer",
+                    padding:"7px 10px",color:C.red,fontSize:"15px",cursor:"pointer",
                     flexShrink:0}}>✕</button>
               </div>
             );
@@ -719,7 +723,7 @@ export function SeasonReport({ products = [], settings = {},
       <div className="space-y-3">
         <button onClick={()=>setShowMgr(false)}
           style={{background:"none",border:"none",color:C.sky,fontWeight:700,
-            fontSize:"13px",cursor:"pointer",fontFamily:"Cairo,sans-serif",padding:0}}>
+            fontSize:"15px",cursor:"pointer",fontFamily:"Cairo,sans-serif",padding:0}}>
           ← رجوع للتقرير
         </button>
         <SectionHeader icon="📂" title="ملفات الموسم" />
@@ -749,23 +753,23 @@ export function SeasonReport({ products = [], settings = {},
         <div style={{display:"flex",alignItems:"flex-start",
           justifyContent:"space-between",gap:"10px",marginBottom:"14px"}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:"16px",fontWeight:900,color:"#fff"}}>
+            <div style={{fontSize:"18px",fontWeight:900,color:"#fff"}}>
               {meta.name?.trim() || "تقرير الموسم"}
             </div>
-            <div style={{fontSize:"11px",color:"#6b788c",marginTop:"3px"}}>
+            <div style={{fontSize:"13px",color:"#6b788c",marginTop:"3px"}}>
               {A.firstLabel} ← {A.lastLabel} · {fmtN(A.periodCount)} فترة
             </div>
           </div>
           <div style={{display:"flex",gap:"6px",flexShrink:0}}>
             <button onClick={()=>setShowMgr(true)} title="ارفع أو احذف"
               style={{background:"rgba(255,255,255,0.06)",border:"none",color:"#cbd5e1",
-                borderRadius:"10px",padding:"8px 11px",fontWeight:700,fontSize:"12px",
+                borderRadius:"10px",padding:"8px 11px",fontWeight:700,fontSize:"14px",
                 cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>📂</button>
             <button onClick={()=>{
                 const r = printSeason(A, {...settings, __seasonName: meta.name}, images);
                 if (!r.ok) alert(r.error); }}
               style={{background:C.gold,color:"#0b0f16",border:"none",borderRadius:"10px",
-                padding:"8px 14px",fontWeight:900,fontSize:"12px",cursor:"pointer",
+                padding:"8px 14px",fontWeight:900,fontSize:"14px",cursor:"pointer",
                 fontFamily:"Cairo,sans-serif"}}>طباعة</button>
           </div>
         </div>
@@ -779,14 +783,14 @@ export function SeasonReport({ products = [], settings = {},
             ["ربح", fmtM(A.grandProfit)],
             ["فروع", fmtN(A.branches.length)]].map(([l,v])=>(
             <div key={l}>
-              <div style={{fontSize:"17px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
-              <div style={{fontSize:"10.5px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
+              <div style={{fontSize:"20px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
+              <div style={{fontSize:"13px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
             </div>
           ))}
         </div>
 
         {!A.dateParsed && (
-          <div style={{marginTop:"12px",fontSize:"11px",color:"#fbbf24",lineHeight:1.8}}>
+          <div style={{marginTop:"12px",fontSize:"13px",color:"#fbbf24",lineHeight:1.8}}>
             أسماء الفترات ما فيها تواريخ، فالترتيب حسب الرفع.
             سمّها بالتاريخ أو «رمضان 1» لترتيب مضبوط.
           </div>
@@ -800,15 +804,15 @@ export function SeasonReport({ products = [], settings = {},
           {A.totalLost > 0 && (
             <div style={{flex:1,background:"rgba(56,189,248,0.07)",borderRadius:"14px",
               padding:"12px",border:"1px solid rgba(56,189,248,0.2)"}}>
-              <div style={{fontSize:"19px",fontWeight:900,color:C.sky}}>{fmtN(A.totalLost)}</div>
-              <div style={{fontSize:"11px",color:"#8b97a8",marginTop:"2px"}}>ضاعت بالنفاد</div>
+              <div style={{fontSize:"22px",fontWeight:900,color:C.sky}}>{fmtN(A.totalLost)}</div>
+              <div style={{fontSize:"13px",color:"#8b97a8",marginTop:"2px"}}>ضاعت بالنفاد</div>
             </div>
           )}
           {A.deadCount > 0 && (
             <div style={{flex:1,background:"rgba(248,113,113,0.07)",borderRadius:"14px",
               padding:"12px",border:"1px solid rgba(248,113,113,0.2)"}}>
-              <div style={{fontSize:"19px",fontWeight:900,color:C.red}}>{fmtM(A.tiedValue)}</div>
-              <div style={{fontSize:"11px",color:"#8b97a8",marginTop:"2px"}}>واقفة في الرفوف</div>
+              <div style={{fontSize:"22px",fontWeight:900,color:C.red}}>{fmtM(A.tiedValue)}</div>
+              <div style={{fontSize:"13px",color:"#8b97a8",marginTop:"2px"}}>واقفة في الرفوف</div>
             </div>
           )}
         </div>
@@ -820,7 +824,7 @@ export function SeasonReport({ products = [], settings = {},
         {TABS.map(([k,lb])=>(
           <button key={k} onClick={()=>{ setTab(k); setPickCat(null); setPickPr(null); }}
             style={{flex:1,padding:"9px 4px",borderRadius:"9px",cursor:"pointer",
-              fontFamily:"Cairo,sans-serif",fontSize:"12.5px",fontWeight:700,border:"none",
+              fontFamily:"Cairo,sans-serif",fontSize:"14.5px",fontWeight:700,border:"none",
               background: tab===k ? "#e8edf4" : "transparent",
               color:      tab===k ? "#0b0f16" : "#6b788c",
               transition:"background .12s"}}>
@@ -849,7 +853,7 @@ export function SeasonReport({ products = [], settings = {},
                   <div>باع {fmtN(r.qty)} · إيراد {fmtM(r.rev)} · ربح {fmtM(r.profit)}</div>
                   <button onClick={e=>{ e.stopPropagation(); setPickPr(r); setPickCat(null); }}
                     style={{marginTop:"7px",background:"rgba(56,189,248,0.12)",border:"none",
-                      borderRadius:"8px",padding:"7px 12px",color:C.sky,fontSize:"11.5px",
+                      borderRadius:"8px",padding:"7px 12px",color:C.sky,fontSize:"13.5px",
                       fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
                     متى انتعش؟
                   </button>
@@ -868,14 +872,14 @@ export function SeasonReport({ products = [], settings = {},
                   style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
                     marginBottom:"7px",cursor:"pointer",overflow:"hidden",
                     border:"1px solid rgba(255,255,255,0.05)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 14px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"15px 15px"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9"}}>{c.catName}</div>
-                      <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>
+                      <div style={{fontSize:"16px",fontWeight:700,color:"#f1f5f9"}}>{c.catName}</div>
+                      <div style={{fontSize:"13px",color:"#7c8a9e",marginTop:"3px"}}>
                         {fmtN(c.items)} منتج · {fmtPct(A.grandQty>0?(c.qty/A.grandQty)*100:0)} من الموسم
                       </div>
                     </div>
-                    <div style={{fontSize:"21px",fontWeight:900,color:C.purple,
+                    <div style={{fontSize:"25px",fontWeight:900,color:C.purple,
                       letterSpacing:"-0.5px"}}>
                       {metric==="profit" ? fmtM(val) : fmtN(val)}
                     </div>
@@ -901,21 +905,21 @@ export function SeasonReport({ products = [], settings = {},
                   style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
                     marginBottom:"7px",cursor:"pointer",overflow:"hidden",
                     border:"1px solid rgba(255,255,255,0.05)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 14px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"15px 15px"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",
+                      <div style={{fontSize:"16px",fontWeight:700,color:"#f1f5f9",
                         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {i===0 && "🥇 "}{b.branch}
                       </div>
-                      <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px",
+                      <div style={{fontSize:"13px",color:"#7c8a9e",marginTop:"3px",
                         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         أقوى منتج · {b.topByQty[0]?.name ?? "—"}
                       </div>
                     </div>
                     <div style={{textAlign:"left",flexShrink:0}}>
-                      <div style={{fontSize:"21px",fontWeight:900,color:C.gold,
+                      <div style={{fontSize:"25px",fontWeight:900,color:C.gold,
                         letterSpacing:"-0.5px"}}>{fmtN(b.qty)}</div>
-                      <div style={{fontSize:"10px",color:"#5b6878"}}>{fmtPct(b.sharePct)}</div>
+                      <div style={{fontSize:"12.5px",color:"#5b6878"}}>{fmtPct(b.sharePct)}</div>
                     </div>
                   </div>
                   <div style={{height:"2.5px",background:"rgba(255,255,255,0.05)",display:"flex",justifyContent:"flex-start"}}>
@@ -928,7 +932,7 @@ export function SeasonReport({ products = [], settings = {},
             <>
               <button onClick={()=>setBranch(null)}
                 style={{background:"none",border:"none",color:C.sky,fontWeight:700,
-                  fontSize:"13px",cursor:"pointer",fontFamily:"Cairo,sans-serif",
+                  fontSize:"15px",cursor:"pointer",fontFamily:"Cairo,sans-serif",
                   padding:"4px 0",marginBottom:"8px"}}>
                 ← كل الفروع
               </button>
@@ -936,7 +940,7 @@ export function SeasonReport({ products = [], settings = {},
               {/* زمن الفرع + أرقامه في بطاقة واحدة */}
               <div style={{background:"rgba(255,255,255,0.03)",borderRadius:"18px",
                 padding:"16px",border:"1px solid rgba(255,255,255,0.06)",marginBottom:"4px"}}>
-                <div style={{fontSize:"15px",fontWeight:900,color:"#fff",marginBottom:"14px"}}>
+                <div style={{fontSize:"17px",fontWeight:900,color:"#fff",marginBottom:"14px"}}>
                   {branch}
                 </div>
                 <Timeline points={bA.timeline} avg={bA.avg} thr={thr} height={96}/>
@@ -946,8 +950,8 @@ export function SeasonReport({ products = [], settings = {},
                     ["ربح", fmtM(bA.profit)],
                     ["نصيبه", fmtPct(bA.sharePct)]].map(([l,v])=>(
                     <div key={l}>
-                      <div style={{fontSize:"17px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
-                      <div style={{fontSize:"10.5px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
+                      <div style={{fontSize:"20px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
+                      <div style={{fontSize:"13px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
                     </div>
                   ))}
                 </div>
@@ -970,7 +974,7 @@ export function SeasonReport({ products = [], settings = {},
                       <div>باع {fmtN(r.qty)} · إيراد {fmtM(r.rev)} · ربح {fmtM(r.profit)}</div>
                       <button onClick={e=>{ e.stopPropagation(); setPickPr(r); setPickCat(null); }}
                         style={{marginTop:"7px",background:"rgba(56,189,248,0.12)",border:"none",
-                          borderRadius:"8px",padding:"7px 12px",color:C.sky,fontSize:"11.5px",
+                          borderRadius:"8px",padding:"7px 12px",color:C.sky,fontSize:"13.5px",
                           fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
                         متى انتعش في {branch}؟
                       </button>
@@ -985,14 +989,14 @@ export function SeasonReport({ products = [], settings = {},
                   style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
                     marginBottom:"7px",cursor:"pointer",overflow:"hidden",
                     border:"1px solid rgba(255,255,255,0.05)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 14px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"15px 15px"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9"}}>{c.catName}</div>
-                      <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>
+                      <div style={{fontSize:"16px",fontWeight:700,color:"#f1f5f9"}}>{c.catName}</div>
+                      <div style={{fontSize:"13px",color:"#7c8a9e",marginTop:"3px"}}>
                         {fmtPct(bA.qty>0?(c.qty/bA.qty)*100:0)} من الفرع
                       </div>
                     </div>
-                    <div style={{fontSize:"21px",fontWeight:900,color:C.purple,
+                    <div style={{fontSize:"25px",fontWeight:900,color:C.purple,
                       letterSpacing:"-0.5px"}}>{fmtN(c.qty)}</div>
                   </div>
                   <div style={{height:"2.5px",background:"rgba(255,255,255,0.05)",display:"flex",justifyContent:"flex-start"}}>
@@ -1027,18 +1031,18 @@ export function SeasonReport({ products = [], settings = {},
               <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px"}}>
                 {pickPr && <Thumb src={images?.[pickPr.barcode]} size={52} onOpen={setViewImg} name={pickPr.name}/>}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:"15px",fontWeight:900,color:"#fff",
+                  <div style={{fontSize:"17px",fontWeight:900,color:"#fff",
                     overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     {pickPr ? pickPr.name : pickCat.catName}
                   </div>
-                  <div style={{fontSize:"11px",color:"#6b788c",marginTop:"3px"}}>
+                  <div style={{fontSize:"13px",color:"#6b788c",marginTop:"3px"}}>
                     {branch ? branch : "كل الفروع"}
                     {pickCat ? ` · ${fmtN(pickCat.items)} منتج` : ""}
                   </div>
                 </div>
                 <button onClick={()=>{ setPickPr(null); setPickCat(null); }}
                   style={{background:"rgba(255,255,255,0.07)",border:"none",borderRadius:"9px",
-                    padding:"8px 12px",color:"#94a3b8",fontSize:"14px",cursor:"pointer"}}>✕</button>
+                    padding:"8px 12px",color:"#94a3b8",fontSize:"16px",cursor:"pointer"}}>✕</button>
               </div>
 
               <Timeline points={pickTL} avg={avg} thr={thr} height={118}/>
@@ -1061,11 +1065,62 @@ export function SeasonReport({ products = [], settings = {},
       {tab === "status" && (
         <div className="space-y-3">
           <div style={{background:"rgba(56,189,248,0.07)",border:"1px solid rgba(56,189,248,0.22)",
-            borderRadius:"13px",padding:"12px",fontSize:"11px",color:"#94a3b8",lineHeight:1.9}}>
+            borderRadius:"13px",padding:"12px",fontSize:"13px",color:"#94a3b8",lineHeight:1.9}}>
             المنتج اللي <b style={{color:C.sky}}>نفد</b> مبيعاته تنزل آخر المدة — بس هذا
             مو ضعف طلب، هذا نقص بضاعة. والفرق يقلب القرار:
             النافد <b style={{color:C.sky}}>نزيده</b>، والضعيف <b style={{color:C.red}}>نقلله</b>.
           </div>
+
+          {/* ── مخزون الموسم ── */}
+          {A.allYears.length > 0 && (
+            <div style={{background:"rgba(255,255,255,0.03)",borderRadius:"14px",
+              padding:"14px",border:"1px solid rgba(255,255,255,0.06)"}}>
+              <div style={{fontSize:"14px",fontWeight:900,color:"#e8edf4",marginBottom:"4px"}}>
+                وارد الموسم
+              </div>
+              <div style={{fontSize:"13px",color:"#8b97a8",lineHeight:1.8,marginBottom:"11px"}}>
+                «نفد» و«الدوران» و«الفلوس الواقفة» تُحسب مقابل الكمية الواردة.
+                لو خليتها «الكل» بتقارن مبيعات الموسم بكل ما اشتريته من أول النظام —
+                فتطلع الأرقام منفوخة. حدّد كونتينرات الموسم.
+              </div>
+              <div style={{display:"flex",gap:"7px",flexWrap:"wrap"}}>
+                {[[null,"الكل"], ...A.allYears.map(y=>[y,`سنة ${y}`])].map(([y,lb])=>{
+                  const on = y === null
+                    ? years === null
+                    : (years?.length === 1 && years[0] === y);
+                  return (
+                    <button key={lb} onClick={()=>setYears(y === null ? null : [y])}
+                      style={{padding:"9px 16px",borderRadius:"11px",border:"none",
+                        cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"14px",
+                        fontWeight:700,
+                        background: on ? "#e8edf4" : "rgba(255,255,255,0.06)",
+                        color:      on ? "#0b0f16" : "#8b97a8"}}>
+                      {lb}
+                    </button>
+                  );
+                })}
+                {A.allYears.length > 1 && (()=>{
+                  const recent = A.allYears.slice(-2);
+                  const on = years?.length === 2 && recent.every(y=>years.includes(y));
+                  return (
+                    <button onClick={()=>setYears(recent)}
+                      style={{padding:"9px 16px",borderRadius:"11px",border:"none",
+                        cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"14px",
+                        fontWeight:700,
+                        background: on ? "#e8edf4" : "rgba(255,255,255,0.06)",
+                        color:      on ? "#0b0f16" : "#8b97a8"}}>
+                      {recent.join(" + ")}
+                    </button>
+                  );
+                })()}
+              </div>
+              {years && (
+                <div style={{fontSize:"13px",color:C.green,marginTop:"11px"}}>
+                  يحسب من كونتينرات {years.join(" و")} فقط
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"6px"}}>
             <Stat label="ضاع بسبب النفاد" value={fmtN(A.totalLost)} color={C.sky} sub="قطعة تقديريًا"/>
@@ -1075,11 +1130,11 @@ export function SeasonReport({ products = [], settings = {},
 
           {A.shortSeries && (
             <div style={{background:"rgba(148,163,184,0.09)",border:"1px solid rgba(148,163,184,0.28)",
-              borderRadius:"13px",padding:"12px",fontSize:"11px",color:"#cbd5e1",lineHeight:1.8}}>
+              borderRadius:"13px",padding:"12px",fontSize:"13px",color:"#cbd5e1",lineHeight:1.8}}>
               ℹ️ عندك <b>{fmtN(A.periodCount)} فترة</b> فقط.
               كشف «توقف بيعه» معطّل لأنه يحتاج {fmtN(A.minPeriodsForStall)} فترة على الأقل —
               مع فترات قليلة، منتج ما باع كم يوم ما يعني إنه وقف.
-              <div style={{marginTop:"5px",color:"#94a3b8",fontSize:"10px"}}>
+              <div style={{marginTop:"5px",color:"#94a3b8",fontSize:"12.5px"}}>
                 ارفع بقية أيام الموسم ويشتغل تلقائيًا.
               </div>
             </div>
@@ -1087,10 +1142,10 @@ export function SeasonReport({ products = [], settings = {},
 
           {A.overSold.length > 0 && (
             <div style={{background:"rgba(245,158,11,0.09)",border:"1px solid rgba(245,158,11,0.3)",
-              borderRadius:"13px",padding:"12px",fontSize:"11px",color:"#fbbf24",lineHeight:1.8}}>
+              borderRadius:"13px",padding:"12px",fontSize:"13px",color:"#fbbf24",lineHeight:1.8}}>
               ⚠️ <b>{fmtN(A.overSold.length)} منتج</b> باع أكثر من المسجّل وارد في المشتريات.
               يعني سجل مشترياتهم ناقص — كونتينر ما انرفع أو كمية ناقصة.
-              <div style={{marginTop:"6px",color:"#94a3b8",fontSize:"10px"}}>
+              <div style={{marginTop:"6px",color:"#94a3b8",fontSize:"12.5px"}}>
                 راجعهم، لأن حسبة "نفد" و"ايش نجيب" تعتمد على الكمية الواردة:
                 {" "}{A.overSold.slice(0,5).map(r=>r.name).join("، ")}
                 {A.overSold.length > 5 ? ` و${fmtN(A.overSold.length-5)} غيرهم` : ""}
@@ -1124,18 +1179,18 @@ export function SeasonReport({ products = [], settings = {},
             <div style={{display:"flex",alignItems:"center",gap:"8px",margin:"20px 0 4px"}}>
               <span style={{width:"7px",height:"7px",borderRadius:"50%",
                 background:"#64748b",flexShrink:0}}/>
-              <span style={{fontSize:"14px",fontWeight:900,color:"#e8edf4",flex:1}}>
+              <span style={{fontSize:"16px",fontWeight:900,color:"#e8edf4",flex:1}}>
                 ما تحرك أو حركته ضعيفة
               </span>
-              <span style={{fontSize:"12px",fontWeight:900,color:"#94a3b8",
+              <span style={{fontSize:"14px",fontWeight:900,color:"#94a3b8",
                 background:"rgba(100,116,139,0.2)",borderRadius:"100px",
                 padding:"2px 9px"}}>{fmtN(A.stagnant.length)}</span>
             </div>
-            <div style={{fontSize:"11px",color:"#6b788c",marginBottom:"10px"}}>
+            <div style={{fontSize:"13px",color:"#6b788c",marginBottom:"10px"}}>
               الأسوأ أول — اللي ما باع ولا قطعة، ثم الأعلى فلوسًا واقفة
             </div>
             {A.stagnant.length === 0 ? (
-              <div style={{textAlign:"center",padding:"30px",color:"#4a5668",fontSize:"12px"}}>
+              <div style={{textAlign:"center",padding:"30px",color:"#4a5668",fontSize:"14px"}}>
                 ما فيه منتج راكد
               </div>
             ) : A.stagnant.slice(0,60).map(r=>(
@@ -1146,7 +1201,7 @@ export function SeasonReport({ products = [], settings = {},
                 badge={
                   <span style={{display:"inline-block",marginTop:"5px",
                     background: r.dead ? "rgba(100,116,139,0.2)" : "rgba(245,158,11,0.14)",
-                    borderRadius:"100px",padding:"2px 10px",fontSize:"10.5px",fontWeight:700,
+                    borderRadius:"100px",padding:"3px 12px",fontSize:"13px",fontWeight:700,
                     color: r.dead ? "#cbd5e1" : "#fbbf24"}}>{r.status}</span>
                 }>
                 <div style={{color:"#cbd5e1"}}>
@@ -1155,7 +1210,7 @@ export function SeasonReport({ products = [], settings = {},
               </Row>
             ))}
             {A.stagnant.length > 60 && (
-              <div style={{textAlign:"center",fontSize:"11px",color:"#4a5668",padding:"10px"}}>
+              <div style={{textAlign:"center",fontSize:"13px",color:"#4a5668",padding:"10px"}}>
                 و{fmtN(A.stagnant.length - 60)} منتج آخر — كلهم في الطباعة
               </div>
             )}
@@ -1174,23 +1229,23 @@ export function SeasonReport({ products = [], settings = {},
               {A.recs.map(r=>(
                 <div key={r.branch} onClick={()=>setBranch(r.branch)}
                   style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
-                    marginBottom:"7px",cursor:"pointer",padding:"13px 14px",
+                    marginBottom:"7px",cursor:"pointer",padding:"15px 15px",
                     border:"1px solid rgba(255,255,255,0.05)",
                     display:"flex",alignItems:"center",gap:"12px"}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",
+                    <div style={{fontSize:"16px",fontWeight:700,color:"#f1f5f9",
                       overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       {r.branch}
                     </div>
-                    <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>
+                    <div style={{fontSize:"13px",color:"#7c8a9e",marginTop:"3px"}}>
                       باع {fmtN(r.totalLastQty)}
                       {r.urgent.length ? ` · نفد عنده ${fmtN(r.urgent.length)}` : ""}
                     </div>
                   </div>
                   <div style={{textAlign:"left",flexShrink:0}}>
-                    <div style={{fontSize:"21px",fontWeight:900,color:C.green,
+                    <div style={{fontSize:"25px",fontWeight:900,color:C.green,
                       letterSpacing:"-0.5px"}}>{fmtN(r.totalSuggest)}</div>
-                    <div style={{fontSize:"10px",color:"#5b6878"}}>نجيب</div>
+                    <div style={{fontSize:"12.5px",color:"#5b6878"}}>نجيب</div>
                   </div>
                 </div>
               ))}
@@ -1199,21 +1254,21 @@ export function SeasonReport({ products = [], settings = {},
             <>
               <button onClick={()=>setBranch(null)}
                 style={{background:"none",border:"none",color:C.sky,fontWeight:700,
-                  fontSize:"13px",cursor:"pointer",fontFamily:"Cairo,sans-serif",
+                  fontSize:"15px",cursor:"pointer",fontFamily:"Cairo,sans-serif",
                   padding:"4px 0",marginBottom:"8px"}}>
                 ← كل الفروع
               </button>
 
               <div style={{background:"rgba(255,255,255,0.03)",borderRadius:"18px",
                 padding:"16px",border:"1px solid rgba(255,255,255,0.06)"}}>
-                <div style={{fontSize:"15px",fontWeight:900,color:"#fff"}}>{branch}</div>
+                <div style={{fontSize:"17px",fontWeight:900,color:"#fff"}}>{branch}</div>
                 <div style={{display:"flex",gap:"18px",marginTop:"14px"}}>
                   {[["باع الموسم", fmtN(rc.totalLastQty)],
                     ["نجيب", fmtN(rc.totalSuggest)],
                     ["نصيبه", fmtPct(rc.sharePct)]].map(([l,v])=>(
                     <div key={l}>
-                      <div style={{fontSize:"17px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
-                      <div style={{fontSize:"10.5px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
+                      <div style={{fontSize:"20px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
+                      <div style={{fontSize:"13px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
                     </div>
                   ))}
                 </div>
@@ -1228,8 +1283,8 @@ export function SeasonReport({ products = [], settings = {},
                   sub={`باع ${fmtN(r.qty)} · دوران ${fmtPct(r.turnPct)}`}
                   badge={
                     <span style={{display:"inline-block",marginTop:"5px",
-                      background:`${r.color}1c`,borderRadius:"100px",padding:"2px 10px",
-                      fontSize:"10.5px",fontWeight:700,color:r.color}}>
+                      background:`${r.color}1c`,borderRadius:"100px",padding:"3px 12px",
+                      fontSize:"13px",fontWeight:700,color:r.color}}>
                       {r.tier} ×{r.grow}
                     </span>
                   }>
@@ -1255,7 +1310,7 @@ export function SeasonReport({ products = [], settings = {},
                       badge={
                         <span style={{display:"inline-block",marginTop:"5px",
                           background:"rgba(248,113,113,0.14)",borderRadius:"100px",
-                          padding:"2px 10px",fontSize:"10.5px",fontWeight:700,
+                          padding:"2px 10px",fontSize:"13px",fontWeight:700,
                           color:C.red}}>{r.tier}</span>
                       }>
                       <div style={{color:"#cbd5e1"}}>{r.why}</div>
