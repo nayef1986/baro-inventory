@@ -109,6 +109,44 @@ function buyPriceOf(product) {
   return num(product?.purchases?.slice(-1)[0]?.buyPrice);
 }
 
+// ─── مخزون الموسم ───────────────────────────────────────────
+// آخر رقمين في كود الكونتينر = السنة (BAR04YW26 → "26")
+export function containerYear(c) {
+  const m = String(c ?? "").match(/(\d{2})$/);
+  return m ? m[1] : "أخرى";
+}
+
+/** كل سنوات الكونتينرات الموجودة في المنتجات */
+export function purchaseYears(products) {
+  const set = new Set();
+  (products ?? []).forEach(p =>
+    (p.purchases ?? []).forEach(x => set.add(containerYear(x.container))));
+  return [...set].sort();
+}
+
+/**
+ * الوارد المحسوب للموسم.
+ * years = null يعني كل المشتريات (السلوك الافتراضي).
+ * تحديد سنوات يخلي "نفد" و"الدوران" و"الفلوس الواقفة" تعني مخزون الموسم
+ * بدل كل ما اشتُري من أول النظام.
+ */
+function boughtFor(product, years) {
+  const list = product?.purchases ?? [];
+  if (!years || !years.length) return list.reduce((s,x)=>s+num(x.qty), 0);
+  return list.reduce((s,x)=>
+    years.includes(containerYear(x.container)) ? s + num(x.qty) : s, 0);
+}
+
+/** سعر الشراء من آخر كونتينر ضمن السنوات المختارة */
+function buyPriceFor(product, years) {
+  const list = product?.purchases ?? [];
+  if (!years || !years.length) return buyPriceOf(product);
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (years.includes(containerYear(list[i].container))) return num(list[i].buyPrice);
+  }
+  return buyPriceOf(product);
+}
+
 // ─── الأفضل مبيعًا: منتجات ──────────────────────────────────
 
 /**
@@ -116,7 +154,7 @@ function buyPriceOf(product) {
  * branch = null يعني كل الفروع.
  * يرجّع لكل منتج: الكمية · الإيراد · الربح · نسبة الدوران
  */
-export function rankProducts(products, periods, settings, branch = null) {
+export function rankProducts(products, periods, settings, branch = null, years = null) {
   const ord = periods;   // مرتبة مسبقًا
   const rows = [];
 
@@ -135,9 +173,9 @@ export function rankProducts(products, periods, settings, branch = null) {
     // يحطه في الذيل تلقائيًا.
     if (qty === 0 && rev === 0) return;
 
-    const buy    = buyPriceOf(p);
+    const buy    = buyPriceFor(p, years);
     const profit = rev - (qty * buy);
-    const bought = totalPurchases(p);
+    const bought = boughtFor(p, years);
     // الدوران = كم باع من وارده. المشتريات مسجّلة على مستوى الشركة مو الفرع،
     // فلو قسمنا مبيعات فرع واحد على الوارد كله تطلع نسبة تافهة لكل المنتجات
     // (30 فرع = ~3% لكل واحد) ويُصنّف الجميع ضعيفًا. فالدوران دائمًا شركة كاملة.
@@ -282,9 +320,9 @@ const MIN_PERIODS_FOR_STALL = 10;
  * متى نفد · كم فترة وقف فيها · معدل بيعه وهو متوفر ·
  * كم كان بيبيع لو ما نفد · وكم ضاع علينا.
  */
-export function productLifecycle(product, periods, branch = null) {
+export function productLifecycle(product, periods, branch = null, years = null) {
   const n      = periods.length;
-  const bought = totalPurchases(product);
+  const bought = boughtFor(product, years);
   const pts    = periods.map(per => cellOf(per, product.barcode, branch));
   const qtys   = pts.map(p => p.qty);
 
@@ -391,15 +429,15 @@ const fmtPctInt = v => Math.round(Number(v)||0) + "%";
  * الراكد: كل المنتجات اللي ما تحركت أو حركتها ضعيفة.
  * يمرّ على كل المنتجات — حتى اللي مبيعاتها صفر (ما تظهر في rankProducts).
  */
-export function stagnantProducts(products, periods, settings, weakTurnPct = 15) {
+export function stagnantProducts(products, periods, settings, weakTurnPct = 15, years = null) {
   const out = [];
   (products ?? []).forEach(p => {
-    const lc = productLifecycle(p, periods, null);
+    const lc = productLifecycle(p, periods, null, years);
     if (lc.sold > 0 && lc.turnPct >= weakTurnPct) return;   // متحرك كفاية
     if (lc.bought <= 0 && lc.sold <= 0) return;             // لا وارد ولا مبيع
 
     const fac = getFactoryCode(p.barcode);
-    const buy = buyPriceOf(p);
+    const buy = buyPriceFor(p, years);
     out.push({
       barcode: p.barcode,
       name:    p.name ?? "",
@@ -428,8 +466,8 @@ export function stagnantProducts(products, periods, settings, weakTurnPct = 15) 
  * تحليل كامل لفرع واحد: أفضل منتجاته · أفضل فئاته · خطه الزمني
  * ونصيبه من إجمالي الموسم.
  */
-export function analyzeBranch(products, periods, settings, branch, grandTotalQty, thresholdPct = 20) {
-  const rows = rankProducts(products, periods, settings, branch);
+export function analyzeBranch(products, periods, settings, branch, grandTotalQty, thresholdPct = 20, years = null) {
+  const rows = rankProducts(products, periods, settings, branch, years);
   const tl   = timeline(periods, branch);
   const pd   = peaksAndDips(tl, thresholdPct);
   const cats = rankCategories(rows);
@@ -588,8 +626,9 @@ export function seasonAnalysis(products, periodsRaw, settings, opts = {}) {
   const periods = orderPeriods(periodsRaw);
 
   // المستوى العام
-  const thr  = opts.thresholdPct ?? 20;
-  const rows = rankProducts(products, periods, settings, null);
+  const thr   = opts.thresholdPct ?? 20;
+  const years = opts.years ?? null;      // سنوات الكونتينرات المحتسبة
+  const rows  = rankProducts(products, periods, settings, null, years);
   const cats = rankCategories(rows);
   const tl   = timeline(periods, null);
   const pd   = peaksAndDips(tl, thr);
@@ -601,16 +640,16 @@ export function seasonAnalysis(products, periodsRaw, settings, opts = {}) {
   // الفروع
   const branches  = allBranches(periods);
   const byBranchA = branches
-    .map(b => analyzeBranch(products, periods, settings, b, grandQty, thr))
+    .map(b => analyzeBranch(products, periods, settings, b, grandQty, thr, years))
     .filter(b => b.qty > 0)
     .sort((a,b) => b.qty - a.qty);
 
   // دورة حياة كل منتج (على مستوى الشركة — المشتريات مو موزعة على الفروع)
   const lifecycles = {};
-  (products ?? []).forEach(p => { lifecycles[p.barcode] = productLifecycle(p, periods, null); });
+  (products ?? []).forEach(p => { lifecycles[p.barcode] = productLifecycle(p, periods, null, years); });
 
   // الراكد وما تحرك — يشمل اللي مبيعاته صفر
-  const stagnant = stagnantProducts(products, periods, settings, opts.weakTurnPct ?? 15);
+  const stagnant = stagnantProducts(products, periods, settings, opts.weakTurnPct ?? 15, years);
 
   // المنتجات اللي نفدت قبل نهاية الموسم
   const soldOut = rows
@@ -640,6 +679,8 @@ export function seasonAnalysis(products, periodsRaw, settings, opts = {}) {
     lastLabel:   periods[periods.length-1]?.label ?? "",
     dateParsed:  periods.some(p => p._dateKey !== null),
     thresholdPct: thr,
+    years,                               // السنوات المحتسبة (null = الكل)
+    allYears: purchaseYears(products),   // السنوات المتاحة للاختيار
     // فترات قليلة = عينة ضعيفة، بعض الكشوفات تُعطّل
     shortSeries: periods.length < MIN_PERIODS_FOR_STALL,
     minPeriodsForStall: MIN_PERIODS_FOR_STALL,
