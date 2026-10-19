@@ -668,7 +668,7 @@ export default function ReportsScreen({ products, periods, settings, images, onS
   }
 
   if (view === "season") {
-    return <SeasonReport products={products} periods={periods} settings={settings}
+    return <SeasonReport products={products} settings={settings}
       images={images} onBack={() => setView(null)} />;
   }
 
@@ -751,7 +751,7 @@ export default function ReportsScreen({ products, periods, settings, images, onS
           <div>
             <div style={{fontSize:"16px",fontWeight:"900",color:"#ffffff"}}>تقرير الموسم</div>
             <div style={{fontSize:"12px",color:"rgba(16,185,129,0.85)",marginTop:"3px"}}>
-              الأفضل مبيعًا · الفئات · متى انتعشت · ايش نجيب لكل فرع
+              رفع مستقل · الأفضل مبيعًا · متى انتعشت · ايش نجيب لكل فرع
             </div>
           </div>
           <div style={{marginRight:"auto",fontSize:"18px",color:"rgba(16,185,129,0.5)"}}>←</div>
