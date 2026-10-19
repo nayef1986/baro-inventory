@@ -45,139 +45,229 @@ function Stat({ label, value, color = "#f1f5f9", sub }) {
 }
 
 // ─── رسم الخط الزمني ────────────────────────────────────────
-function Timeline({ points, avg, onPick, thr = 20 }) {
+// أعمدة الموسم. الضغط على عمود يظهر يومه ورقمه تحت الرسم مباشرة.
+function Timeline({ points, avg, thr = 20, height = 110, compact = false }) {
+  const [sel, setSel] = useState(null);
   if (!points.length) return null;
-  const max = Math.max(...points.map(p=>p.qty), 1);
-  const avgY = avg > 0 ? (avg / max) * 100 : 0;
+  const max  = Math.max(...points.map(p=>p.qty), 1);
+  const best = points.reduce((m,p)=> p.qty > m.qty ? p : m, points[0]);
+  const shown = sel ?? best;
 
   return (
     <div>
-      <div style={{position:"relative",display:"flex",alignItems:"flex-end",gap:"3px",
-        height:"150px",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-        {/* خط المتوسط */}
-        <div style={{position:"absolute",right:0,left:0,bottom:`${avgY*1.34}px`,
-          borderTop:"1px dashed rgba(212,168,83,0.45)",pointerEvents:"none"}}>
-          <span style={{position:"absolute",right:0,top:"-15px",fontSize:"9px",color:C.gold}}>
-            متوسط {fmtN(Math.round(avg))}
-          </span>
-        </div>
+      {/* القراءة: اليوم المختار أو الأقوى */}
+      <div style={{display:"flex",alignItems:"baseline",gap:"8px",marginBottom:"10px"}}>
+        <span style={{fontSize:"26px",fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>
+          {fmtN(shown.qty)}
+        </span>
+        <span style={{fontSize:"12px",color:"#8b97a8"}}>
+          قطعة · {shown.label}{sel ? "" : " (الأقوى)"}
+        </span>
+      </div>
+
+      <div style={{position:"relative",display:"flex",alignItems:"flex-end",
+        gap: points.length > 20 ? "2px" : "4px", height:`${height}px`}}>
+        {avg > 0 && (
+          <div style={{position:"absolute",right:0,left:0,
+            bottom:`${(avg/max)*height}px`,height:0,
+            borderTop:"1px dashed rgba(255,255,255,0.18)",pointerEvents:"none"}}/>
+        )}
         {points.map((p,i)=>{
           const h   = (p.qty / max) * 100;
-          const col = p.vsAvgPct >= thr ? C.green : p.vsAvgPct <= -thr ? C.red : C.slate;
+          const on  = shown === p;
+          const col = p.vsAvgPct >=  thr ? C.green
+                    : p.vsAvgPct <= -thr ? C.red : "#3f4b5c";
           return (
-            <div key={i} onClick={()=>onPick?.(p)} title={`${p.label}: ${fmtN(p.qty)}`}
-              style={{flex:1,minWidth:"5px",display:"flex",flexDirection:"column",
-                justifyContent:"flex-end",height:"100%",cursor:onPick?"pointer":"default"}}>
-              <div style={{height:`${Math.max(2,h)}%`,background:col,borderRadius:"3px 3px 0 0"}}/>
+            <div key={i}
+              onClick={e=>{ e.stopPropagation(); setSel(sel===p ? null : p); }}
+              style={{flex:1,minWidth:"4px",height:"100%",display:"flex",
+                flexDirection:"column",justifyContent:"flex-end",cursor:"pointer"}}>
+              <div style={{height:`${Math.max(3,h)}%`,background:col,
+                borderRadius:"4px 4px 2px 2px",
+                outline: on ? "1.5px solid #fff" : "none",
+                outlineOffset:"1px",transition:"outline .12s"}}/>
             </div>
           );
         })}
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",
-        color:"#475569",marginTop:"5px"}}>
-        <span>{points[0]?.label}</span>
-        {points.length > 2 && <span>{points[Math.floor(points.length/2)]?.label}</span>}
-        <span>{points[points.length-1]?.label}</span>
-      </div>
-      <div style={{display:"flex",gap:"12px",justifyContent:"center",marginTop:"8px",fontSize:"10px"}}>
-        <span style={{color:C.green}}>■ انتعاش</span>
-        <span style={{color:C.slate}}>■ عادي</span>
-        <span style={{color:C.red}}>■ هبوط</span>
-      </div>
+
+      {!compact && (
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",
+          color:"#56637a",marginTop:"7px"}}>
+          <span>{points[0]?.label}</span>
+          <span>{points[points.length-1]?.label}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── عنوان قسم ──────────────────────────────────────────────
+function Head({ children, note }) {
+  return (
+    <div style={{margin:"20px 0 10px"}}>
+      <div style={{fontSize:"14px",fontWeight:900,color:"#e8edf4"}}>{children}</div>
+      {note && <div style={{fontSize:"11px",color:"#6b788c",marginTop:"3px"}}>{note}</div>}
+    </div>
+  );
+}
+
+// ─── سطر تسمية/قيمة ─────────────────────────────────────────
+function Line({ label, value, color = "#8b97a8" }) {
+  return (
+    <div style={{display:"flex",gap:"10px",alignItems:"baseline"}}>
+      <span style={{fontSize:"12px",fontWeight:700,color,flexShrink:0,minWidth:"56px"}}>
+        {label}
+      </span>
+      <span style={{fontSize:"12.5px",color:"#cbd5e1",lineHeight:1.8}}>{value}</span>
+    </div>
+  );
+}
+
+// ─── مبدّل ──────────────────────────────────────────────────
+function Toggle({ value, onChange, options }) {
+  return (
+    <div style={{display:"flex",gap:"4px",background:"rgba(255,255,255,0.04)",
+      borderRadius:"11px",padding:"3px"}}>
+      {options.map(([k,l])=>(
+        <button key={k} onClick={()=>onChange(k)}
+          style={{flex:1,padding:"8px",borderRadius:"8px",border:"none",cursor:"pointer",
+            fontFamily:"Cairo,sans-serif",fontSize:"12px",fontWeight:700,
+            background: value===k ? "rgba(255,255,255,0.1)" : "transparent",
+            color:      value===k ? "#e8edf4" : "#6b788c"}}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── صورة المنتج ────────────────────────────────────────────
+// الضغط على الصورة يفتحها بحجمها، ولا يفتح تفاصيل البطاقة
+function Thumb({ src, size = 68, onOpen, name }) {
+  if (!src) {
+    return (
+      <div style={{width:size,height:size,borderRadius:"12px",flexShrink:0,
+        background:"rgba(255,255,255,0.05)",border:"1px dashed rgba(255,255,255,0.12)",
+        display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:size*0.36,opacity:0.5}}>📦</div>
+    );
+  }
+  return (
+    <img src={src} alt={name ?? ""}
+      onClick={onOpen ? e => { e.stopPropagation(); onOpen({ src, name }); } : undefined}
+      style={{width:size,height:size,borderRadius:"12px",objectFit:"cover",
+        flexShrink:0,background:"#fff",cursor: onOpen ? "zoom-in" : "default"}}/>
+  );
+}
+
+// ─── عارض الصورة ────────────────────────────────────────────
+function Viewer({ img, onClose }) {
+  if (!img) return null;
+  return (
+    <div onClick={onClose}
+      style={{position:"fixed",inset:0,background:"rgba(2,6,14,0.94)",zIndex:90,
+        display:"flex",flexDirection:"column",alignItems:"center",
+        justifyContent:"center",padding:"20px",gap:"16px"}}>
+      <img src={img.src} alt={img.name ?? ""}
+        onClick={e=>e.stopPropagation()}
+        style={{maxWidth:"100%",maxHeight:"74vh",borderRadius:"16px",
+          objectFit:"contain",background:"#fff"}}/>
+      {img.name && (
+        <div style={{fontSize:"14px",fontWeight:700,color:"#e8edf4",
+          textAlign:"center",maxWidth:"90%"}}>{img.name}</div>
+      )}
+      <button onClick={onClose}
+        style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"100px",
+          padding:"11px 30px",color:"#e8edf4",fontSize:"13px",fontWeight:700,
+          cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>إغلاق</button>
     </div>
   );
 }
 
 // ─── صف منتج ────────────────────────────────────────────────
-function ProdRow({ r, i, maxQty, metric, images, extra }) {
-  const val = metric === "profit" ? r.profit : r.qty;
-  const max = maxQty || 1;
+// سطران فقط: الاسم ورقم واحد كبير. التفاصيل تنفتح بالضغط.
+function Row({ r, rank, value, unit, color = C.gold, fill = 0,
+               sub, images, children, badge, onImg }) {
+  const [open, setOpen] = useState(false);
+  const medal = rank === 0 ? "🥇" : rank === 1 ? "🥈" : rank === 2 ? "🥉" : null;
+
   return (
-    <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",
-      borderRadius:"12px",padding:"10px",marginBottom:"6px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-        <div style={{width:"22px",fontSize:"12px",fontWeight:900,
-          color: i<3 ? C.gold : "#475569",textAlign:"center",flexShrink:0}}>{i+1}</div>
-        {images?.[r.barcode]
-          ? <img src={images[r.barcode]} alt="" style={{width:"54px",height:"54px",
-              borderRadius:"9px",objectFit:"cover",flexShrink:0}}/>
-          : <div style={{width:"54px",height:"54px",borderRadius:"9px",background:"rgba(255,255,255,0.06)",
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}}>📦</div>}
+    <div onClick={()=>setOpen(!open)}
+      style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
+        marginBottom:"7px",cursor:"pointer",overflow:"hidden",
+        border:"1px solid rgba(255,255,255,0.05)"}}>
+
+      <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"11px 12px"}}>
+        <Thumb src={images?.[r.barcode]} onOpen={onImg} name={r.name} />
+
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:"12px",fontWeight:700,color:"#e2e8f0",
-            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-          <div style={{fontSize:"9px",color:"#94a3b8",marginTop:"2px",
-            fontFamily:"monospace",direction:"ltr",textAlign:"right"}}>{r.barcode}</div>
-          <div style={{fontSize:"9px",color:"#64748b",marginTop:"2px",lineHeight:1.6}}>
-            🏭 {r.fac}{r.facName ? ` · ${r.facName}` : ""}
+          <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+            {medal && <span style={{fontSize:"14px"}}>{medal}</span>}
+            <span style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",
+              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
           </div>
-          <div style={{fontSize:"9px",color:"#64748b",lineHeight:1.6}}>
-            📦 {r.cont || "—"} · 🏷️ {r.cat}
-          </div>
+          {sub && <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>{sub}</div>}
+          {badge}
         </div>
-        <div style={{textAlign:"left",flexShrink:0}}>
-          <div style={{fontSize:"15px",fontWeight:900,
-            color: metric==="profit" ? C.green : C.gold}}>
-            {metric==="profit" ? fmtM(val) : fmtN(val)}
-          </div>
-          <div style={{fontSize:"9px",color:"#475569"}}>دوران {fmtPct(r.turnPct)}</div>
+
+        <div style={{textAlign:"left",flexShrink:0,minWidth:"58px"}}>
+          <div style={{fontSize:"21px",fontWeight:900,color,lineHeight:1.1,
+            letterSpacing:"-0.5px"}}>{value}</div>
+          {unit && <div style={{fontSize:"10px",color:"#5b6878",marginTop:"1px"}}>{unit}</div>}
         </div>
       </div>
-      <div style={{marginTop:"7px"}}><Bar pct={(val/max)*100}
-        color={metric==="profit" ? C.green : C.gold} /></div>
-      {extra}
+
+      {/* الشريط = حافة البطاقة السفلى، مو عنصر زائد */}
+      {fill > 0 && (
+        <div style={{height:"2.5px",background:"rgba(255,255,255,0.05)",display:"flex",justifyContent:"flex-start"}}>
+          <div style={{width:`${Math.max(1,Math.min(100,fill))}%`,height:"100%",background:color}}/>
+        </div>
+      )}
+
+      {open && (
+        <div style={{padding:"11px 12px",background:"rgba(0,0,0,0.22)",
+          fontSize:"11.5px",color:"#94a3b8",lineHeight:2}}>
+          <div style={{fontFamily:"monospace",direction:"ltr",textAlign:"right",
+            color:"#cbd5e1",fontSize:"12px",marginBottom:"3px"}}>{r.barcode}</div>
+          <div>المصنع · {r.fac}{r.facName ? ` — ${r.facName}` : ""}</div>
+          <div>الكونتينر · {r.cont || "ما له كونتينر"}</div>
+          <div>الفئة · {r.catName || r.cat}</div>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── مجموعة حالة ────────────────────────────────────────────
-function StatusGroup({ title, hint, color, items, images, right }) {
+function StatusGroup({ title, hint, color, items, images, right, onImg }) {
   const [open, setOpen] = useState(true);
   if (!items?.length) return null;
 
   return (
     <div>
       <div onClick={()=>setOpen(!open)}
-        style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-          cursor:"pointer",marginBottom:"3px"}}>
-        <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0"}}>
-          {title} ({fmtN(items.length)})
-        </div>
-        <span style={{color:"#475569",fontSize:"12px"}}>{open?"▲":"▼"}</span>
+        style={{display:"flex",alignItems:"center",gap:"8px",cursor:"pointer",
+          margin:"20px 0 4px"}}>
+        <span style={{width:"7px",height:"7px",borderRadius:"50%",background:color,
+          flexShrink:0}}/>
+        <span style={{fontSize:"14px",fontWeight:900,color:"#e8edf4",flex:1}}>
+          {title}
+        </span>
+        <span style={{fontSize:"12px",fontWeight:900,color,background:`${color}1f`,
+          borderRadius:"100px",padding:"2px 9px"}}>{fmtN(items.length)}</span>
+        <span style={{color:"#4a5668",fontSize:"11px"}}>{open?"▲":"▼"}</span>
       </div>
-      <div style={{fontSize:"10px",color:"#64748b",marginBottom:"9px"}}>{hint}</div>
+      <div style={{fontSize:"11px",color:"#6b788c",marginBottom:"10px"}}>{hint}</div>
 
       {open && items.map(r=>(
-        <div key={r.barcode} style={{background:`${color}0d`,border:`1px solid ${color}33`,
-          borderRadius:"12px",padding:"10px",marginBottom:"6px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-            {images?.[r.barcode]
-              ? <img src={images[r.barcode]} alt="" style={{width:"50px",height:"50px",
-                  borderRadius:"9px",objectFit:"cover",flexShrink:0}}/>
-              : <div style={{width:"50px",height:"50px",borderRadius:"9px",
-                  background:"rgba(255,255,255,0.06)",display:"flex",alignItems:"center",
-                  justifyContent:"center",fontSize:"20px",flexShrink:0}}>📦</div>}
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:"12px",fontWeight:700,color:"#e2e8f0",
-                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-              <div style={{fontSize:"9px",color:"#94a3b8",marginTop:"2px",
-                fontFamily:"monospace",direction:"ltr",textAlign:"right"}}>{r.barcode}</div>
-              <div style={{fontSize:"9px",color:"#64748b",marginTop:"2px",lineHeight:1.6}}>
-                🏭 {r.fac}{r.facName ? ` · ${r.facName}` : ""}
-              </div>
-              <div style={{fontSize:"9px",color:"#64748b",lineHeight:1.6}}>
-                📦 {r.cont || "—"} · وارد {fmtN(r.lc?.bought ?? 0)} · باع {fmtN(r.qty)}
-              </div>
-            </div>
-            <div style={{textAlign:"left",flexShrink:0}}>{right?.(r)}</div>
-          </div>
-          {r.lc?.note && (
-            <div style={{marginTop:"7px",fontSize:"10px",color:"#94a3b8",lineHeight:1.7,
-              background:"rgba(0,0,0,0.2)",borderRadius:"8px",padding:"6px 9px"}}>
-              {r.lc.note}
-            </div>
-          )}
-        </div>
+        <Row key={r.barcode} r={r} rank={-1} images={images} onImg={onImg}
+          color={color}
+          value={right(r).v} unit={right(r).u}
+          sub={`وارد ${fmtN(r.lc?.bought ?? 0)} · باع ${fmtN(r.qty)}`}>
+          {r.lc?.note && <div style={{color:"#cbd5e1"}}>{r.lc.note}</div>}
+        </Row>
       ))}
     </div>
   );
@@ -423,6 +513,7 @@ export function SeasonReport({ products = [], settings = {},
   const [pickCat, setPickCat] = useState(null);      // فئة نتبع زمنها
   const [pickPr,  setPickPr]  = useState(null);      // منتج نتبع زمنه
   const [thr,     setThr]     = useState(20);        // حساسية الانتعاش/الهبوط %
+  const [viewImg, setViewImg] = useState(null);      // الصورة المفتوحة بالحجم الكامل
 
   // ── فترات الموسم: مخزن مستقل، ما يمس مبيعاتك العادية ──
   const [periods,  setPeriods]  = useState([]);
@@ -638,11 +729,10 @@ export function SeasonReport({ products = [], settings = {},
   }
 
   const TABS = [
-    ["overall",  "🏆", "عام"],
-    ["branches", "🏬", "الفروع"],
-    ["time",     "📅", "الزمن"],
-    ["status",   "⚠️", "الحالة"],
-    ["decide",   "📦", "القرار"],
+    ["overall",  "المنتجات"],
+    ["branches", "الفروع"],
+    ["status",   "الحالة"],
+    ["decide",   "القرار"],
   ];
 
   const bA = branch ? A.branches.find(b=>b.branch===branch) : null;
@@ -650,99 +740,91 @@ export function SeasonReport({ products = [], settings = {},
 
   return (
     <div className="space-y-3">
+      <Viewer img={viewImg} onClose={()=>setViewImg(null)} />
       <BackBtn onClick={onBack} label="رجوع للتقارير" />
 
-      {/* ترويسة */}
-      <div style={{background:"linear-gradient(135deg,rgba(212,168,83,0.13),rgba(212,168,83,0.03))",
-        border:"1px solid rgba(212,168,83,0.3)",borderRadius:"16px",padding:"14px"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px"}}>
+      {/* ══ الموسم ══ الخط الزمني هو بطل الشاشة، يبقى فوق دايم */}
+      <div style={{background:"rgba(255,255,255,0.03)",borderRadius:"18px",padding:"16px",
+        border:"1px solid rgba(255,255,255,0.06)"}}>
+        <div style={{display:"flex",alignItems:"flex-start",
+          justifyContent:"space-between",gap:"10px",marginBottom:"14px"}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:"17px",fontWeight:900,color:"#fff"}}>
-              📊 {meta.name?.trim() || "تقرير الموسم"}
+            <div style={{fontSize:"16px",fontWeight:900,color:"#fff"}}>
+              {meta.name?.trim() || "تقرير الموسم"}
             </div>
-            <div style={{fontSize:"11px",color:"rgba(212,168,83,0.75)",marginTop:"3px"}}>
+            <div style={{fontSize:"11px",color:"#6b788c",marginTop:"3px"}}>
               {A.firstLabel} ← {A.lastLabel} · {fmtN(A.periodCount)} فترة
             </div>
           </div>
           <div style={{display:"flex",gap:"6px",flexShrink:0}}>
-            <button onClick={()=>setShowMgr(true)}
-              title="ارفع أيامًا أخرى أو احذف"
-              style={{background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.35)",
-                color:C.green,borderRadius:"11px",padding:"9px 12px",fontWeight:900,
-                fontSize:"12px",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
-              📂 ملفات
-            </button>
+            <button onClick={()=>setShowMgr(true)} title="ارفع أو احذف"
+              style={{background:"rgba(255,255,255,0.06)",border:"none",color:"#cbd5e1",
+                borderRadius:"10px",padding:"8px 11px",fontWeight:700,fontSize:"12px",
+                cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>📂</button>
             <button onClick={()=>{
                 const r = printSeason(A, {...settings, __seasonName: meta.name}, images);
                 if (!r.ok) alert(r.error); }}
-              style={{background:C.gold,color:"#000",border:"none",borderRadius:"11px",
-                padding:"9px 13px",fontWeight:900,fontSize:"12px",cursor:"pointer",
-                fontFamily:"Cairo,sans-serif"}}>
-              🖨️ طباعة
-            </button>
+              style={{background:C.gold,color:"#0b0f16",border:"none",borderRadius:"10px",
+                padding:"8px 14px",fontWeight:900,fontSize:"12px",cursor:"pointer",
+                fontFamily:"Cairo,sans-serif"}}>طباعة</button>
           </div>
         </div>
+
+        <Timeline points={A.timeline} avg={A.avg} thr={thr} height={104} />
+
+        {/* ثلاثة أرقام فقط — الباقي داخل التبويبات */}
+        <div style={{display:"flex",gap:"18px",marginTop:"16px",paddingTop:"14px",
+          borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+          {[["مباع", fmtN(A.grandQty)],
+            ["ربح", fmtM(A.grandProfit)],
+            ["فروع", fmtN(A.branches.length)]].map(([l,v])=>(
+            <div key={l}>
+              <div style={{fontSize:"17px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
+              <div style={{fontSize:"10.5px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
+            </div>
+          ))}
+        </div>
+
         {!A.dateParsed && (
-          <div style={{marginTop:"9px",background:"rgba(248,113,113,0.1)",
-            border:"1px solid rgba(248,113,113,0.3)",borderRadius:"9px",
-            padding:"8px",fontSize:"10px",color:"#fca5a5",lineHeight:1.7}}>
-            ⚠️ أسماء الفترات ما فيها تواريخ — الترتيب حسب الرفع.
-            سمّ الملفات بالتاريخ (مثل <b>2026-03-15</b>) أو <b>رمضان 1</b> لترتيب زمني مضبوط.
+          <div style={{marginTop:"12px",fontSize:"11px",color:"#fbbf24",lineHeight:1.8}}>
+            أسماء الفترات ما فيها تواريخ، فالترتيب حسب الرفع.
+            سمّها بالتاريخ أو «رمضان 1» لترتيب مضبوط.
           </div>
         )}
       </div>
 
-      {/* أرقام الموسم */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"6px"}}>
-        <Stat label="مباع"   value={fmtN(A.grandQty)}    color={C.gold} />
-        <Stat label="إيراد"  value={fmtM(A.grandRev)}    color={C.sky} />
-        <Stat label="ربح"    value={fmtM(A.grandProfit)} color={C.green} />
-        <Stat label="فروع"   value={fmtN(A.branches.length)} color={C.purple} />
-      </div>
-
-      {/* تنبيه الحالة — يظهر لو فيه نافد أو راكد */}
+      {/* تنبيهان فقط، ومختصران */}
       {(A.totalLost > 0 || A.deadCount > 0) && (
         <div onClick={()=>setTab("status")}
-          style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px",cursor:"pointer"}}>
+          style={{display:"flex",gap:"8px",cursor:"pointer"}}>
           {A.totalLost > 0 && (
-            <div style={{background:"rgba(56,189,248,0.08)",border:"1px solid rgba(56,189,248,0.28)",
-              borderRadius:"13px",padding:"11px"}}>
-              <div style={{fontSize:"17px",fontWeight:900,color:C.sky}}>{fmtN(A.totalLost)}</div>
-              <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px",lineHeight:1.5}}>
-                قطعة ضاعت بسبب النفاد
-              </div>
-              <div style={{fontSize:"9px",color:C.sky,marginTop:"3px"}}>
-                {fmtN(A.soldOut.length)} منتج خلص بدري ←
-              </div>
+            <div style={{flex:1,background:"rgba(56,189,248,0.07)",borderRadius:"14px",
+              padding:"12px",border:"1px solid rgba(56,189,248,0.2)"}}>
+              <div style={{fontSize:"19px",fontWeight:900,color:C.sky}}>{fmtN(A.totalLost)}</div>
+              <div style={{fontSize:"11px",color:"#8b97a8",marginTop:"2px"}}>ضاعت بالنفاد</div>
             </div>
           )}
           {A.deadCount > 0 && (
-            <div style={{background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.28)",
-              borderRadius:"13px",padding:"11px"}}>
-              <div style={{fontSize:"17px",fontWeight:900,color:C.red}}>{fmtM(A.tiedValue)}</div>
-              <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px",lineHeight:1.5}}>
-                فلوس واقفة في الرفوف
-              </div>
-              <div style={{fontSize:"9px",color:C.red,marginTop:"3px"}}>
-                {fmtN(A.deadCount)} منتج ما تحرك ←
-              </div>
+            <div style={{flex:1,background:"rgba(248,113,113,0.07)",borderRadius:"14px",
+              padding:"12px",border:"1px solid rgba(248,113,113,0.2)"}}>
+              <div style={{fontSize:"19px",fontWeight:900,color:C.red}}>{fmtM(A.tiedValue)}</div>
+              <div style={{fontSize:"11px",color:"#8b97a8",marginTop:"2px"}}>واقفة في الرفوف</div>
             </div>
           )}
         </div>
       )}
 
-      {/* التبويبات */}
-      <div style={{display:"flex",gap:"5px",background:"rgba(255,255,255,0.04)",
-        borderRadius:"13px",padding:"4px"}}>
-        {TABS.map(([k,ic,lb])=>(
+      {/* التبويبات — نص فقط، بلا أيقونات */}
+      <div style={{display:"flex",gap:"4px",background:"rgba(255,255,255,0.04)",
+        borderRadius:"12px",padding:"4px"}}>
+        {TABS.map(([k,lb])=>(
           <button key={k} onClick={()=>{ setTab(k); setPickCat(null); setPickPr(null); }}
-            style={{flex:1,padding:"8px 3px",borderRadius:"10px",cursor:"pointer",
-              fontFamily:"Cairo,sans-serif",fontSize:"11px",fontWeight:700,
-              background: tab===k ? "rgba(212,168,83,0.16)" : "transparent",
-              color:      tab===k ? C.gold : "rgba(255,255,255,0.4)",
-              border:     tab===k ? "1px solid rgba(212,168,83,0.35)" : "1px solid transparent"}}>
-            <div style={{fontSize:"15px"}}>{ic}</div>
-            <div style={{marginTop:"2px"}}>{lb}</div>
+            style={{flex:1,padding:"9px 4px",borderRadius:"9px",cursor:"pointer",
+              fontFamily:"Cairo,sans-serif",fontSize:"12.5px",fontWeight:700,border:"none",
+              background: tab===k ? "#e8edf4" : "transparent",
+              color:      tab===k ? "#0b0f16" : "#6b788c",
+              transition:"background .12s"}}>
+            {lb}
           </button>
         ))}
       </div>
@@ -750,57 +832,57 @@ export function SeasonReport({ products = [], settings = {},
       {/* ══ عام ══ */}
       {tab === "overall" && (
         <div className="space-y-3">
-          <div style={{display:"flex",gap:"5px"}}>
-            {[["qty","📦 الأكثر كمية"],["profit","💰 الأعلى ربحًا"]].map(([k,l])=>(
-              <button key={k} onClick={()=>setMetric(k)}
-                style={{flex:1,padding:"8px",borderRadius:"10px",cursor:"pointer",
-                  fontFamily:"Cairo,sans-serif",fontSize:"11px",fontWeight:700,
-                  background: metric===k ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
-                  color:      metric===k ? C.green : "#64748b",
-                  border:     metric===k ? "1px solid rgba(16,185,129,0.35)" : "1px solid rgba(255,255,255,0.07)"}}>
-                {l}
-              </button>
-            ))}
+          <Toggle value={metric} onChange={setMetric}
+            options={[["qty","كمية"],["profit","ربح"]]} />
+
+          <div>
+            {(metric==="profit" ? A.topByProfit : A.topByQty).slice(0,30).map((r,i)=>{
+              const val = metric==="profit" ? r.profit : r.qty;
+              const max = (metric==="profit" ? A.topByProfit[0]?.profit : A.topByQty[0]?.qty) || 1;
+              return (
+                <Row key={r.barcode} r={r} rank={i} images={images} onImg={setViewImg}
+                  value={metric==="profit" ? fmtM(val) : fmtN(val)}
+                  unit={metric==="profit" ? "ريال" : "قطعة"}
+                  color={metric==="profit" ? C.green : C.gold}
+                  fill={(val/max)*100}
+                  sub={`دوران ${fmtPct(r.turnPct)}`}>
+                  <div>باع {fmtN(r.qty)} · إيراد {fmtM(r.rev)} · ربح {fmtM(r.profit)}</div>
+                  <button onClick={e=>{ e.stopPropagation(); setPickPr(r); setPickCat(null); }}
+                    style={{marginTop:"7px",background:"rgba(56,189,248,0.12)",border:"none",
+                      borderRadius:"8px",padding:"7px 12px",color:C.sky,fontSize:"11.5px",
+                      fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+                    متى انتعش؟
+                  </button>
+                </Row>
+              );
+            })}
           </div>
 
           <div>
-            <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0",marginBottom:"8px"}}>
-              🏆 أفضل المنتجات
-            </div>
-            {(metric==="profit" ? A.topByProfit : A.topByQty).slice(0,25).map((r,i)=>(
-              <ProdRow key={r.barcode} r={r} i={i} metric={metric} images={images}
-                maxQty={(metric==="profit" ? A.topByProfit[0]?.profit : A.topByQty[0]?.qty) ?? 1} />
-            ))}
-          </div>
-
-          <div>
-            <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0",marginBottom:"8px"}}>
-              🏷️ أفضل الفئات — اضغط فئة تشوف زمنها
-            </div>
+            <Head>الفئات</Head>
             {(metric==="profit" ? A.topCatsProfit : A.topCats).map((c,i)=>{
               const val = metric==="profit" ? c.profit : c.qty;
-              const max = (metric==="profit" ? A.topCatsProfit[0]?.profit : A.topCats[0]?.qty) ?? 1;
+              const max = (metric==="profit" ? A.topCatsProfit[0]?.profit : A.topCats[0]?.qty) || 1;
               return (
-                <div key={c.cat} onClick={()=>{ setPickCat(c); setPickPr(null); setTab("time"); }}
-                  style={{background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.18)",
-                    borderRadius:"12px",padding:"11px",marginBottom:"6px",cursor:"pointer"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-                    <div style={{width:"22px",fontSize:"12px",fontWeight:900,
-                      color: i<3 ? C.purple : "#475569",textAlign:"center"}}>{i+1}</div>
+                <div key={c.cat} onClick={()=>{ setPickCat(c); setPickPr(null); }}
+                  style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
+                    marginBottom:"7px",cursor:"pointer",overflow:"hidden",
+                    border:"1px solid rgba(255,255,255,0.05)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 14px"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"12px",fontWeight:700,color:"#e2e8f0"}}>{c.catName}</div>
-                      <div style={{fontSize:"9px",color:"#64748b",marginTop:"1px"}}>
+                      <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9"}}>{c.catName}</div>
+                      <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>
                         {fmtN(c.items)} منتج · {fmtPct(A.grandQty>0?(c.qty/A.grandQty)*100:0)} من الموسم
                       </div>
                     </div>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{fontSize:"15px",fontWeight:900,color:C.purple}}>
-                        {metric==="profit" ? fmtM(val) : fmtN(val)}
-                      </div>
-                      <div style={{fontSize:"9px",color:"#475569"}}>📅 زمنها ←</div>
+                    <div style={{fontSize:"21px",fontWeight:900,color:C.purple,
+                      letterSpacing:"-0.5px"}}>
+                      {metric==="profit" ? fmtM(val) : fmtN(val)}
                     </div>
                   </div>
-                  <div style={{marginTop:"7px"}}><Bar pct={(val/max)*100} color={C.purple}/></div>
+                  <div style={{height:"2.5px",background:"rgba(255,255,255,0.05)",display:"flex",justifyContent:"flex-start"}}>
+                    <div style={{width:`${(val/max)*100}%`,height:"100%",background:C.purple}}/>
+                  </div>
                 </div>
               );
             })}
@@ -810,38 +892,34 @@ export function SeasonReport({ products = [], settings = {},
 
       {/* ══ الفروع ══ */}
       {tab === "branches" && (
-        <div className="space-y-2">
+        <div>
           {!branch ? (
             <>
-              <div style={{fontSize:"11px",color:"#64748b",marginBottom:"4px"}}>
-                مرتبة بالأقوى مبيعًا — اضغط فرع لتحليله
-              </div>
+              <Head note="مرتبة بالأقوى — اضغط فرع لتحليله">الفروع</Head>
               {A.branches.map((b,i)=>(
                 <div key={b.branch} onClick={()=>setBranch(b.branch)}
-                  style={{background:"rgba(255,255,255,0.035)",border:"1px solid rgba(255,255,255,0.07)",
-                    borderRadius:"14px",padding:"13px",cursor:"pointer"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                    <div style={{width:"26px",height:"26px",borderRadius:"8px",
-                      background: i===0 ? C.gold : "rgba(255,255,255,0.07)",
-                      color:      i===0 ? "#000" : "#64748b",
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                      fontSize:"12px",fontWeight:900,flexShrink:0}}>{i+1}</div>
+                  style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
+                    marginBottom:"7px",cursor:"pointer",overflow:"hidden",
+                    border:"1px solid rgba(255,255,255,0.05)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 14px"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"14px",fontWeight:900,color:"#f1f5f9"}}>🏬 {b.branch}</div>
-                      <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>
-                        أقوى منتج: {b.topByQty[0]?.name ?? "—"}
+                      <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {i===0 && "🥇 "}{b.branch}
+                      </div>
+                      <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        أقوى منتج · {b.topByQty[0]?.name ?? "—"}
                       </div>
                     </div>
                     <div style={{textAlign:"left",flexShrink:0}}>
-                      <div style={{fontSize:"17px",fontWeight:900,color:C.gold}}>{fmtN(b.qty)}</div>
-                      <div style={{fontSize:"9px",color:"#475569"}}>{fmtPct(b.sharePct)} من الموسم</div>
+                      <div style={{fontSize:"21px",fontWeight:900,color:C.gold,
+                        letterSpacing:"-0.5px"}}>{fmtN(b.qty)}</div>
+                      <div style={{fontSize:"10px",color:"#5b6878"}}>{fmtPct(b.sharePct)}</div>
                     </div>
                   </div>
-                  <div style={{marginTop:"9px"}}><Bar pct={b.sharePct} h={7}/></div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"5px",marginTop:"9px"}}>
-                    <Stat label="إيراد" value={fmtM(b.rev)} color={C.sky}/>
-                    <Stat label="ربح" value={fmtM(b.profit)} color={C.green}/>
-                    <Stat label="أقوى فترة" value={b.best?.label ?? "—"} color={C.gold}/>
+                  <div style={{height:"2.5px",background:"rgba(255,255,255,0.05)",display:"flex",justifyContent:"flex-start"}}>
+                    <div style={{width:`${b.sharePct}%`,height:"100%",background:C.gold}}/>
                   </div>
                 </div>
               ))}
@@ -850,87 +928,76 @@ export function SeasonReport({ products = [], settings = {},
             <>
               <button onClick={()=>setBranch(null)}
                 style={{background:"none",border:"none",color:C.sky,fontWeight:700,
-                  fontSize:"12px",cursor:"pointer",fontFamily:"Cairo,sans-serif",padding:0}}>
+                  fontSize:"13px",cursor:"pointer",fontFamily:"Cairo,sans-serif",
+                  padding:"4px 0",marginBottom:"8px"}}>
                 ← كل الفروع
               </button>
-              <div style={{fontSize:"16px",fontWeight:900,color:"#fff"}}>🏬 {branch}</div>
 
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"5px"}}>
-                <Stat label="مباع" value={fmtN(bA.qty)} color={C.gold}/>
-                <Stat label="نصيبه" value={fmtPct(bA.sharePct)} color={C.purple}/>
-                <Stat label="إيراد" value={fmtM(bA.rev)} color={C.sky}/>
-                <Stat label="ربح" value={fmtM(bA.profit)} color={C.green}/>
-              </div>
-
-              {/* زمن الفرع */}
-              <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",
-                borderRadius:"14px",padding:"13px"}}>
-                <div style={{fontSize:"12px",fontWeight:900,color:"#e2e8f0",marginBottom:"9px"}}>
-                  📅 متى انتعش ومتى هبط
+              {/* زمن الفرع + أرقامه في بطاقة واحدة */}
+              <div style={{background:"rgba(255,255,255,0.03)",borderRadius:"18px",
+                padding:"16px",border:"1px solid rgba(255,255,255,0.06)",marginBottom:"4px"}}>
+                <div style={{fontSize:"15px",fontWeight:900,color:"#fff",marginBottom:"14px"}}>
+                  {branch}
                 </div>
-                <Timeline points={bA.timeline} avg={bA.avg} thr={thr}/>
-                <div style={{marginTop:"11px",fontSize:"11px",lineHeight:2,color:"#94a3b8"}}>
-                  <div>🟢 انتعش: <b style={{color:C.green}}>
-                    {bA.peaks.map(p=>p.label).join("، ") || "—"}</b></div>
-                  <div>🔴 هبط: <b style={{color:C.red}}>
-                    {bA.dips.map(p=>p.label).join("، ") || "—"}</b></div>
-                  <div>⭐ أقوى: <b style={{color:C.gold}}>
-                    {bA.best?.label} ({fmtN(bA.best?.qty)})</b></div>
-                </div>
-              </div>
-
-              <div style={{display:"flex",gap:"5px"}}>
-                {[["qty","📦 كمية"],["profit","💰 ربح"]].map(([k,l])=>(
-                  <button key={k} onClick={()=>setMetric(k)}
-                    style={{flex:1,padding:"7px",borderRadius:"9px",cursor:"pointer",
-                      fontFamily:"Cairo,sans-serif",fontSize:"11px",fontWeight:700,
-                      background: metric===k ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
-                      color:      metric===k ? C.green : "#64748b",
-                      border:     metric===k ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(255,255,255,0.07)"}}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{fontSize:"12px",fontWeight:900,color:"#e2e8f0"}}>
-                🏆 أقوى منتجات {branch}
-              </div>
-              {(metric==="profit" ? bA.topByProfit : bA.topByQty).map((r,i)=>(
-                <ProdRow key={r.barcode} r={r} i={i} metric={metric} images={images}
-                  maxQty={(metric==="profit" ? bA.topByProfit[0]?.profit : bA.topByQty[0]?.qty) ?? 1}
-                  extra={
-                    <button onClick={()=>{ setPickPr(r); setPickCat(null); setTab("time"); }}
-                      style={{marginTop:"7px",width:"100%",background:"rgba(56,189,248,0.1)",
-                        border:"1px solid rgba(56,189,248,0.25)",borderRadius:"8px",
-                        padding:"5px",color:C.sky,fontSize:"10px",fontWeight:700,
-                        cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
-                      📅 متى انتعش هذا المنتج؟
-                    </button>
-                  }/>
-              ))}
-
-              <div style={{fontSize:"12px",fontWeight:900,color:"#e2e8f0",marginTop:"12px"}}>
-                🏷️ أفضل فئات {branch}
-              </div>
-              {bA.topCats.map((c,i)=>(
-                <div key={c.cat} onClick={()=>{ setPickCat(c); setPickPr(null); setTab("time"); }}
-                  style={{background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.18)",
-                    borderRadius:"11px",padding:"10px",marginBottom:"5px",cursor:"pointer"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                    <div style={{width:"20px",fontSize:"11px",fontWeight:900,
-                      color:C.purple,textAlign:"center"}}>{i+1}</div>
-                    <div style={{flex:1,minWidth:0,fontSize:"12px",fontWeight:700,color:"#e2e8f0"}}>
-                      {c.catName}
+                <Timeline points={bA.timeline} avg={bA.avg} thr={thr} height={96}/>
+                <div style={{display:"flex",gap:"18px",marginTop:"16px",paddingTop:"14px",
+                  borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+                  {[["مباع", fmtN(bA.qty)],
+                    ["ربح", fmtM(bA.profit)],
+                    ["نصيبه", fmtPct(bA.sharePct)]].map(([l,v])=>(
+                    <div key={l}>
+                      <div style={{fontSize:"17px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
+                      <div style={{fontSize:"10.5px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
                     </div>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{fontSize:"14px",fontWeight:900,color:C.purple}}>{fmtN(c.qty)}</div>
-                      <div style={{fontSize:"9px",color:"#475569"}}>
+                  ))}
+                </div>
+              </div>
+
+              <Head>منتجاته</Head>
+              <Toggle value={metric} onChange={setMetric}
+                options={[["qty","كمية"],["profit","ربح"]]} />
+              <div style={{marginTop:"10px"}}>
+                {(metric==="profit" ? bA.topByProfit : bA.topByQty).slice(0,40).map((r,i)=>{
+                  const val = metric==="profit" ? r.profit : r.qty;
+                  const max = (metric==="profit" ? bA.topByProfit[0]?.profit : bA.topByQty[0]?.qty) || 1;
+                  return (
+                    <Row key={r.barcode} r={r} rank={i} images={images} onImg={setViewImg}
+                      value={metric==="profit" ? fmtM(val) : fmtN(val)}
+                      unit={metric==="profit" ? "ريال" : "قطعة"}
+                      color={metric==="profit" ? C.green : C.gold}
+                      fill={(val/max)*100}
+                      sub={`دوران ${fmtPct(r.turnPct)}`}>
+                      <div>باع {fmtN(r.qty)} · إيراد {fmtM(r.rev)} · ربح {fmtM(r.profit)}</div>
+                      <button onClick={e=>{ e.stopPropagation(); setPickPr(r); setPickCat(null); }}
+                        style={{marginTop:"7px",background:"rgba(56,189,248,0.12)",border:"none",
+                          borderRadius:"8px",padding:"7px 12px",color:C.sky,fontSize:"11.5px",
+                          fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+                        متى انتعش في {branch}؟
+                      </button>
+                    </Row>
+                  );
+                })}
+              </div>
+
+              <Head>فئاته</Head>
+              {bA.topCats.map(c=>(
+                <div key={c.cat} onClick={()=>{ setPickCat(c); setPickPr(null); }}
+                  style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
+                    marginBottom:"7px",cursor:"pointer",overflow:"hidden",
+                    border:"1px solid rgba(255,255,255,0.05)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"13px 14px"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9"}}>{c.catName}</div>
+                      <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>
                         {fmtPct(bA.qty>0?(c.qty/bA.qty)*100:0)} من الفرع
                       </div>
                     </div>
+                    <div style={{fontSize:"21px",fontWeight:900,color:C.purple,
+                      letterSpacing:"-0.5px"}}>{fmtN(c.qty)}</div>
                   </div>
-                  <div style={{marginTop:"6px"}}>
-                    <Bar pct={(c.qty/(bA.topCats[0]?.qty||1))*100} color={C.purple}/>
+                  <div style={{height:"2.5px",background:"rgba(255,255,255,0.05)",display:"flex",justifyContent:"flex-start"}}>
+                    <div style={{width:`${(c.qty/(bA.topCats[0]?.qty||1))*100}%`,
+                      height:"100%",background:C.purple}}/>
                   </div>
                 </div>
               ))}
@@ -939,143 +1006,56 @@ export function SeasonReport({ products = [], settings = {},
         </div>
       )}
 
-      {/* ══ الزمن ══ */}
-      {tab === "time" && (
-        <div className="space-y-3">
-          {(pickPr || pickCat) && (
-            <div style={{background:"rgba(56,189,248,0.07)",border:"1px solid rgba(56,189,248,0.25)",
-              borderRadius:"14px",padding:"13px"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"9px"}}>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:"13px",fontWeight:900,color:"#fff"}}>
-                    {pickPr ? `📦 ${pickPr.name}` : `🏷️ ${pickCat.catName}`}
+      {/* ══ الزمن ══ لوحة منبثقة عند اختيار منتج أو فئة */}
+      {(pickPr || pickCat) && pickTL && (()=>{
+        const avg  = pickTL.reduce((s,p)=>s+p.qty,0) / (pickTL.length||1);
+        const up   = pickTL.filter(p=>p.vsAvgPct >=  thr);
+        const down = pickTL.filter(p=>p.vsAvgPct <= -thr);
+        return (
+          <div onClick={()=>{ setPickPr(null); setPickCat(null); }}
+            style={{position:"fixed",inset:0,background:"rgba(2,6,14,0.82)",zIndex:60,
+              display:"flex",alignItems:"flex-end",justifyContent:"center",
+              backdropFilter:"blur(3px)"}}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{background:"#121824",borderRadius:"22px 22px 0 0",padding:"20px",
+                width:"100%",maxWidth:"480px",maxHeight:"86vh",overflowY:"auto",
+                border:"1px solid rgba(255,255,255,0.08)"}}>
+
+              <div style={{width:"38px",height:"4px",background:"rgba(255,255,255,0.18)",
+                borderRadius:"100px",margin:"0 auto 16px"}}/>
+
+              <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px"}}>
+                {pickPr && <Thumb src={images?.[pickPr.barcode]} size={52} onOpen={setViewImg} name={pickPr.name}/>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:"15px",fontWeight:900,color:"#fff",
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {pickPr ? pickPr.name : pickCat.catName}
                   </div>
-                  <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>
-                    {branch ? `في ${branch}` : "كل الفروع"} ·
-                    {pickPr ? ` ${pickPr.barcode}` : ` ${fmtN(pickCat.items)} منتج`}
+                  <div style={{fontSize:"11px",color:"#6b788c",marginTop:"3px"}}>
+                    {branch ? branch : "كل الفروع"}
+                    {pickCat ? ` · ${fmtN(pickCat.items)} منتج` : ""}
                   </div>
                 </div>
                 <button onClick={()=>{ setPickPr(null); setPickCat(null); }}
-                  style={{background:"rgba(255,255,255,0.07)",border:"none",borderRadius:"8px",
-                    padding:"5px 10px",color:"#94a3b8",fontSize:"11px",fontWeight:700,
-                    cursor:"pointer",fontFamily:"Cairo,sans-serif",flexShrink:0}}>✕</button>
+                  style={{background:"rgba(255,255,255,0.07)",border:"none",borderRadius:"9px",
+                    padding:"8px 12px",color:"#94a3b8",fontSize:"14px",cursor:"pointer"}}>✕</button>
               </div>
-              {pickTL && (()=>{
-                const avg  = pickTL.reduce((s,p)=>s+p.qty,0) / (pickTL.length||1);
-                const up   = pickTL.filter(p=>p.vsAvgPct>=  thr);
-                const down = pickTL.filter(p=>p.vsAvgPct<= -thr);
-                const best = pickTL.reduce((m,p)=>p.qty>m.qty?p:m, pickTL[0]);
-                return (
-                  <>
-                    <div style={{marginTop:"11px"}}><Timeline points={pickTL} avg={avg} thr={thr}/></div>
-                    <div style={{marginTop:"11px",fontSize:"11px",lineHeight:2,color:"#94a3b8"}}>
-                      <div>🟢 انتعش: <b style={{color:C.green}}>
-                        {up.map(p=>p.label).join("، ") || "—"}</b></div>
-                      <div>🔴 هبط: <b style={{color:C.red}}>
-                        {down.map(p=>p.label).join("، ") || "—"}</b></div>
-                      <div>⭐ أقوى فترة: <b style={{color:C.gold}}>
-                        {best?.label} ({fmtN(best?.qty)})</b></div>
-                      <div>📊 المتوسط: <b>{fmtN(Math.round(avg))}</b> لكل فترة</div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
 
-          {/* حساسية التصنيف */}
-          <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",
-            borderRadius:"13px",padding:"12px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-              marginBottom:"8px"}}>
-              <span style={{fontSize:"11px",fontWeight:700,color:"#94a3b8"}}>
-                حساسية الانتعاش / الهبوط
-              </span>
-              <span style={{fontSize:"13px",fontWeight:900,color:C.gold}}>±{thr}%</span>
-            </div>
-            <input type="range" min={10} max={80} step={5} value={thr}
-              onChange={e=>setThr(+e.target.value)}
-              style={{width:"100%",accentColor:C.gold}}/>
-            <div style={{fontSize:"9px",color:"#64748b",marginTop:"5px",lineHeight:1.7}}>
-              الفترة تُحسب انتعاشًا لو فوق المتوسط بهذي النسبة، وهبوطًا لو تحته بها.
-              ارفعها لو الأيام الموسومة كثيرة.
-            </div>
-          </div>
+              <Timeline points={pickTL} avg={avg} thr={thr} height={118}/>
 
-          <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",
-            borderRadius:"14px",padding:"13px"}}>
-            <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0",marginBottom:"3px"}}>
-              📅 مبيعات الموسم — كل الفروع
-            </div>
-            <div style={{fontSize:"10px",color:"#64748b",marginBottom:"11px"}}>
-              متوسط {fmtN(Math.round(A.avg))} قطعة · إجمالي {fmtN(A.total)}
-            </div>
-            <Timeline points={A.timeline} avg={A.avg} thr={thr}/>
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px"}}>
-            <div style={{background:"rgba(16,185,129,0.07)",border:"1px solid rgba(16,185,129,0.25)",
-              borderRadius:"13px",padding:"12px"}}>
-              <div style={{fontSize:"11px",fontWeight:900,color:C.green,marginBottom:"7px"}}>
-                🟢 انتعشت ({A.peaks.length})
+              <div style={{marginTop:"18px",display:"flex",flexDirection:"column",gap:"10px"}}>
+                <Line label="انتعش" color={C.green}
+                  value={up.map(p=>p.label).join("، ") || "ما فيه ذروة واضحة"}/>
+                <Line label="هبط" color={C.red}
+                  value={down.map(p=>p.label).join("، ") || "ما فيه هبوط واضح"}/>
+                <Line label="المتوسط" color="#8b97a8"
+                  value={`${fmtN(Math.round(avg))} لكل فترة`}/>
               </div>
-              {A.peaks.length ? A.peaks.slice(0,8).map((p,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",
-                  fontSize:"11px",padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-                  <span style={{color:"#cbd5e1"}}>{p.label}</span>
-                  <span style={{color:C.green,fontWeight:900}}>{fmtN(p.qty)}</span>
-                </div>
-              )) : <div style={{fontSize:"10px",color:"#475569"}}>ما فيه ذرى واضحة</div>}
-            </div>
-            <div style={{background:"rgba(248,113,113,0.07)",border:"1px solid rgba(248,113,113,0.25)",
-              borderRadius:"13px",padding:"12px"}}>
-              <div style={{fontSize:"11px",fontWeight:900,color:C.red,marginBottom:"7px"}}>
-                🔴 هبطت ({A.dips.length})
-              </div>
-              {A.dips.length ? A.dips.slice(0,8).map((p,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",
-                  fontSize:"11px",padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-                  <span style={{color:"#cbd5e1"}}>{p.label}</span>
-                  <span style={{color:C.red,fontWeight:900}}>{fmtN(p.qty)}</span>
-                </div>
-              )) : <div style={{fontSize:"10px",color:"#475569"}}>ما فيه هبوط واضح</div>}
             </div>
           </div>
+        );
+      })()}
 
-          {/* كل الفترات */}
-          <div>
-            <div style={{fontSize:"12px",fontWeight:900,color:"#e2e8f0",marginBottom:"8px"}}>
-              كل الفترات بالتفصيل
-            </div>
-            {A.timeline.map((t,i)=>{
-              const col = t.vsAvgPct>=thr ? C.green : t.vsAvgPct<=-thr ? C.red : C.slate;
-              return (
-                <div key={i} style={{background:"rgba(255,255,255,0.03)",
-                  border:`1px solid ${col}25`,borderRadius:"11px",padding:"10px",marginBottom:"5px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-                    <div style={{width:"20px",fontSize:"10px",color:"#475569",
-                      textAlign:"center",fontWeight:700}}>{i+1}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"12px",fontWeight:700,color:"#e2e8f0"}}>{t.label}</div>
-                      <div style={{fontSize:"9px",color:"#64748b",marginTop:"1px"}}>
-                        {fmtM(t.rev)} إيراد
-                        {t.change!==null && ` · ${t.change>0?"▲":"▼"} ${fmtPct(Math.abs(t.change))} عن قبلها`}
-                      </div>
-                    </div>
-                    <div style={{textAlign:"left",flexShrink:0}}>
-                      <div style={{fontSize:"15px",fontWeight:900,color:col}}>{fmtN(t.qty)}</div>
-                      <div style={{fontSize:"9px",color:col,direction:"ltr",
-                        unicodeBidi:"isolate"}}>
-                        {t.vsAvgPct>0?"+":""}{fmtPct(t.vsAvgPct)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* ══ الحالة ══ */}
       {tab === "status" && (
@@ -1118,107 +1098,65 @@ export function SeasonReport({ products = [], settings = {},
             </div>
           )}
 
-          {/* نفد مبكرًا */}
           <StatusGroup
-            title="🔵 نفد قبل نهاية المدة"
+            title="نفد قبل نهاية المدة"
             hint="خلصت بضاعته وباقي وقت — الطلب أعلى مما بعناه"
-            color={C.sky} items={A.soldOut} images={images}
-            right={r => (
-              <>
-                <div style={{fontSize:"15px",fontWeight:900,color:C.sky}}>
-                  +{fmtN(r.lc.lost)}
-                </div>
-                <div style={{fontSize:"9px",color:"#475569"}}>ضاع تقديريًا</div>
-              </>
-            )}
+            color={C.sky} items={A.soldOut} images={images} onImg={setViewImg}
+            right={r => ({ v: `+${fmtN(r.lc.lost)}`, u: "ضاع" })}
           />
 
-          {/* توقف */}
           <StatusGroup
-            title="🟠 وقف بيعه في النص"
+            title="وقف بيعه في النص"
             hint="آخر بيعة له بدري وبعدها صفر — راجع إذا نفد من الفرع"
-            color="#fb923c" items={A.stalled} images={images}
-            right={r => (
-              <>
-                <div style={{fontSize:"15px",fontWeight:900,color:"#fb923c"}}>
-                  {fmtN(r.lc.trailingZeros)}
-                </div>
-                <div style={{fontSize:"9px",color:"#475569"}}>فترة صفر</div>
-              </>
-            )}
+            color="#fb923c" items={A.stalled} images={images} onImg={setViewImg}
+            right={r => ({ v: fmtN(r.lc.trailingZeros), u: "فترة صفر" })}
           />
 
-          {/* ضعف طلبه */}
           <StatusGroup
-            title="🔴 ضعف طلبه فعلًا"
+            title="ضعف طلبه فعلًا"
             hint="عنده بضاعة وما انباعت — هذا اللي نقلله"
-            color={C.red} items={A.declined} images={images}
-            right={r => (
-              <>
-                <div style={{fontSize:"15px",fontWeight:900,color:C.red}}>
-                  {fmtN(r.lc.left)}
-                </div>
-                <div style={{fontSize:"9px",color:"#475569"}}>باقية عنده</div>
-              </>
-            )}
+            color={C.red} items={A.declined} images={images} onImg={setViewImg}
+            right={r => ({ v: fmtN(r.lc.left), u: "باقية" })}
           />
 
           {/* الراكد */}
           <div>
-            <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0",marginBottom:"3px"}}>
-              ⚫ ما تحرك أو حركته ضعيفة ({fmtN(A.stagnant.length)})
+            <div style={{display:"flex",alignItems:"center",gap:"8px",margin:"20px 0 4px"}}>
+              <span style={{width:"7px",height:"7px",borderRadius:"50%",
+                background:"#64748b",flexShrink:0}}/>
+              <span style={{fontSize:"14px",fontWeight:900,color:"#e8edf4",flex:1}}>
+                ما تحرك أو حركته ضعيفة
+              </span>
+              <span style={{fontSize:"12px",fontWeight:900,color:"#94a3b8",
+                background:"rgba(100,116,139,0.2)",borderRadius:"100px",
+                padding:"2px 9px"}}>{fmtN(A.stagnant.length)}</span>
             </div>
-            <div style={{fontSize:"10px",color:"#64748b",marginBottom:"9px"}}>
-              مرتبة بالأسوأ — اللي ما باع ولا قطعة أول، ثم الأعلى فلوسًا واقفة
+            <div style={{fontSize:"11px",color:"#6b788c",marginBottom:"10px"}}>
+              الأسوأ أول — اللي ما باع ولا قطعة، ثم الأعلى فلوسًا واقفة
             </div>
             {A.stagnant.length === 0 ? (
-              <div style={{textAlign:"center",padding:"26px",color:"#475569",fontSize:"11px"}}>
-                ما فيه منتج راكد 👌
+              <div style={{textAlign:"center",padding:"30px",color:"#4a5668",fontSize:"12px"}}>
+                ما فيه منتج راكد
               </div>
             ) : A.stagnant.slice(0,60).map(r=>(
-              <div key={r.barcode} style={{background: r.dead ? "rgba(71,85,105,0.14)" : "rgba(245,158,11,0.06)",
-                border:`1px solid ${r.dead ? "rgba(100,116,139,0.3)" : "rgba(245,158,11,0.22)"}`,
-                borderRadius:"12px",padding:"10px",marginBottom:"6px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-                  {images?.[r.barcode]
-                    ? <img src={images[r.barcode]} alt="" style={{width:"50px",height:"50px",
-                        borderRadius:"9px",objectFit:"cover",flexShrink:0,
-                        filter: r.dead ? "grayscale(0.7)" : "none"}}/>
-                    : <div style={{width:"50px",height:"50px",borderRadius:"9px",
-                        background:"rgba(255,255,255,0.06)",display:"flex",alignItems:"center",
-                        justifyContent:"center",fontSize:"20px",flexShrink:0}}>📦</div>}
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"12px",fontWeight:700,color:"#e2e8f0",
-                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-                    <div style={{fontSize:"9px",color:"#94a3b8",marginTop:"2px",
-                      fontFamily:"monospace",direction:"ltr",textAlign:"right"}}>{r.barcode}</div>
-                    <div style={{fontSize:"9px",color:"#64748b",marginTop:"2px",lineHeight:1.6}}>
-                      🏭 {r.fac}{r.facName ? ` · ${r.facName}` : ""}
-                    </div>
-                    <div style={{fontSize:"9px",color:"#64748b",lineHeight:1.6}}>
-                      📦 {r.cont || "—"} · وارد {fmtN(r.bought)} · باع {fmtN(r.sold)}
-                    </div>
-                    <span style={{display:"inline-block",marginTop:"4px",
-                      background: r.dead ? "rgba(100,116,139,0.22)" : "rgba(245,158,11,0.16)",
-                      border:`1px solid ${r.dead ? "rgba(148,163,184,0.35)" : "rgba(245,158,11,0.35)"}`,
-                      borderRadius:"100px",padding:"1px 9px",fontSize:"9px",fontWeight:900,
-                      color: r.dead ? "#cbd5e1" : "#fbbf24"}}>{r.status}</span>
-                  </div>
-                  <div style={{textAlign:"left",flexShrink:0}}>
-                    <div style={{fontSize:"15px",fontWeight:900,color: r.dead ? "#94a3b8" : "#fbbf24"}}>
-                      {fmtM(r.tiedValue)}
-                    </div>
-                    <div style={{fontSize:"9px",color:"#475569"}}>واقفة</div>
-                    <div style={{fontSize:"9px",color:"#475569",marginTop:"2px"}}>
-                      {fmtN(r.left)} قطعة
-                    </div>
-                  </div>
+              <Row key={r.barcode} r={r} rank={-1} images={images} onImg={setViewImg}
+                color={r.dead ? "#94a3b8" : "#fbbf24"}
+                value={fmtM(r.tiedValue)} unit="واقفة"
+                sub={`وارد ${fmtN(r.bought)} · باع ${fmtN(r.sold)} · باقي ${fmtN(r.left)}`}
+                badge={
+                  <span style={{display:"inline-block",marginTop:"5px",
+                    background: r.dead ? "rgba(100,116,139,0.2)" : "rgba(245,158,11,0.14)",
+                    borderRadius:"100px",padding:"2px 10px",fontSize:"10.5px",fontWeight:700,
+                    color: r.dead ? "#cbd5e1" : "#fbbf24"}}>{r.status}</span>
+                }>
+                <div style={{color:"#cbd5e1"}}>
+                  {r.note} · سعر الشراء {fmtM(r.buyPrice)}
                 </div>
-              </div>
+              </Row>
             ))}
             {A.stagnant.length > 60 && (
-              <div style={{textAlign:"center",fontSize:"10px",color:"#475569",padding:"7px"}}>
-                … و{fmtN(A.stagnant.length - 60)} منتج آخر — كلهم في الطباعة
+              <div style={{textAlign:"center",fontSize:"11px",color:"#4a5668",padding:"10px"}}>
+                و{fmtN(A.stagnant.length - 60)} منتج آخر — كلهم في الطباعة
               </div>
             )}
           </div>
@@ -1227,47 +1165,32 @@ export function SeasonReport({ products = [], settings = {},
 
       {/* ══ القرار ══ */}
       {tab === "decide" && (
-        <div className="space-y-2">
-          <div style={{background:"rgba(212,168,83,0.07)",border:"1px solid rgba(212,168,83,0.22)",
-            borderRadius:"13px",padding:"12px",fontSize:"11px",color:"#94a3b8",lineHeight:1.9}}>
-            الأساس = اللي باعه الفرع فعلًا هذا الموسم، مضروب في معامل حسب قوة المنتج،
-            ومقرّب لدزينة كاملة.
-            <div style={{marginTop:"7px",display:"flex",flexWrap:"wrap",gap:"5px"}}>
-              {[["قوي","×1.35",C.green],["متعطش","×1.6",C.sky],
-                ["جيد","×1",C.gold],["ضعيف","×0.5",C.red]].map(([t,m,c])=>(
-                <span key={t} style={{background:`${c}18`,border:`1px solid ${c}35`,
-                  borderRadius:"100px",padding:"2px 9px",fontSize:"10px",
-                  fontWeight:700,color:c}}>{t} {m}</span>
-              ))}
-            </div>
-            <div style={{marginTop:"7px",fontSize:"10px",color:"#64748b"}}>
-              <b style={{color:C.sky}}>متعطش</b> = صفّى اللي عنده بس كميته كانت صغيرة — غالبًا نقص بضاعة.
-            </div>
-          </div>
-
+        <div>
           {!branch ? (
             <>
-              <div style={{fontSize:"11px",color:"#64748b"}}>اضغط فرع تشوف قراره</div>
+              <Head note="الأساس = اللي باعه الفرع، مضروب في قوة المنتج، ومقرّب لدزينة">
+                ايش نجيب لكل فرع
+              </Head>
               {A.recs.map(r=>(
                 <div key={r.branch} onClick={()=>setBranch(r.branch)}
-                  style={{background:"rgba(255,255,255,0.035)",border:"1px solid rgba(255,255,255,0.07)",
-                    borderRadius:"14px",padding:"13px",cursor:"pointer"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"9px"}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:"14px",fontWeight:900,color:"#f1f5f9"}}>🏬 {r.branch}</div>
-                      <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>
-                        {fmtPct(r.sharePct)} من الموسم · {fmtN(r.bring.length)} منتج نجيبه
-                        {r.stop.length ? ` · ${fmtN(r.stop.length)} نوقفه` : ""}
-                      </div>
+                  style={{background:"rgba(255,255,255,0.028)",borderRadius:"14px",
+                    marginBottom:"7px",cursor:"pointer",padding:"13px 14px",
+                    border:"1px solid rgba(255,255,255,0.05)",
+                    display:"flex",alignItems:"center",gap:"12px"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {r.branch}
                     </div>
-                    <div style={{textAlign:"left",flexShrink:0}}>
-                      <div style={{fontSize:"18px",fontWeight:900,color:C.green}}>
-                        {fmtN(r.totalSuggest)}
-                      </div>
-                      <div style={{fontSize:"9px",color:"#475569"}}>
-                        باع {fmtN(r.totalLastQty)}
-                      </div>
+                    <div style={{fontSize:"11px",color:"#7c8a9e",marginTop:"3px"}}>
+                      باع {fmtN(r.totalLastQty)}
+                      {r.urgent.length ? ` · نفد عنده ${fmtN(r.urgent.length)}` : ""}
                     </div>
+                  </div>
+                  <div style={{textAlign:"left",flexShrink:0}}>
+                    <div style={{fontSize:"21px",fontWeight:900,color:C.green,
+                      letterSpacing:"-0.5px"}}>{fmtN(r.totalSuggest)}</div>
+                    <div style={{fontSize:"10px",color:"#5b6878"}}>نجيب</div>
                   </div>
                 </div>
               ))}
@@ -1276,87 +1199,67 @@ export function SeasonReport({ products = [], settings = {},
             <>
               <button onClick={()=>setBranch(null)}
                 style={{background:"none",border:"none",color:C.sky,fontWeight:700,
-                  fontSize:"12px",cursor:"pointer",fontFamily:"Cairo,sans-serif",padding:0}}>
+                  fontSize:"13px",cursor:"pointer",fontFamily:"Cairo,sans-serif",
+                  padding:"4px 0",marginBottom:"8px"}}>
                 ← كل الفروع
               </button>
-              <div style={{fontSize:"16px",fontWeight:900,color:"#fff"}}>📦 قرار {branch}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"5px"}}>
-                <Stat label="باع الموسم" value={fmtN(rc.totalLastQty)} color={C.gold}/>
-                <Stat label="المقترح" value={fmtN(rc.totalSuggest)} color={C.green}/>
-                <Stat label="نصيب الفرع" value={fmtPct(rc.sharePct)} color={C.purple}/>
+
+              <div style={{background:"rgba(255,255,255,0.03)",borderRadius:"18px",
+                padding:"16px",border:"1px solid rgba(255,255,255,0.06)"}}>
+                <div style={{fontSize:"15px",fontWeight:900,color:"#fff"}}>{branch}</div>
+                <div style={{display:"flex",gap:"18px",marginTop:"14px"}}>
+                  {[["باع الموسم", fmtN(rc.totalLastQty)],
+                    ["نجيب", fmtN(rc.totalSuggest)],
+                    ["نصيبه", fmtPct(rc.sharePct)]].map(([l,v])=>(
+                    <div key={l}>
+                      <div style={{fontSize:"17px",fontWeight:900,color:"#e8edf4"}}>{v}</div>
+                      <div style={{fontSize:"10.5px",color:"#5b6878",marginTop:"1px"}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div style={{fontSize:"12px",fontWeight:900,color:C.green,marginTop:"9px"}}>
-                ✅ نجيب ({fmtN(rc.bring.length)})
-              </div>
-              {rc.bring.map((r,i)=>(
-                <div key={r.barcode} style={{background:"rgba(255,255,255,0.03)",
-                  border:`1px solid ${r.color}28`,borderRadius:"12px",padding:"10px",marginBottom:"6px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-                    <div style={{width:"20px",fontSize:"11px",color:"#475569",
-                      textAlign:"center",fontWeight:700}}>{i+1}</div>
-                    {images?.[r.barcode]
-                      ? <img src={images[r.barcode]} alt="" style={{width:"54px",height:"54px",
-                          borderRadius:"9px",objectFit:"cover",flexShrink:0}}/>
-                      : <div style={{width:"54px",height:"54px",borderRadius:"9px",
-                          background:"rgba(255,255,255,0.06)",display:"flex",alignItems:"center",
-                          justifyContent:"center",fontSize:"22px",flexShrink:0}}>📦</div>}
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"12px",fontWeight:700,color:"#e2e8f0",
-                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-                      <div style={{fontSize:"9px",color:"#94a3b8",marginTop:"2px",
-                        fontFamily:"monospace",direction:"ltr",textAlign:"right"}}>{r.barcode}</div>
-                      <div style={{fontSize:"9px",color:"#64748b",marginTop:"2px",lineHeight:1.6}}>
-                        🏭 {r.fac}{r.facName ? ` · ${r.facName}` : ""}
-                      </div>
-                      <div style={{fontSize:"9px",color:"#64748b",lineHeight:1.6}}>
-                        📦 {r.cont || "—"} · باع {fmtN(r.qty)} · دوران {fmtPct(r.turnPct)}
-                      </div>
-                      <span style={{display:"inline-block",marginTop:"4px",
-                        background:`${r.color}18`,border:`1px solid ${r.color}35`,
-                        borderRadius:"100px",padding:"1px 8px",fontSize:"9px",
-                        fontWeight:900,color:r.color}}>{r.tier} ×{r.grow}</span>
-                    </div>
-                    <div style={{textAlign:"left",flexShrink:0}}>
-                      <div style={{fontSize:"19px",fontWeight:900,color:C.green}}>
-                        {fmtN(r.suggest)}
-                      </div>
-                      <div style={{fontSize:"9px",color: r.delta>=0 ? C.green : C.red,
-                        direction:"ltr",unicodeBidi:"isolate"}}>
-                        {r.delta>0?"+":""}{fmtN(r.delta)}
-                      </div>
-                      <div style={{fontSize:"8px",color:"#475569"}}>
-                        {Math.round(r.suggest/12)} دزينة
-                      </div>
-                    </div>
+              <Head note={`${fmtN(rc.bring.length)} منتج · الأعلى ${fmtN(Math.min(50,rc.bring.length))} هنا، وكلهم في الطباعة`}>نجيب</Head>
+              {rc.bring.slice(0,50).map(r=>(
+                <Row key={r.barcode} r={r} rank={-1} images={images} onImg={setViewImg}
+                  color={C.green}
+                  value={fmtN(r.suggest)}
+                  unit={`${fmtN(Math.round(r.suggest/12))} دزينة`}
+                  sub={`باع ${fmtN(r.qty)} · دوران ${fmtPct(r.turnPct)}`}
+                  badge={
+                    <span style={{display:"inline-block",marginTop:"5px",
+                      background:`${r.color}1c`,borderRadius:"100px",padding:"2px 10px",
+                      fontSize:"10.5px",fontWeight:700,color:r.color}}>
+                      {r.tier} ×{r.grow}
+                    </span>
+                  }>
+                  <div style={{color:"#cbd5e1"}}>{r.why}</div>
+                  <div style={{marginTop:"4px"}}>
+                    الفرق <span style={{color: r.delta>=0 ? C.green : C.red,
+                      direction:"ltr",unicodeBidi:"isolate",fontWeight:700}}>
+                      {r.delta>0?"+":""}{fmtN(r.delta)}</span>
                   </div>
-                </div>
+                </Row>
               ))}
 
               {rc.stop.length > 0 && (
                 <>
-                  <div style={{fontSize:"12px",fontWeight:900,color:C.red,marginTop:"13px"}}>
-                    ⚠️ ضعيف — نقلل أو نوقف ({fmtN(rc.stop.length)})
-                  </div>
-                  {rc.stop.map((r,i)=>(
-                    <div key={r.barcode} style={{background:"rgba(248,113,113,0.05)",
-                      border:"1px solid rgba(248,113,113,0.2)",borderRadius:"11px",
-                      padding:"9px",marginBottom:"5px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                        <div style={{width:"18px",fontSize:"10px",color:"#475569",
-                          textAlign:"center"}}>{i+1}</div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:"11px",fontWeight:700,color:"#cbd5e1",
-                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-                          <div style={{fontSize:"9px",color:"#64748b"}}>
-                            باع {fmtN(r.qty)} فقط · دوران {fmtPct(r.turnPct)}
-                          </div>
-                        </div>
-                        <div style={{fontSize:"13px",fontWeight:900,color:C.red,flexShrink:0}}>
-                          {fmtN(r.suggest)}
-                        </div>
-                      </div>
-                    </div>
+                  <Head note={`${fmtN(rc.stop.length)} منتج · باقية بضاعتها أو ما تتحرك`}>
+                    نقلل أو نوقف
+                  </Head>
+                  {rc.stop.slice(0,30).map(r=>(
+                    <Row key={r.barcode} r={r} rank={-1} images={images} onImg={setViewImg}
+                      color={C.red}
+                      value={fmtN(r.suggest)} unit="نجيب"
+                      sub={`باع ${fmtN(r.qty)} · دوران ${fmtPct(r.turnPct)}`}
+                      badge={
+                        <span style={{display:"inline-block",marginTop:"5px",
+                          background:"rgba(248,113,113,0.14)",borderRadius:"100px",
+                          padding:"2px 10px",fontSize:"10.5px",fontWeight:700,
+                          color:C.red}}>{r.tier}</span>
+                      }>
+                      <div style={{color:"#cbd5e1"}}>{r.why}</div>
+                    </Row>
                   ))}
                 </>
               )}
