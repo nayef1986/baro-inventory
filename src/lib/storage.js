@@ -512,12 +512,45 @@ export async function saveSeasonMeta(meta) {
   return await save(SEASON_META, meta ?? {});
 }
 
+/**
+ * يضغط الفترة قبل الحفظ: {qty, totalPrice} → [qty, totalPrice]
+ * يوفّر ~66% من الحجم. inflatePeriod يفكّها عند القراءة.
+ */
+function deflatePeriod(per) {
+  if (!per?.sales) return per;
+  const sales = {};
+  for (const b in per.sales) {
+    sales[b] = {};
+    for (const bc in per.sales[b]) {
+      const v = per.sales[b][bc];
+      if (Array.isArray(v)) { sales[b][bc] = v; continue; }
+      sales[b][bc] = [num(v?.qty), Math.round(num(v?.totalPrice) * 100) / 100];
+    }
+  }
+  return { ...per, sales, _c: 1 };
+}
+
 export async function loadSeasonPeriods() {
-  const rows = await sbGetByPrefix(SEASON_PREFIX);
-  return rows
-    .map(r => r.value)
-    .filter(Boolean)
-    .map(inflatePeriod);
+  // فحص خفيف أول: مفاتيح وتواريخ التحديث فقط (بايتات قليلة).
+  // لو ما تغيّر شي نستخدم الكاش المحلي — بدون تحميل ميجابايتات كل مرة.
+  const cached     = await idbGet("season_cache");
+  const cachedMeta = await idbGet("season_meta");
+  if (cached && cachedMeta) {
+    const remote = await sbGetPeriodsMeta(SEASON_PREFIX);
+    if (remote && sameMeta(cachedMeta, remote)) return cached;
+  }
+
+  const rows   = await sbGetByPrefix(SEASON_PREFIX);
+  const result = rows.map(r => r.value).filter(Boolean).map(inflatePeriod);
+
+  idbSet("season_cache", result);
+  sbGetPeriodsMeta(SEASON_PREFIX).then(m => { if (m) idbSet("season_meta", m); }).catch(()=>{});
+  return result;
+}
+
+/** يبطّل الكاش بعد أي تعديل عشان القراءة الجاية تجيب الجديد */
+function bustSeasonCache() {
+  idbSet("season_meta", null);
 }
 
 /** يضيف فترة موسم — يمنع رفع نفس الملف مرتين بالبصمة */
@@ -531,7 +564,9 @@ export async function addSeasonPeriod(period) {
   // نفس التسمية = نفس اليوم مرفوع قبل → نستبدله بدل ما نكرره
   const sameLabel = existing.find(p => p.label && p.label === period.label);
   if (sameLabel) {
-    const ok = await sbSet(SEASON_PREFIX + sameLabel.id, { ...period, id: sameLabel.id });
+    const ok = await sbSet(SEASON_PREFIX + sameLabel.id,
+                           deflatePeriod({ ...period, id: sameLabel.id }));
+    if (ok) bustSeasonCache();
     return { ok, ok2: "replaced",
              reason: ok ? `حُدّثت «${period.label}»` : (getLastSbError() || "فشل التحديث") };
   }
@@ -540,18 +575,22 @@ export async function addSeasonPeriod(period) {
     return { ok: false, reason: `«${period.label}» مرفوعة مسبقًا — نفس الأرقام` };
   }
 
-  const ok = await sbSet(SEASON_PREFIX + period.id, period);
+  const ok = await sbSet(SEASON_PREFIX + period.id, deflatePeriod(period));
+  if (ok) bustSeasonCache();
   return { ok, reason: ok ? undefined : (getLastSbError() || "فشل الحفظ") };
 }
 
 export async function deleteSeasonPeriod(periodId) {
   if (!periodId) return { ok: false };
   const ok = await sbDelete(SEASON_PREFIX + periodId);
+  if (ok) bustSeasonCache();
   return { ok };
 }
 
 export async function deleteAllSeasonPeriods() {
   await sbDeleteByPrefix(SEASON_PREFIX);
+  bustSeasonCache();
+  idbSet("season_cache", []);
   return { ok: true };
 }
 
