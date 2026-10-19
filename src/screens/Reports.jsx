@@ -5,6 +5,7 @@
 import { useState, useMemo, memo } from "react";
 import { OperationsRoom } from "./OperationsRoom.jsx";
 import { MonthlyIntelligence } from "./MonthlyIntelligence.jsx";
+import { SeasonReport } from "./SeasonReport.jsx";
 import {
   Card, Btn, StatPill, EmptyState, ExportBar,
   FilterChips, SearchBar, SectionHeader, BackBtn,
@@ -666,6 +667,11 @@ export default function ReportsScreen({ products, periods, settings, images, onS
     );
   }
 
+  if (view === "season") {
+    return <SeasonReport products={products} periods={periods} settings={settings}
+      images={images} onBack={() => setView(null)} />;
+  }
+
   if (view === "reorder") {
     return <ReorderView products={products} periods={periods} onBack={() => setView(null)} />;
   }
@@ -732,6 +738,23 @@ export default function ReportsScreen({ products, periods, settings, images, onS
             <div style={{fontSize:"12px",color:"rgba(99,102,241,0.8)",marginTop:"3px"}}>أفضل المنتجات · كرّره · تجنّبه</div>
           </div>
           <div style={{marginRight:"auto",fontSize:"18px",color:"rgba(99,102,241,0.5)"}}>←</div>
+        </div>
+      </div>
+
+      <div onClick={() => setView("season")} style={{
+        background:"linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.03))",
+        border:"1px solid rgba(16,185,129,0.3)",borderRadius:"18px",padding:"18px",
+        cursor:"pointer",marginBottom:"10px",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+          <span style={{fontSize:"28px"}}>📊</span>
+          <div>
+            <div style={{fontSize:"16px",fontWeight:"900",color:"#ffffff"}}>تقرير الموسم</div>
+            <div style={{fontSize:"12px",color:"rgba(16,185,129,0.85)",marginTop:"3px"}}>
+              الأفضل مبيعًا · الفئات · متى انتعشت · ايش نجيب لكل فرع
+            </div>
+          </div>
+          <div style={{marginRight:"auto",fontSize:"18px",color:"rgba(16,185,129,0.5)"}}>←</div>
         </div>
       </div>
 
