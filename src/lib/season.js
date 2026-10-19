@@ -126,7 +126,10 @@ export function rankProducts(products, periods, settings, branch = null) {
       const c = cellOf(per, p.barcode, branch);
       qty += c.qty; rev += c.rev;
     });
-    if (qty <= 0) return;
+    // نستبعد اللي ما له أي حركة فقط. الصافي السالب (مرتجعات أكثر من مبيعات)
+    // نبقيه عشان مجاميع الفروع تطابق الإجمالي العام — ترتيب "الأفضل مبيعًا"
+    // يحطه في الذيل تلقائيًا.
+    if (qty === 0 && rev === 0) return;
 
     const buy    = buyPriceOf(p);
     const profit = rev - (qty * buy);
@@ -263,6 +266,8 @@ export function timelineFor(periods, barcodes, branch = null) {
 /** هل الفترة الأخيرة في المدة؟ نعتبر النفاد "مبكّرًا" لو بقي وقت معتبر */
 const EARLY_RATIO = 0.8;    // نفد قبل 80% من المدة = مبكّر
 const SOLDOUT_AT  = 0.92;   // باع 92% من الوارد = اعتبره نفد
+// أقل عدد فترات نحكم عنده بـ"توقف البيع" — أقل منها السلسلة قصيرة ويطلع إنذار كاذب
+const MIN_PERIODS_FOR_STALL = 10;
 
 /**
  * يحلل سلوك المنتج عبر الموسم:
@@ -320,13 +325,17 @@ export function productLifecycle(product, periods, branch = null) {
       note += ` ⚠️ باع ${fmtInt(sold)} والمسجّل وارد ${fmtInt(bought)} فقط — راجع المشتريات`;
     }
 
-  } else if (trailingZeros >= Math.max(3, Math.floor(n * 0.3)) && turnPct >= 60) {
+  // "توقف البيع" يحتاج سلسلة طويلة كفاية. مع 5 فترات، 3 أصفار ما تعني شي —
+  // ممكن المنتج يُباع كل كم يوم. نطلب 10 فترات على الأقل قبل ما نحكم.
+  } else if (n >= MIN_PERIODS_FOR_STALL
+             && trailingZeros >= Math.max(3, Math.floor(n * 0.3)) && turnPct >= 60) {
     // وقف البيع فترة طويلة وهو مبيعاته عالية → غالبًا نفد من الفرع
     status = "توقف — غالبًا نفد"; color = "#60a5fa"; severity = 1;
     note = `آخر بيعة «${periods[lastIdx]?.label ?? ""}» وبعدها ${fmtInt(trailingZeros)} فترة صفر، `
          + `وباع ${fmtPctInt(turnPct)} من وارده`;
 
-  } else if (trailingZeros >= Math.max(3, Math.floor(n * 0.3))) {
+  } else if (n >= MIN_PERIODS_FOR_STALL
+             && trailingZeros >= Math.max(3, Math.floor(n * 0.3))) {
     status = "توقف بيعه"; color = "#fb923c"; severity = 3;
     note = `آخر بيعة «${periods[lastIdx]?.label ?? ""}» وبعدها ${fmtInt(trailingZeros)} فترة صفر، `
          + `وباقي عنده ${fmtInt(left)}`;
@@ -618,6 +627,9 @@ export function seasonAnalysis(products, periodsRaw, settings, opts = {}) {
     lastLabel:   periods[periods.length-1]?.label ?? "",
     dateParsed:  periods.some(p => p._dateKey !== null),
     thresholdPct: thr,
+    // فترات قليلة = عينة ضعيفة، بعض الكشوفات تُعطّل
+    shortSeries: periods.length < MIN_PERIODS_FOR_STALL,
+    minPeriodsForStall: MIN_PERIODS_FOR_STALL,
 
     // عام
     rows, cats, timeline: tl, ...pd,
