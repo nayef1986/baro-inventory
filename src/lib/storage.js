@@ -496,6 +496,65 @@ export async function saveTransfers(transfers) {
   return await save(KEYS.TRANSFERS, transfers);
 }
 
+// ─── فترات الموسم (رمضان وغيره) ──────────────────────────────
+// مخزن مستقل تمامًا عن المبيعات العادية: ترفع مبيعات الموسم هنا
+// وتحللها لحالها، وتبقى فتراتك اليومية المعتادة كما هي ما تُمس.
+
+const SEASON_PREFIX = "baro_season_v1_";
+const SEASON_META   = "baro_season_meta_v1";
+
+/** اسم الموسم الحالي + وصفه (مثلاً "رمضان 1447") */
+export async function loadSeasonMeta() {
+  const v = await load(SEASON_META);
+  return (v && typeof v === "object") ? v : { name: "", note: "" };
+}
+export async function saveSeasonMeta(meta) {
+  return await save(SEASON_META, meta ?? {});
+}
+
+export async function loadSeasonPeriods() {
+  const rows = await sbGetByPrefix(SEASON_PREFIX);
+  return rows
+    .map(r => r.value)
+    .filter(Boolean)
+    .map(inflatePeriod);
+}
+
+/** يضيف فترة موسم — يمنع رفع نفس الملف مرتين بالبصمة */
+export async function addSeasonPeriod(period) {
+  if (!period) return { ok: false, reason: "فترة فاضية" };
+  if (period.id == null || period.id === "") {
+    period = { ...period, id: `s_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}` };
+  }
+  const existing = await loadSeasonPeriods();
+
+  // نفس التسمية = نفس اليوم مرفوع قبل → نستبدله بدل ما نكرره
+  const sameLabel = existing.find(p => p.label && p.label === period.label);
+  if (sameLabel) {
+    const ok = await sbSet(SEASON_PREFIX + sameLabel.id, { ...period, id: sameLabel.id });
+    return { ok, ok2: "replaced",
+             reason: ok ? `حُدّثت «${period.label}»` : (getLastSbError() || "فشل التحديث") };
+  }
+
+  if (period.fingerprint && existing.find(p => p.fingerprint === period.fingerprint)) {
+    return { ok: false, reason: `«${period.label}» مرفوعة مسبقًا — نفس الأرقام` };
+  }
+
+  const ok = await sbSet(SEASON_PREFIX + period.id, period);
+  return { ok, reason: ok ? undefined : (getLastSbError() || "فشل الحفظ") };
+}
+
+export async function deleteSeasonPeriod(periodId) {
+  if (!periodId) return { ok: false };
+  const ok = await sbDelete(SEASON_PREFIX + periodId);
+  return { ok };
+}
+
+export async function deleteAllSeasonPeriods() {
+  await sbDeleteByPrefix(SEASON_PREFIX);
+  return { ok: true };
+}
+
 // ─── منتجات التكرار (مشتركة بين كل الأجهزة) ──────────────────
 const REPEAT_BASKET_KEY = "baro_repeat_basket_v1";
 
