@@ -3,9 +3,14 @@
 // عام · الفروع · الزمن · القرار
 // ============================================================
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { SectionHeader, BackBtn, fmtN, fmtM, fmtPct } from "../components/UI.jsx";
 import { seasonAnalysis, timelineFor } from "../lib/season.js";
+import { parseSalesFile } from "../lib/parsers.js";
+import {
+  loadSeasonPeriods, addSeasonPeriod, deleteSeasonPeriod,
+  deleteAllSeasonPeriods, loadSeasonMeta, saveSeasonMeta,
+} from "../lib/storage.js";
 
 const C = {
   gold:"#d4a853", green:"#10b981", sky:"#38bdf8",
@@ -389,7 +394,7 @@ img.th{width:46px;height:46px;object-fit:cover;border-radius:5px;
   <button class="b2" onclick="window.close()">إغلاق</button>
 </div>
 <div class="wrap">
-  <h1>📊 تقرير الموسم</h1>
+  <h1>📊 ${esc(settings?.__seasonName?.trim() || "تقرير الموسم")}</h1>
   <div class="meta">${esc(brand)} · ${esc(A.firstLabel)} ← ${esc(A.lastLabel)} ·
     ${fmtN(A.periodCount)} فترة · طُبع ${esc(today)}</div>
   ${body}
@@ -409,7 +414,7 @@ function printSeason(A, settings, images = {}) {
 }
 
 // ════════════════════════════════════════════════════════════
-export function SeasonReport({ products = [], periods = [], settings = {},
+export function SeasonReport({ products = [], settings = {},
   images = {}, onBack }) {
 
   const [tab,     setTab]     = useState("overall");
@@ -418,6 +423,80 @@ export function SeasonReport({ products = [], periods = [], settings = {},
   const [pickCat, setPickCat] = useState(null);      // فئة نتبع زمنها
   const [pickPr,  setPickPr]  = useState(null);      // منتج نتبع زمنه
   const [thr,     setThr]     = useState(20);        // حساسية الانتعاش/الهبوط %
+
+  // ── فترات الموسم: مخزن مستقل، ما يمس مبيعاتك العادية ──
+  const [periods,  setPeriods]  = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [uploading,setUploading]= useState(false);
+  const [log,      setLog]      = useState([]);
+  const [meta,     setMeta]     = useState({ name:"", note:"" });
+  const [showMgr,  setShowMgr]  = useState(false);   // شاشة إدارة الملفات
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ps, m] = await Promise.all([loadSeasonPeriods(), loadSeasonMeta()]);
+      setPeriods(ps ?? []);
+      setMeta(m ?? { name:"", note:"" });
+    } catch { setPeriods([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(()=>{ refresh(); }, [refresh]);
+
+  // ── رفع ملف ──
+  const handleFile = useCallback(async (file) => {
+    if (!file) return;
+    setUploading(true);
+    setLog([{type:"info", text:`📖 أقرأ «${file.name}»…`}]);
+    try {
+      const buffer = await file.arrayBuffer();
+      const { periods: parsed, errors, warnings } = parseSalesFile(buffer, "");
+
+      if (errors?.length) {
+        setLog(errors.map(e=>({type:"error", text:e})));
+        setUploading(false);
+        return;
+      }
+      if (!parsed?.length) {
+        setLog([{type:"error", text:"ما قدرت أقرأ الملف — تأكد إنه تقرير نقطة البيع"}]);
+        setUploading(false);
+        return;
+      }
+
+      const out = [
+        {type:"success", text:`✅ لقيت ${parsed.length} ${parsed.length===1?"فترة":"فترة"} في الملف`},
+        ...(warnings ?? []).slice(0,2).map(w=>({type:"warning", text:w})),
+      ];
+      setLog([...out]);
+
+      let saved = 0, replaced = 0, skipped = 0;
+      for (const p of parsed) {
+        const r = await addSeasonPeriod(p);
+        if (r.ok && r.ok2 === "replaced") { replaced++; out.push({type:"info",    text:`🔄 ${r.reason}`}); }
+        else if (r.ok)                    { saved++;    out.push({type:"success", text:`💾 ${p.label}`}); }
+        else                              { skipped++;  out.push({type:"warning", text:`⏭️ ${r.reason}`}); }
+        setLog([...out]);
+      }
+      out.push({type:"success",
+        text:`تم — جديد ${saved} · محدّث ${replaced}${skipped?` · متخطّى ${skipped}`:""}`});
+      setLog([...out]);
+      await refresh();
+    } catch (e) {
+      setLog([{type:"error", text:`خطأ: ${e?.message ?? e}`}]);
+    } finally { setUploading(false); }
+  }, [refresh]);
+
+  const removeOne = async (p) => {
+    if (!confirm(`تحذف «${p.label}»؟`)) return;
+    await deleteSeasonPeriod(p.id);
+    await refresh();
+  };
+  const removeAll = async () => {
+    if (!confirm(`تحذف كل فترات الموسم (${periods.length})؟\nمبيعاتك العادية ما تتأثر.`)) return;
+    await deleteAllSeasonPeriods();
+    await refresh();
+  };
 
   const A = useMemo(
     () => seasonAnalysis(products, periods, settings, { thresholdPct: thr }),
@@ -431,15 +510,129 @@ export function SeasonReport({ products = [], periods = [], settings = {},
     return null;
   }, [pickPr, pickCat, A.periods, branch]);
 
+  // ── لوحة الرفع والإدارة (تظهر فاضية أو عند الضغط على "الملفات") ──
+  const uploadPanel = (
+    <div className="space-y-3">
+      <div style={{background:"rgba(16,185,129,0.07)",border:"1px solid rgba(16,185,129,0.25)",
+        borderRadius:"16px",padding:"14px"}}>
+        <div style={{fontSize:"14px",fontWeight:900,color:"#fff",marginBottom:"4px"}}>
+          📤 ارفع مبيعات الموسم
+        </div>
+        <div style={{fontSize:"11px",color:"#94a3b8",lineHeight:1.8,marginBottom:"11px"}}>
+          مخزن مستقل — <b style={{color:C.green}}>مبيعاتك العادية ما تتأثر أبدًا</b>.
+          ارفع ملف تقرير نقطة البيع كما هو؛ لو فيه أيام متعددة ينفصلون تلقائيًا
+          كل يوم بتاريخه.
+        </div>
+
+        <input value={meta.name ?? ""}
+          onChange={e=>{ const m={...meta,name:e.target.value}; setMeta(m); }}
+          onBlur={()=>saveSeasonMeta(meta)}
+          placeholder="اسم الموسم — مثلاً: رمضان 1447"
+          style={{width:"100%",background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.12)",
+            color:"#f1f5f9",borderRadius:"11px",padding:"9px 12px",fontSize:"13px",
+            fontFamily:"Cairo,sans-serif",marginBottom:"10px",outline:"none"}}/>
+
+        <label style={{display:"block",cursor: uploading?"wait":"pointer",
+          background: uploading ? "#334155" : "linear-gradient(135deg,#059669,#047857)",
+          color:"#fff",borderRadius:"13px",padding:"14px",textAlign:"center",
+          fontWeight:900,fontSize:"13px"}}>
+          {uploading ? "⏳ جاري الرفع…" : "📂 اختر ملف المبيعات"}
+          <input type="file" accept=".xlsx,.xls" disabled={uploading}
+            style={{display:"none"}}
+            onChange={e=>{ const f=e.target.files?.[0]; e.target.value=""; handleFile(f); }}/>
+        </label>
+
+        {log.length > 0 && (
+          <div style={{marginTop:"11px",maxHeight:"230px",overflowY:"auto"}}>
+            {log.map((l,i)=>(
+              <div key={i} style={{fontSize:"11px",padding:"5px 9px",borderRadius:"8px",
+                marginBottom:"3px",lineHeight:1.6,
+                background: l.type==="success" ? "rgba(16,185,129,0.12)"
+                          : l.type==="error"   ? "rgba(248,113,113,0.12)"
+                          : l.type==="warning" ? "rgba(245,158,11,0.12)"
+                          :                      "rgba(56,189,248,0.1)",
+                color:     l.type==="success" ? "#6ee7b7"
+                          : l.type==="error"   ? "#fca5a5"
+                          : l.type==="warning" ? "#fcd34d"
+                          :                      "#7dd3fc"}}>
+                {l.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {periods.length > 0 && (
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+            marginBottom:"9px"}}>
+            <div style={{fontSize:"13px",fontWeight:900,color:"#e2e8f0"}}>
+              📅 الفترات المرفوعة ({fmtN(periods.length)})
+            </div>
+            <button onClick={removeAll}
+              style={{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",
+                borderRadius:"9px",padding:"5px 11px",color:C.red,fontSize:"11px",
+                fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+              🗑️ احذف الكل
+            </button>
+          </div>
+          {[...A.periods].map(p=>{
+            const q = Object.values(p.sales??{}).reduce((s,d)=>
+              s + Object.values(d).reduce((ss,v)=>ss+(Number(v?.qty)||0),0), 0);
+            const nb = Object.keys(p.sales??{}).length;
+            return (
+              <div key={p.id} style={{background:"rgba(255,255,255,0.03)",
+                border:"1px solid rgba(255,255,255,0.07)",borderRadius:"12px",
+                padding:"11px",marginBottom:"6px",display:"flex",
+                alignItems:"center",gap:"10px"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:"13px",fontWeight:700,color:"#e2e8f0"}}>{p.label}</div>
+                  <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>
+                    {fmtN(nb)} فرع · {fmtN(q)} قطعة
+                  </div>
+                </div>
+                <button onClick={()=>removeOne(p)}
+                  style={{background:"rgba(248,113,113,0.1)",border:"none",borderRadius:"8px",
+                    padding:"7px 10px",color:C.red,fontSize:"13px",cursor:"pointer",
+                    flexShrink:0}}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <BackBtn onClick={onBack} label="رجوع للتقارير" />
+        <SectionHeader icon="📊" title="تقرير الموسم" />
+        <div style={{textAlign:"center",padding:"60px",color:"#64748b"}}>⏳ أحمّل…</div>
+      </div>
+    );
+  }
+
   if (!periods.length) {
     return (
       <div className="space-y-3">
         <BackBtn onClick={onBack} label="رجوع للتقارير" />
         <SectionHeader icon="📊" title="تقرير الموسم" />
-        <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b",lineHeight:2}}>
-          ما فيه مبيعات مرفوعة.<br/>
-          <span style={{fontSize:"12px"}}>ارفع مبيعات الموسم من تبويب المبيعات، ثم ارجع هنا.</span>
-        </div>
+        {uploadPanel}
+      </div>
+    );
+  }
+
+  if (showMgr) {
+    return (
+      <div className="space-y-3">
+        <button onClick={()=>setShowMgr(false)}
+          style={{background:"none",border:"none",color:C.sky,fontWeight:700,
+            fontSize:"13px",cursor:"pointer",fontFamily:"Cairo,sans-serif",padding:0}}>
+          ← رجوع للتقرير
+        </button>
+        <SectionHeader icon="📂" title="ملفات الموسم" />
+        {uploadPanel}
       </div>
     );
   }
@@ -464,18 +657,30 @@ export function SeasonReport({ products = [], periods = [], settings = {},
         border:"1px solid rgba(212,168,83,0.3)",borderRadius:"16px",padding:"14px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px"}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:"17px",fontWeight:900,color:"#fff"}}>📊 تقرير الموسم</div>
+            <div style={{fontSize:"17px",fontWeight:900,color:"#fff"}}>
+              📊 {meta.name?.trim() || "تقرير الموسم"}
+            </div>
             <div style={{fontSize:"11px",color:"rgba(212,168,83,0.75)",marginTop:"3px"}}>
               {A.firstLabel} ← {A.lastLabel} · {fmtN(A.periodCount)} فترة
             </div>
           </div>
-          <button onClick={()=>{ const r = printSeason(A, settings, images);
-              if (!r.ok) alert(r.error); }}
-            style={{background:C.gold,color:"#000",border:"none",borderRadius:"11px",
-              padding:"9px 15px",fontWeight:900,fontSize:"12px",cursor:"pointer",
-              fontFamily:"Cairo,sans-serif",flexShrink:0}}>
-            🖨️ طباعة الكل
-          </button>
+          <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+            <button onClick={()=>setShowMgr(true)}
+              title="ارفع أيامًا أخرى أو احذف"
+              style={{background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.35)",
+                color:C.green,borderRadius:"11px",padding:"9px 12px",fontWeight:900,
+                fontSize:"12px",cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+              📂 ملفات
+            </button>
+            <button onClick={()=>{
+                const r = printSeason(A, {...settings, __seasonName: meta.name}, images);
+                if (!r.ok) alert(r.error); }}
+              style={{background:C.gold,color:"#000",border:"none",borderRadius:"11px",
+                padding:"9px 13px",fontWeight:900,fontSize:"12px",cursor:"pointer",
+                fontFamily:"Cairo,sans-serif"}}>
+              🖨️ طباعة
+            </button>
+          </div>
         </div>
         {!A.dateParsed && (
           <div style={{marginTop:"9px",background:"rgba(248,113,113,0.1)",
@@ -887,6 +1092,18 @@ export function SeasonReport({ products = [], periods = [], settings = {},
             <Stat label="فلوس واقفة" value={fmtM(A.tiedValue)} color={C.red}
               sub={`${fmtN(A.deadCount)} منتج ما تحرك`}/>
           </div>
+
+          {A.shortSeries && (
+            <div style={{background:"rgba(148,163,184,0.09)",border:"1px solid rgba(148,163,184,0.28)",
+              borderRadius:"13px",padding:"12px",fontSize:"11px",color:"#cbd5e1",lineHeight:1.8}}>
+              ℹ️ عندك <b>{fmtN(A.periodCount)} فترة</b> فقط.
+              كشف «توقف بيعه» معطّل لأنه يحتاج {fmtN(A.minPeriodsForStall)} فترة على الأقل —
+              مع فترات قليلة، منتج ما باع كم يوم ما يعني إنه وقف.
+              <div style={{marginTop:"5px",color:"#94a3b8",fontSize:"10px"}}>
+                ارفع بقية أيام الموسم ويشتغل تلقائيًا.
+              </div>
+            </div>
+          )}
 
           {A.overSold.length > 0 && (
             <div style={{background:"rgba(245,158,11,0.09)",border:"1px solid rgba(245,158,11,0.3)",
