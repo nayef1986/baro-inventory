@@ -29,8 +29,14 @@
   --color-warn: #8a5f36;
   --color-warn-soft: #f2e7d8;
 
-  /* الشعار صار رسماً متجهاً في Wordmark.tsx، فلا حاجة لخط لاتيني. */
-  --font-display: "Cairo", system-ui, sans-serif;
+  /* الشعار صار رسماً متجهاً في Wordmark.tsx، فلا حاجة لخط لاتيني.
+
+     العناوين بخطّ مستدير لا بـCairo: ‏Cairo خطّ الواجهات
+     الافتراضي في كل مكان فلا شخصية فيه، وهذا محلّ حلويات لا
+     مكتب محاسبة. و‏Baloo انحناءاته لدنة ودافئة وتُقرأ في الحجم
+     الصغير — جرّبتُ قبله كوفيّاً هندسيّاً فالتصقت نقاطه وصارت
+     «ربح» تُقرأ «رىح». الأرقام تبقى بـCairo. */
+  --font-display: "Baloo Bhaijaan 2", "Cairo", system-ui, sans-serif;
   --font-sans: "Cairo", "SF Arabic", "Segoe UI", system-ui, sans-serif;
 }
 
@@ -51,7 +57,19 @@ body {
 
 .display {
   font-family: var(--font-display);
-  font-weight: 900;
+  font-weight: 700;
+}
+
+/* حافة القالب: شريط عسليّ أعلى البطاقة، أسفله مضلَّع كحافة
+   التارت. ولونه لون القشرة لا الشوكولاتة عمداً — الأسود يبقى
+   للرقم وحده، فلا ينازعه شيء على العين. */
+.tart-rim {
+  height: 11px;
+  background-color: var(--color-honey);
+  -webkit-mask: radial-gradient(circle at 9px 11px, transparent 7.4px, #000 7.8px) repeat-x;
+  mask: radial-gradient(circle at 9px 11px, transparent 7.4px, #000 7.8px) repeat-x;
+  -webkit-mask-size: 18px 11px;
+  mask-size: 18px 11px;
 }
 
 input[type="number"]::-webkit-inner-spin-button,

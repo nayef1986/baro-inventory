@@ -17,12 +17,12 @@ import {
   PageHeader,
   Pill,
   ProgressBar,
-  StatTile,
   Table,
   Td,
   TextInput,
   Th,
 } from '../components/UI.tsx'
+import { ProfitHero } from '../components/ProfitHero.tsx'
 import { saveSettings } from '../lib/api.ts'
 import {
   goalFor,
@@ -35,7 +35,7 @@ import {
 import { buildCoach, type InsightTone } from '../lib/coach.ts'
 import { changePercent } from '../lib/cost.ts'
 import { productRows } from '../lib/derive.ts'
-import { arabicDate, money, percent, signedPercent, todayISO } from '../lib/format.ts'
+import { arabicDate, money, percent, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
 
 const PERIOD_TABS: { key: PeriodKey; label: string }[] = [
@@ -45,10 +45,25 @@ const PERIOD_TABS: { key: PeriodKey; label: string }[] = [
   { key: 'custom', label: 'فترة مخصصة' },
 ]
 
+/** الفترة مكتوبة في العنوان لا مفهومة من السياق */
+const PERIOD_NOUN: Record<PeriodKey, string> = {
+  today: 'اليوم',
+  week: 'هذا الأسبوع',
+  month: 'هذا الشهر',
+  custom: 'الفترة المختارة',
+}
+
 const INSIGHT_DOT: Record<InsightTone, string> = {
   good: 'bg-good',
   warn: 'bg-bad',
   info: 'bg-warn',
+}
+
+/** «التارت» · «التارت والتيراميسو» · «التارت و٣ وصفات أخرى» */
+function listNames(names: string[]): string {
+  if (names.length === 1) return `«${names[0]}»`
+  if (names.length === 2) return `«${names[0]}» و«${names[1]}»`
+  return `«${names[0]}» و${names.length - 1} وصفات أخرى`
 }
 
 export default function DashboardScreen({ data, reload, onError, goTo }: ScreenProps) {
@@ -67,10 +82,42 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
   )
 
   const products = useMemo(() => productRows(data), [data])
-  const salesChange = changePercent(totals.sales, previous.sales)
   const profitChange = changePercent(totals.profit, previous.profit)
-  const marginDelta = totals.marginPercent - previous.marginPercent
-  const wasteShare = totals.totalCost > 0 ? (totals.wasteValue / totals.totalCost) * 100 : 0
+
+  /**
+   * ما ينقص الحساب ليصحّ.
+   *
+   * وصفةٌ بلا مكوّنات تكلفتها صفر، فيخرج الربح أكبر مما هو — ولا
+   * شيء في الشاشة يقول ذلك. الصمت هنا أسوأ من رقم خاطئ معلوم،
+   * فنسمّي الناقص ونفتح البابَ إليه.
+   */
+  const gap = useMemo(() => {
+    if (data.recipes.length === 0) {
+      return {
+        text: 'ما عندك وصفات بعد، والتكلفة تُحسب من مكوّنات الوصفة. أنشئ وصفة لتعرف ربح كل قطعة.',
+        cta: 'افتح الوصفات',
+      }
+    }
+
+    const empty = data.recipes.filter(
+      (recipe) => !data.recipeItems.some((item) => item.recipe_id === recipe.id),
+    )
+    if (empty.length > 0) {
+      return {
+        text: `${listNames(empty.map((r) => r.name))} بلا مكوّنات، فتكلفتها تُحسب صفراً والربح أعلاه أكبر من الحقيقة. أضف مكوّناتها.`,
+        cta: 'افتح الوصفات',
+      }
+    }
+
+    const unpriced = products.filter((row) => row.incompleteCount > 0)
+    if (unpriced.length > 0) {
+      return {
+        text: `${listNames(unpriced.map((r) => r.recipe.name))} فيها مكوّنات بلا سعر شراء، فتكلفتها ناقصة. سجّل شراءها لتكتمل.`,
+        cta: 'افتح المشتريات',
+      }
+    }
+    return null
+  }, [data.recipes, data.recipeItems, products])
 
   return (
     <>
@@ -116,99 +163,61 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
         </Card>
       ) : null}
 
-      {/* ── رسالتك اليوم ─────────────────────────────────── */}
-      <section className="bg-bark rounded-2xl p-6 sm:p-7 text-[#ede3d7] flex flex-col lg:flex-row gap-7">
-        <div className="flex-1 min-w-0 flex flex-col gap-3">
-          <div className="flex items-center gap-2.5 text-[11.5px] text-[#c9a177]">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-              <path d="M12 3v2" /><path d="M12 19v2" /><path d="M5 12H3" /><path d="M21 12h-2" />
-              <circle cx="12" cy="12" r="4.5" />
-            </svg>
-            <span>رسالتك اليوم</span>
-          </div>
-
-          <h2 className="display m-0 text-[24px] sm:text-[27px] font-bold leading-snug">{coach.card.head}</h2>
-          <p className="m-0 text-[15.5px] leading-loose text-[#ded0c0] max-w-[560px]">{coach.card.body}</p>
-          {coach.card.action ? (
-            <p className="m-0 text-[13.5px] leading-loose text-[#b8a493] border-r-2 border-[#5c4437] pr-3 max-w-[560px]">
-              {coach.card.action}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="w-full lg:w-[302px] shrink-0 bg-bark-2 rounded-2xl p-5">
-          {coach.progress ? (
-            <div className="flex flex-col gap-2.5">
-              <div className="text-[12.5px] text-[#b8a493]">{coach.progress.label}</div>
-              <div className="text-[28px] font-bold num leading-none">
-                {money(coach.progress.goal)} <span className="text-[14px] font-medium text-[#b8a493]">ر.س</span>
-              </div>
-              <ProgressBar percent={coach.progress.percent} className="mt-1 !bg-[#4a362b]" />
-              <div className="flex justify-between text-[12.5px] text-[#b8a493] num">
-                <span>المحقق {money(coach.progress.achieved)}</span>
-                <span>{percent(coach.progress.percent, 1)}</span>
-              </div>
-              <p className="m-0 mt-1.5 bg-bark-3 rounded-lg px-3.5 py-2.5 text-[13.5px] leading-relaxed text-[#ede3d7]">
-                {coach.progress.message}
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              <div className="text-[12.5px] text-[#b8a493]">
-                {periodKey === 'custom' ? 'الفترة المخصصة' : 'بدون هدف'}
-              </div>
-              <p className="m-0 text-[14.5px] leading-loose text-[#ded0c0]">
-                {periodKey === 'custom'
-                  ? 'لا يوجد هدف مرتبط بفترة مخصصة. اختر الأسبوع أو الشهر لمتابعة التقدم.'
-                  : periodKey === 'today'
-                    ? 'الأهداف محدّدة أسبوعياً وشهرياً. اختر «هذا الأسبوع» لمتابعة تقدمك.'
-                    : 'لم تُحدَّد أهداف بعد.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowGoals(true)}
-                className="self-start text-[13.5px] text-[#c9a177] bg-transparent border-0 border-b border-[#5c4437] pb-0.5 cursor-pointer"
+      <ProfitHero
+        period={PERIOD_NOUN[periodKey]}
+        totals={totals}
+        profitChange={profitChange}
+        gap={
+          gap ? (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+              <p className="m-0 flex-1 text-[13.5px] leading-loose text-soft">{gap.text}</p>
+              <Button
+                variant="secondary"
+                className="self-start shrink-0"
+                onClick={() => goTo(gap.cta === 'افتح المشتريات' ? 'suppliers' : 'recipes')}
               >
-                تعديل الأهداف
-              </button>
+                {gap.cta}
+              </Button>
             </div>
-          )}
-        </div>
-      </section>
+          ) : null
+        }
+      />
 
-      {/* ── الأرقام ──────────────────────────────────────── */}
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <StatTile
-          label="إجمالي المبيعات"
-          value={money(totals.sales)}
-          note={
-            salesChange !== null
-              ? `${signedPercent(salesChange)} عن الفترة السابقة`
-              : `${totals.invoiceCount} فاتورة · بدون الضريبة`
-          }
-        />
-        <StatTile
-          label="تكلفة المبيعات"
-          value={money(totals.cogs)}
-          note={`تكلفة الإنتاج في الفترة ${money(totals.productionCost)}`}
-        />
-        <StatTile
-          label="إجمالي الهدر"
-          value={money(totals.wasteValue)}
-          note={totals.totalCost > 0 ? `${percent(wasteShare)} من إجمالي التكلفة` : undefined}
-          tone="bad"
-        />
-        <StatTile
-          label="إجمالي الربح"
-          value={money(totals.profit)}
-          note={profitChange !== null ? `${signedPercent(profitChange)} عن الفترة السابقة` : undefined}
-          tone={totals.profit >= 0 ? 'good' : 'bad'}
-        />
-        <StatTile
-          label="متوسط هامش الربح"
-          value={percent(totals.marginPercent)}
-          note={previous.batchCount > 0 ? `${signedPercent(marginDelta)} نقطة` : undefined}
-        />
+      {/* ── ما يقوله الرقم ───────────────────────────────── */}
+      <section className="border-s-[3px] border-s-honey ps-5">
+        <h2 className="display m-0 text-[19px] sm:text-[21px] leading-snug">{coach.card.head}</h2>
+        <p className="m-0 mt-2.5 text-[14.5px] leading-loose text-soft max-w-[58ch]">
+          {coach.card.body}
+        </p>
+        {coach.card.action ? (
+          <p className="m-0 mt-2 text-[13.5px] leading-loose text-muted max-w-[58ch]">
+            {coach.card.action}
+          </p>
+        ) : null}
+
+        {coach.progress ? (
+          <div className="mt-5 max-w-[420px]">
+            <div className="flex items-baseline justify-between gap-3 text-[12.5px] text-muted">
+              <span>{coach.progress.label}</span>
+              <span className="num">{percent(coach.progress.percent, 1)}</span>
+            </div>
+            <ProgressBar percent={coach.progress.percent} className="mt-2" />
+            <div className="mt-2 num text-[12.5px] text-muted">
+              {money(coach.progress.achieved)} من {money(coach.progress.goal)} ر.س
+            </div>
+            <p className="m-0 mt-2.5 text-[13px] leading-relaxed text-soft">
+              {coach.progress.message}
+            </p>
+          </div>
+        ) : periodKey === 'week' || periodKey === 'month' ? (
+          <button
+            type="button"
+            onClick={() => setShowGoals(true)}
+            className="mt-4 text-[13.5px] text-accent bg-transparent border-0 border-b border-line p-0 pb-0.5 cursor-pointer"
+          >
+            حدّد هدفاً لتتابع تقدّمك
+          </button>
+        ) : null}
       </section>
 
       {/* ── المنتجات + المساعد ───────────────────────────── */}
@@ -217,7 +226,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           <div className="px-5 pt-4 pb-3">
             <CardTitle
               title="أداء المنتجات"
-              subtitle="لكل وحدة بيع · بالأسعار الحالية · مرتّبة حسب الهامش"
+              subtitle="ربح القطعة الواحدة بأسعار اليوم، من الأعلى هامشاً إلى الأقل"
               action={
                 <Button variant="ghost" className="!px-2 !text-[13px]" onClick={() => goTo('recipes')}>
                   فتح الوصفات
@@ -227,7 +236,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           </div>
 
           {products.length === 0 ? (
-            <EmptyState title="لا توجد منتجات" hint="أنشئ وصفة لتظهر ربحيتها هنا." />
+            <EmptyState title="ما في منتجات بعد" hint="أنشئ وصفة وأضف مكوّناتها، ويظهر ربح كل قطعة هنا." />
           ) : (
             <Table>
               <thead>
@@ -292,7 +301,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           <Card>
             <CardTitle title="الإنجازات" />
             {coach.milestones.length === 0 ? (
-              <EmptyState title="لا توجد إنجازات بعد" hint="سجّل إنتاجك وستظهر إنجازاتك هنا تلقائياً." />
+              <EmptyState title="ما في إنجازات بعد" hint="سجّل أول دفعة إنتاج ويبدأ العدّ." />
             ) : (
               <div className="flex flex-col gap-2.5">
                 {coach.milestones.map((m, index) => (
@@ -322,7 +331,7 @@ export default function DashboardScreen({ data, reload, onError, goTo }: ScreenP
           <Card>
             <CardTitle title="ملاحظات ذكية" />
             {coach.insights.length === 0 ? (
-              <EmptyState title="لا توجد ملاحظات" hint="الملاحظات تظهر عندما تتوفّر بيانات كافية للمقارنة." />
+              <EmptyState title="ما في ملاحظات بعد" hint="الملاحظات تحتاج فترتين لتقارن بينهما. سجّل شهراً كاملاً." />
             ) : (
               <ul className="list-none m-0 p-0 flex flex-col gap-3">
                 {coach.insights.map((insight, index) => (
