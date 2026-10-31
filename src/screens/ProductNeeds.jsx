@@ -6,6 +6,7 @@ import {
   getBranchRemaining, getCategoryCode, getCategoryName,
 } from "../lib/calc.js";
 import { loadBranchCounts, loadTransfers, loadRepeatBasket, syncRepeatBasket } from "../lib/storage.js";
+import { exportSearchResults, exportRepeatList } from "../lib/exporters.js";
 import OfferBuilder from "./OfferBuilder.jsx";
 
 // مفتاح حفظ منتجات التكرار في الجهاز
@@ -1846,10 +1847,19 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
               </div>
             </div>
 
-            <button onClick={()=>printRepeatReport(items, images, settings, settings?.brandName ?? "ALBAROO")}
-              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white py-3.5 rounded-xl font-black text-base">
-              🖨️ اطبع تقرير التكرار ({items.length})
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={()=>{
+                  const r = exportRepeatList(items, settings, settings?.brandName ?? "");
+                  if (!r.ok) alert(r.error);
+                }}
+                className="bg-gradient-to-r from-green-700 to-green-800 text-white py-3.5 rounded-xl font-black text-base">
+                📊 إكسل ({items.length})
+              </button>
+              <button onClick={()=>printRepeatReport(items, images, settings, settings?.brandName ?? "ALBAROO")}
+                className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white py-3.5 rounded-xl font-black text-base">
+                🖨️ طباعة
+              </button>
+            </div>
 
             <div className="space-y-2">
               {items.map(x => {
@@ -1945,8 +1955,22 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
             {searchSort==="best" && <span className="text-emerald-400 font-bold"> · مرتّبة بالأفضل</span>}
             {searchSort==="worst" && <span className="text-red-400 font-bold"> · مرتّبة بالأسوأ</span>}
           </div>
-          {results.length > 0 && <button onClick={()=>printSearchResults(results, calcItem, images, settings, searchQuery)}
-            className="bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black">🖨️ طباعة النتائج</button>}
+          {results.length > 0 && (
+            <div className="flex gap-1.5 shrink-0">
+              <button onClick={()=>{
+                  const r = exportSearchResults(results.map(calcItem), settings,
+                    searchQuery, settings?.brandName ?? "");
+                  if (!r.ok) alert(r.error);
+                }}
+                className="bg-green-800 text-white px-3 py-1.5 rounded-lg text-xs font-black">
+                📊 إكسل
+              </button>
+              <button onClick={()=>printSearchResults(results, calcItem, images, settings, searchQuery)}
+                className="bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black">
+                🖨️ طباعة
+              </button>
+            </div>
+          )}
         </div>}
 
         {/* حدّد كل النتائج دفعة وحدة — مفيد لو بحثت بمصنع كامل */}
