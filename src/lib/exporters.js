@@ -24,15 +24,28 @@ const todayHijri = () => {
 const todayBoth = () => {
   const m = new Date().toLocaleDateString("ar-SA", { calendar:"gregory", year:"numeric", month:"2-digit", day:"2-digit" });
   const h = todayHijri();
-  return h ? `${m} م  |  ${h} هـ` : m;
+  // المتصفح يضيف "هـ" في آخر التاريخ الهجري أصلاً — لا نكررها
+  return h ? `${m} م  |  ${/هـ\s*$/.test(h) ? h : h + " هـ"}` : m;
 };
 
 const todayLabel = () =>
   new Date().toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
 
 function safeFilename(name) {
-  return String(name ?? "تقرير").replace(/[/\\:*?"<>|]/g, "_").trim() || "تقرير";
+  return String(name ?? "تقرير")
+    // رموز اتجاه النص غير مرئية لكنها تكسر أسماء الملفات على بعض الأنظمة
+    .replace(/[‎‏‪-‮⁦-⁩]/g, "")
+    .replace(/[/\\:*?"<>|]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim() || "تقرير";
 }
+
+/** تاريخ لاسم الملف: أرقام إنجليزية، YYYY-MM-DD */
+const fileDate = () => {
+  const d = new Date();
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+};
 
 function escHtml(str) {
   return String(str ?? "")
@@ -140,6 +153,79 @@ export function exportFactoryReport(report, factoryName = "", threshold = null) 
     headers, rows,
     `مصنع_${report.factoryCode}`
   );
+}
+
+/**
+ * نتائج البحث في احتياج المنتجات → إكسل.
+ * items = [{ p, bought, sold, closing, soldPct }]
+ */
+export function exportSearchResults(items, settings, query = "", brandName = "") {
+  const headers = ["#","الباركود","اسم المنتج","المصنع","اسم المصنع",
+                   "الكونتينر","السنة","جاء","باع","المتبقي","نسبة البيع %",
+                   "سعر الشراء","سعر البيع"];
+
+  const rows = (items ?? []).map((x, i) => {
+    const p   = x.p ?? x;
+    const bc  = String(p.barcode ?? "");
+    const fac = bc.slice(0, 5);
+    const cont = p.container ?? "";
+    const yr  = (String(cont).match(/(\d{2})$/) || [])[1] ?? "";
+    const buy = num(p.purchases?.slice(-1)[0]?.buyPrice);
+    return [
+      i + 1, bc, p.name ?? "",
+      fac, settings?.factories?.[fac] ?? "",
+      cont, yr,
+      Math.round(num(x.bought)),
+      Math.round(num(x.sold)),
+      Math.round(num(x.closing)),
+      Math.round(num(x.soldPct)),
+      buy, num(p.sellPrice),
+    ];
+  });
+
+  // صف الإجمالي
+  if (rows.length) {
+    rows.push([]);
+    rows.push(["", "الإجمالي", `${rows.length - 1} منتج`, "", "", "", "",
+      rows.reduce((s,r)=>s+(num(r[7])||0),0),
+      rows.reduce((s,r)=>s+(num(r[8])||0),0),
+      rows.reduce((s,r)=>s+(num(r[9])||0),0),
+      "", "", ""]);
+  }
+
+  const sub = `${brandName ? brandName + " · " : ""}${query ? `بحث: ${query} · ` : ""}${todayBoth()}`;
+  return exportExcel("نتائج البحث — احتياج المنتجات", sub, headers, rows,
+    `بحث_${query || "الكل"}_${fileDate()}`);
+}
+
+/**
+ * منتجات التكرار المحددة → إكسل. بالمتبقي فقط، زي تقرير الطباعة.
+ */
+export function exportRepeatList(items, settings, brandName = "") {
+  const headers = ["#","الباركود","اسم المنتج","المصنع","اسم المصنع",
+                   "الكونتينر","المتبقي"];
+
+  const rows = (items ?? []).map((x, i) => {
+    const p   = x.p ?? x;
+    const bc  = String(p.barcode ?? "");
+    const fac = bc.slice(0, 5);
+    return [
+      i + 1, bc, p.name ?? "",
+      fac, settings?.factories?.[fac] ?? "",
+      p.container ?? "",
+      Math.round(num(x.closing)),
+    ];
+  });
+
+  if (rows.length) {
+    const total = rows.reduce((s,r)=>s+num(r[6]), 0);
+    rows.push([]);
+    rows.push(["", "الإجمالي", `${rows.length - 1} منتج`, "", "", "", total]);
+  }
+
+  const sub = `${brandName ? brandName + " · " : ""}${todayBoth()}`;
+  return exportExcel("تقرير التكرار", sub, headers, rows,
+    `التكرار_${fileDate()}`);
 }
 
 export function exportGeneric(data, title, filename) {
