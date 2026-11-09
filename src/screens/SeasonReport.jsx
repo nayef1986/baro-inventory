@@ -6,6 +6,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { SectionHeader, BackBtn, fmtN, fmtM, fmtPct } from "../components/UI.jsx";
 import { seasonAnalysis, timelineFor } from "../lib/season.js";
+import { printCategoryReport } from "../lib/seasonPrint.js";
 import { parseSalesFile } from "../lib/parsers.js";
 import {
   loadSeasonPeriods, addSeasonPeriod, deleteSeasonPeriod,
@@ -516,6 +517,9 @@ export function SeasonReport({ products = [], settings = {},
   const [pickPr,  setPickPr]  = useState(null);      // منتج نتبع زمنه
   const [thr,     setThr]     = useState(20);        // حساسية الانتعاش/الهبوط %
   const [viewImg, setViewImg] = useState(null);      // الصورة المفتوحة بالحجم الكامل
+  const [showPrint, setShowPrint] = useState(false); // لوحة اختيار ما يُطبع
+  const [printCats, setPrintCats] = useState(null);  // null = كل الفئات
+  const [printImgs, setPrintImgs] = useState(true);
   // سنوات الكونتينرات المحتسبة في "وارد" و"الدوران" — null = كل المشتريات
   const [years,   setYears]   = useState(null);
 
@@ -745,6 +749,141 @@ export function SeasonReport({ products = [], settings = {},
   return (
     <div className="space-y-3">
       <Viewer img={viewImg} onClose={()=>setViewImg(null)} />
+
+      {/* ── اختيار ما يُطبع ── */}
+      {showPrint && (()=>{
+        const cats = A.catReport;
+        const sel  = printCats ?? cats.map(c=>c.cat);
+        const toggle = k => {
+          const next = sel.includes(k) ? sel.filter(x=>x!==k) : [...sel, k];
+          setPrintCats(next);
+        };
+        const picked = cats.filter(c=>sel.includes(c.cat));
+        const qty    = picked.reduce((s,c)=>s+c.qty, 0);
+        const items  = picked.reduce((s,c)=>s+c.items.length, 0);
+
+        return (
+          <div onClick={()=>setShowPrint(false)}
+            style={{position:"fixed",inset:0,background:"rgba(2,6,14,0.85)",zIndex:70,
+              display:"flex",alignItems:"flex-end",justifyContent:"center",
+              backdropFilter:"blur(3px)"}}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{background:"#121824",borderRadius:"22px 22px 0 0",padding:"20px",
+                width:"100%",maxWidth:"480px",maxHeight:"90vh",display:"flex",
+                flexDirection:"column",border:"1px solid rgba(255,255,255,0.08)"}}>
+
+              <div style={{width:"38px",height:"4px",background:"rgba(255,255,255,0.18)",
+                borderRadius:"100px",margin:"0 auto 16px",flexShrink:0}}/>
+
+              <div style={{fontSize:"17px",fontWeight:900,color:"#fff",flexShrink:0}}>
+                وش نطبع؟
+              </div>
+              <div style={{fontSize:"13px",color:"#8b97a8",marginTop:"4px",
+                lineHeight:1.8,flexShrink:0}}>
+                التقرير مقسّم على الفئات. صفحة خلاصة أول، ثم قسم لكل فئة
+                بمنتجاتها وذروتها وكمية الشراء المقترحة.
+              </div>
+
+              <div style={{display:"flex",gap:"7px",margin:"14px 0",flexShrink:0}}>
+                <button onClick={()=>setPrintCats(cats.map(c=>c.cat))}
+                  style={{flex:1,padding:"10px",borderRadius:"10px",border:"none",
+                    background:"rgba(255,255,255,0.07)",color:"#cbd5e1",fontSize:"13px",
+                    fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+                  الكل
+                </button>
+                <button onClick={()=>setPrintCats(cats.slice(0,10).map(c=>c.cat))}
+                  style={{flex:1,padding:"10px",borderRadius:"10px",border:"none",
+                    background:"rgba(255,255,255,0.07)",color:"#cbd5e1",fontSize:"13px",
+                    fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+                  أعلى 10
+                </button>
+                <button onClick={()=>setPrintCats([])}
+                  style={{flex:1,padding:"10px",borderRadius:"10px",border:"none",
+                    background:"rgba(255,255,255,0.07)",color:"#cbd5e1",fontSize:"13px",
+                    fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+                  ولا وحدة
+                </button>
+              </div>
+
+              <div style={{flex:1,overflowY:"auto",minHeight:0,
+                border:"1px solid rgba(255,255,255,0.06)",borderRadius:"12px",padding:"6px"}}>
+                {cats.map(c=>{
+                  const on = sel.includes(c.cat);
+                  return (
+                    <div key={c.cat} onClick={()=>toggle(c.cat)}
+                      style={{display:"flex",alignItems:"center",gap:"11px",
+                        padding:"11px 10px",borderRadius:"9px",cursor:"pointer",
+                        background: on ? "rgba(16,185,129,0.1)" : "transparent"}}>
+                      <span style={{width:"21px",height:"21px",borderRadius:"6px",
+                        flexShrink:0,display:"flex",alignItems:"center",
+                        justifyContent:"center",fontSize:"13px",fontWeight:900,
+                        background: on ? C.green : "rgba(255,255,255,0.08)",
+                        color: on ? "#06281d" : "transparent"}}>✓</span>
+                      <span style={{flex:1,minWidth:0,fontSize:"14px",fontWeight:700,
+                        color: on ? "#e8edf4" : "#6b788c",overflow:"hidden",
+                        textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {c.catName || c.cat}
+                      </span>
+                      <span style={{fontSize:"12.5px",color:"#5b6878",flexShrink:0}}>
+                        {fmtN(c.items.length)} منتج
+                      </span>
+                      <span style={{fontSize:"14px",fontWeight:900,color:C.gold,
+                        flexShrink:0,minWidth:"56px",textAlign:"left"}}>
+                        {fmtN(c.qty)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <label style={{display:"flex",alignItems:"center",gap:"10px",
+                margin:"14px 0 12px",cursor:"pointer",flexShrink:0}}>
+                <input type="checkbox" checked={printImgs}
+                  onChange={e=>setPrintImgs(e.target.checked)}
+                  style={{width:"19px",height:"19px",accentColor:C.green}}/>
+                <span style={{fontSize:"13.5px",color:"#cbd5e1"}}>
+                  أرفق صور المنتجات
+                </span>
+              </label>
+
+              <div style={{display:"flex",gap:"8px",flexShrink:0}}>
+                <button onClick={()=>setShowPrint(false)}
+                  style={{padding:"14px 18px",borderRadius:"13px",border:"none",
+                    background:"rgba(255,255,255,0.07)",color:"#8b97a8",fontSize:"14px",
+                    fontWeight:700,cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>
+                  إلغاء
+                </button>
+                <button disabled={!picked.length}
+                  onClick={()=>{
+                    const r = printCategoryReport(A, settings, images, {
+                      seasonName: meta.name,
+                      cats: sel,
+                      images: printImgs,
+                    });
+                    if (!r.ok) alert(r.error); else setShowPrint(false);
+                  }}
+                  style={{flex:1,padding:"14px",borderRadius:"13px",border:"none",
+                    background: picked.length ? C.gold : "#2a3340",
+                    color: picked.length ? "#0b0f16" : "#55606f",
+                    fontSize:"14.5px",fontWeight:900,
+                    cursor: picked.length ? "pointer" : "default",
+                    fontFamily:"Cairo,sans-serif"}}>
+                  {picked.length
+                    ? `اطبع ${fmtN(picked.length)} فئة · ${fmtN(items)} منتج`
+                    : "اختر فئة على الأقل"}
+                </button>
+              </div>
+              {picked.length > 0 && (
+                <div style={{fontSize:"12px",color:"#5b6878",textAlign:"center",
+                  marginTop:"9px",flexShrink:0}}>
+                  تغطي {fmtPct(A.grandQty>0 ? (qty/A.grandQty)*100 : 0)} من مبيعات الموسم
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       <BackBtn onClick={onBack} label="رجوع للتقارير" />
 
       {/* ══ الموسم ══ الخط الزمني هو بطل الشاشة، يبقى فوق دايم */}
@@ -765,9 +904,7 @@ export function SeasonReport({ products = [], settings = {},
               style={{background:"rgba(255,255,255,0.06)",border:"none",color:"#cbd5e1",
                 borderRadius:"10px",padding:"8px 11px",fontWeight:700,fontSize:"14px",
                 cursor:"pointer",fontFamily:"Cairo,sans-serif"}}>📂</button>
-            <button onClick={()=>{
-                const r = printSeason(A, {...settings, __seasonName: meta.name}, images);
-                if (!r.ok) alert(r.error); }}
+            <button onClick={()=>setShowPrint(true)}
               style={{background:C.gold,color:"#0b0f16",border:"none",borderRadius:"10px",
                 padding:"8px 14px",fontWeight:900,fontSize:"14px",cursor:"pointer",
                 fontFamily:"Cairo,sans-serif"}}>طباعة</button>
