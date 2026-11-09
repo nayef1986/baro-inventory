@@ -132,6 +132,19 @@ export function invoiceFileName(storeName: string, issuedOn: string, sequence = 
   return `${invoiceTitle(storeName, issuedOn, sequence)}.pdf`
 }
 
+/**
+ * التقرير الجامع لكل العملاء: «تقرير كل العملاء لشهر أكتوبر».
+ * لا يحمل اسم عميل لأنه ليس لعميل — هو نظرة صاحب المتجر على شهره.
+ */
+export function reportTitle(month: string): string {
+  return clean(`تقرير كل العملاء لشهر ${arabicMonth(`${month}-01`)}`)
+}
+
+/** «تقرير كل العملاء لشهر أكتوبر.pdf» */
+export function reportFileName(month: string): string {
+  return `${reportTitle(month)}.pdf`
+}
+
 /** «كشف حساب مقهى الرصيف لشهر أكتوبر.pdf» */
 export function statementFileName(customerName: string, month: string): string {
   return `${statementTitle(customerName, month)}.pdf`

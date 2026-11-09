@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { buildStatement, monthLabel, monthRange } from './statement.ts'
+import { ALL_CUSTOMERS, buildStatement, monthLabel, monthRange } from './statement.ts'
 import type { InvoicePayment, InvoiceTotals, SalesInvoice } from '../types.ts'
 
 function inv(id: string, issued: string, customer: string | null = 'c1', status: SalesInvoice['status'] = 'issued'): SalesInvoice {
@@ -194,4 +194,46 @@ test('البنود مرتّبة بالتاريخ', () => {
   })
 
   assert.deepEqual(s.lines.map((l) => l.invoice.id), ['a', 'b', 'c'])
+})
+
+// ─── التقرير الجامع ──────────────────────────────────────────
+
+test('ALL_CUSTOMERS يجمع فواتير كل العملاء في كشف واحد', () => {
+  const invoices = [
+    inv('a', '2026-10-03', 'c1'),
+    inv('b', '2026-10-11', 'c2'),
+    inv('c', '2026-10-20', null), // نقدي
+    inv('d', '2026-10-25', 'c1', 'cancelled'), // ملغاة — خارج الحساب
+  ]
+
+  const s = buildStatement({
+    invoices,
+    totals: { a: tot('a', 100), b: tot('b', 250), c: tot('c', 60), d: tot('d', 999) },
+    payments: [],
+    customerId: ALL_CUSTOMERS,
+    customers: [
+      { id: 'c1', name: 'مقهى الرصيف' },
+      { id: 'c2', name: 'بوفيه الحي' },
+    ],
+    ...monthRange('2026-10'),
+  })
+
+  assert.equal(s.lines.length, 3)
+  assert.equal(s.charges, 410)
+  assert.deepEqual(
+    s.lines.map((l) => l.customerName),
+    ['مقهى الرصيف', 'بوفيه الحي', null],
+  )
+})
+
+test('كشف عميل واحد لا يتأثّر بوجود عملاء آخرين', () => {
+  const s = buildStatement({
+    invoices: [inv('a', '2026-10-03', 'c1'), inv('b', '2026-10-11', 'c2')],
+    totals: { a: tot('a', 100), b: tot('b', 250) },
+    payments: [],
+    customerId: 'c1',
+    ...monthRange('2026-10'),
+  })
+  assert.equal(s.lines.length, 1)
+  assert.equal(s.charges, 100)
 })

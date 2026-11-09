@@ -12,6 +12,12 @@
 
 import type { InvoicePayment, InvoiceTotals, SalesInvoice } from '../types.ts'
 
+/**
+ * يُمرَّر مكان معرّف العميل ليشمل الكشفُ العملاءَ كلهم في مستند
+ * واحد. علامةٌ لا تصادف معرّفاً: المعرّفات UUID.
+ */
+export const ALL_CUSTOMERS = '*'
+
 /** الفواتير الملغاة والمسودات خارج الحساب كله */
 function counts(invoice: SalesInvoice): boolean {
   return invoice.status !== 'cancelled' && invoice.status !== 'draft'
@@ -19,6 +25,8 @@ function counts(invoice: SalesInvoice): boolean {
 
 export interface StatementLine {
   invoice: SalesInvoice
+  /** اسم العميل — يلزم في التقرير الجامع وحده. null للنقدي */
+  customerName: string | null
   total: number
   /** ما سُدِّد على هذه الفاتورة حتى نهاية الفترة */
   paid: number
@@ -50,18 +58,23 @@ export function buildStatement({
   totals,
   payments,
   customerId,
+  customers,
   from,
   to,
 }: {
   invoices: SalesInvoice[]
   totals: Record<string, InvoiceTotals | undefined>
   payments: InvoicePayment[]
-  /** null يعني العميل النقدي */
+  /** null يعني العميل النقدي، وALL_CUSTOMERS يعني الجميع */
   customerId: string | null
+  /** لتسمية العملاء في التقرير الجامع */
+  customers?: { id: string; name: string }[]
   from: string
   to: string
 }): Statement {
-  const mine = invoices.filter((i) => counts(i) && i.customer_id === customerId)
+  const all = customerId === ALL_CUSTOMERS
+  const mine = invoices.filter((i) => counts(i) && (all || i.customer_id === customerId))
+  const nameById = new Map((customers ?? []).map((c) => [c.id, c.name]))
   const mineIds = new Set(mine.map((i) => i.id))
   const minePayments = payments.filter((p) => mineIds.has(p.invoice_id))
 
@@ -88,7 +101,13 @@ export function buildStatement({
     const paid = minePayments
       .filter((p) => p.invoice_id === invoice.id && p.paid_on <= to)
       .reduce((sum, p) => sum + p.amount, 0)
-    return { invoice, total, paid, balance: Math.max(total - paid, 0) }
+    return {
+      invoice,
+      customerName: invoice.customer_id ? (nameById.get(invoice.customer_id) ?? null) : null,
+      total,
+      paid,
+      balance: Math.max(total - paid, 0),
+    }
   })
 
   const paymentRows: StatementPayment[] = minePayments

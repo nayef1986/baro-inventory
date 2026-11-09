@@ -61,11 +61,18 @@ import {
   invoiceFileName,
   invoicePdfBlob,
   invoiceSequence,
+  reportFileName,
   statementFileName,
 } from '../lib/invoicePdf.ts'
-import { buildStatement, currentMonth, monthLabel, monthRange } from '../lib/statement.ts'
+import {
+  ALL_CUSTOMERS,
+  buildStatement,
+  currentMonth,
+  monthLabel,
+  monthRange,
+} from '../lib/statement.ts'
 import { recipeCostFor } from '../lib/derive.ts'
-import { arabicDateShort, arabicDays, money, percent, todayISO } from '../lib/format.ts'
+import { arabicDateShort, arabicDays, integer, money, percent, todayISO } from '../lib/format.ts'
 import { dbErrorMessage } from '../lib/supabase.ts'
 import type { Customer, PaymentMethod, SalesInvoice, SweetCostData } from '../types.ts'
 
@@ -159,6 +166,33 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
   )
 
   const printInvoice = printId ? (data.invoices.find((i) => i.id === printId) ?? null) : null
+
+  /**
+   * توتال الطلبيات المعروضة.
+   * الملغاة والمسودات خارجه — هي خارج حساب المبيعات في كل مكان
+   * آخر، فلو دخلت هنا لاختلف مجموع الشاشة عن مجموع التقارير.
+   */
+  const ledger = useMemo(() => {
+    let count = 0
+    let lineCount = 0
+    let total = 0
+    let profit = 0
+    let paid = 0
+    let balance = 0
+
+    for (const invoice of data.invoices) {
+      if (invoice.status === 'cancelled' || invoice.status === 'draft') continue
+      const t = data.invoiceTotals[invoice.id]
+      const due = dueOf(invoice, t, today)
+      count += 1
+      lineCount += t?.line_count ?? 0
+      total += t?.total ?? 0
+      profit += profitOf(t?.taxable ?? 0, t?.cost ?? 0).profit
+      paid += due.paid
+      balance += due.balance
+    }
+    return { count, lineCount, total, profit, paid, balance }
+  }, [data.invoices, data.invoiceTotals, today])
 
   /**
    * يرسل الفاتورة كملف PDF عبر لوحة مشاركة الجوال — ومنها واتساب.
@@ -350,6 +384,9 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                             </span>
                           ) : null}
                         </>
+                      ) : due.paid > 0 ? (
+                        // السداد الكامل كان يُعرض شَرطة، فيضيع المبلغ المدفوع
+                        <span className="text-good font-semibold">دُفع {money(due.paid)}</span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}
@@ -419,6 +456,24 @@ export default function InvoicesScreen({ data, reload, onError }: ScreenProps) {
                 )
               })}
             </tbody>
+            <tfoot>
+              <tr className="bg-cream border-t-2 border-t-ink">
+                <Td className="ps-5 font-semibold" colSpan={3}>
+                  الإجمالي · {ledger.count} فاتورة
+                </Td>
+                <Td className="num text-soft">{integer(ledger.lineCount)}</Td>
+                <Td className="num font-bold text-[15px]">{money(ledger.total)}</Td>
+                <Td className="num font-semibold">{money(ledger.profit)}</Td>
+                <Td className="num font-semibold">
+                  {ledger.balance > 0 ? (
+                    <span className="text-bad">{money(ledger.balance)}</span>
+                  ) : (
+                    <span className="text-good">دُفع {money(ledger.paid)}</span>
+                  )}
+                </Td>
+                <Td colSpan={2} />
+              </tr>
+            </tfoot>
           </Table>
         )}
         <p className="m-0 px-5 py-3 text-[12.5px] text-muted bg-cream border-t border-line leading-relaxed">
@@ -694,7 +749,10 @@ function InvoiceForm({
             value={customerId}
             onChange={setCustomerId}
             placeholder="عميل نقدي"
-            options={data.customers.map((c) => ({ value: c.id, label: c.name }))}
+            options={[
+              { value: ALL_CUSTOMERS, label: 'كل العملاء — تقرير الشهر' },
+              ...data.customers.map((c) => ({ value: c.id, label: c.name })),
+            ]}
           />
         </Field>
         <Field label="تاريخ الإصدار" htmlFor="in-date">
@@ -1275,7 +1333,7 @@ function StatementModal({
   onError: (message: string) => void
 }) {
   const today = todayISO()
-  const [customerId, setCustomerId] = useState<string>(data.customers[0]?.id ?? '')
+  const [customerId, setCustomerId] = useState<string>(ALL_CUSTOMERS)
   const [month, setMonth] = useState(currentMonth(today))
   const [busy, setBusy] = useState(false)
   const captureNode = useRef<HTMLDivElement | null>(null)
@@ -1291,18 +1349,21 @@ function StatementModal({
         invoices: data.invoices,
         totals: data.invoiceTotals,
         payments: data.invoicePayments,
-        customerId: customerId || null,
+        customerId: customerId === ALL_CUSTOMERS ? ALL_CUSTOMERS : customerId || null,
+        customers: data.customers,
         ...range,
       }),
     [data, customerId, range.from, range.to],
   )
 
+  const all = customerId === ALL_CUSTOMERS
   const sheet = {
     statement,
     month,
     customer,
     settings: data.settings,
     issuedOn: today,
+    scope: all ? ('all' as const) : ('customer' as const),
   }
 
   // الطباعة تبقى مركّبة حتى ينتهي المتصفح منها
@@ -1327,7 +1388,8 @@ function StatementModal({
       if (!node) throw new Error('no node')
 
       const blob = await invoicePdfBlob(node)
-      const file = new File([blob], statementFileName(customer?.name ?? 'نقدي', month), {
+      const name = all ? reportFileName(month) : statementFileName(customer?.name ?? 'نقدي', month)
+      const file = new File([blob], name, {
         type: 'application/pdf',
       })
 

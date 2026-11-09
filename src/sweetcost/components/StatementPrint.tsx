@@ -19,6 +19,8 @@ export interface StatementProps {
   customer: Customer | null
   settings: Settings
   issuedOn: string
+  /** 'all' يجمع العملاء كلهم في مستند واحد */
+  scope?: 'customer' | 'all'
 }
 
 export function StatementSheet({
@@ -27,9 +29,15 @@ export function StatementSheet({
   customer,
   settings,
   issuedOn,
+  scope = 'customer',
 }: StatementProps) {
   const hijri = hijriDate(issuedOn)
   const s = statement
+  const all = scope === 'all'
+
+  const customerCount = all
+    ? new Set(s.lines.map((l) => l.invoice.customer_id ?? 'نقدي')).size
+    : 0
 
   return (
     <article className="invoice-sheet">
@@ -48,7 +56,7 @@ export function StatementSheet({
         </div>
 
         <div className="invoice-id">
-          <div className="invoice-kind">كشف حساب شهري</div>
+          <div className="invoice-kind">{all ? 'تقرير الشهر' : 'كشف حساب شهري'}</div>
           <table className="invoice-id-table">
             <tbody>
               <tr>
@@ -77,11 +85,19 @@ export function StatementSheet({
       </header>
 
       <section className="invoice-party">
-        <h2>كشف حساب</h2>
-        <div className="invoice-party-name">{customer?.name ?? 'عميل نقدي'}</div>
+        <h2>{all ? 'تقرير مبيعات' : 'كشف حساب'}</h2>
+        <div className="invoice-party-name">
+          {all ? 'كل العملاء' : (customer?.name ?? 'عميل نقدي')}
+        </div>
         <div className="invoice-meta">
-          {customer?.phone ? <div dir="ltr">{customer.phone}</div> : null}
-          {customer?.address ? <div>{customer.address}</div> : null}
+          {all ? (
+            <div className="num">{integer(customerCount)} عميلاً في هذا الشهر</div>
+          ) : (
+            <>
+              {customer?.phone ? <div dir="ltr">{customer.phone}</div> : null}
+              {customer?.address ? <div>{customer.address}</div> : null}
+            </>
+          )}
         </div>
       </section>
 
@@ -100,7 +116,12 @@ export function StatementSheet({
           {s.lines.map((line, index) => (
             <tr key={line.invoice.id}>
               <td className="col-idx num">{index + 1}</td>
-              <td className="col-name num">{line.invoice.invoice_no}</td>
+              <td className="col-name num">
+                {line.invoice.invoice_no}
+                {all ? (
+                  <span className="invoice-sub">{line.customerName ?? 'عميل نقدي'}</span>
+                ) : null}
+              </td>
               <td className="col-num">{arabicDate(line.invoice.issued_on)}</td>
               <td className="col-num num">{money(line.total)}</td>
               <td className="col-num num">{line.paid > 0 ? money(line.paid) : '—'}</td>
