@@ -5,6 +5,9 @@
 import * as XLSX from "xlsx";
 import { num } from "./calc.js";
 
+// اسم المصدر لملف مبيعات ما فيه تقسيم فروع
+export const NO_BRANCH = "كل الفروع";
+
 function cleanBarcode(raw) {
   // لو Excel حوّل الباركود لتاريخ (كائن Date) — نحوّله لرمز نظيف بدل ما يكسر النظام
   if (raw instanceof Date) {
@@ -350,9 +353,32 @@ export function parseMonthlyFile(buffer) {
     return { periods: [], errors: ["لم يُعثر على شهور في الصف الثاني"] };
   }
 
+  // ─ ملف بلا فروع ─────────────────────────────────────────
+  // بعض تقارير نقطة البيع تُصدَّر بالمنتجات فقط: كل تاريخ عمودان
+  // (كمية المنتج | إجمالي السعر) وما فيه صف فروع إطلاقًا.
+  // بدون الكشف يقرأ النظام الترويستين على إنهما اسما فرعين،
+  // فتختلط الكميات بالأسعار وتطلع الأرقام مضاعفة.
+  const metricHeader = /^(كمية المنتج|إجمالي السعر|الطلب|التكلفة|Product Cost|Qty|Quantity|Total)/i;
+  const headerCells  = branchRow.filter(v => typeof v === "string" && v.trim());
+  const branchless   = headerCells.length > 0 &&
+                       headerCells.every(v => metricHeader.test(v.trim()));
+
   const monthData = monthCols.map((m, i) => {
     const start = m.col;
     const end   = i + 1 < monthCols.length ? monthCols[i + 1].col : branchRow.length;
+
+    // بلا فروع: نجمع كل شي تحت مصدر واحد، ونحدد عمودي الكمية والسعر بالترويسة
+    if (branchless) {
+      let qtyCol = -1, priceCol = -1;
+      for (let col = start; col < end; col++) {
+        const h = String(branchRow[col] ?? "").trim();
+        if (qtyCol   < 0 && /^(كمية المنتج|Qty|Quantity)/i.test(h)) qtyCol   = col;
+        if (priceCol < 0 && /^(إجمالي السعر|Total)/i.test(h))       priceCol = col;
+      }
+      if (qtyCol < 0) qtyCol = start;              // احتياط: أول عمود في الكتلة
+      if (priceCol < 0) priceCol = qtyCol + 1;
+      return { name: m.name, start, end, branchless: true, qtyCol, priceCol };
+    }
 
     const branches = {};
     for (let col = start; col < end; col++) {
@@ -374,15 +400,24 @@ export function parseMonthlyFile(buffer) {
     return { name: m.name, start, end, branches };
   });
 
+  // أول صف منتج = أول صف يبدأ بـ [باركود].
+  // ما نثبّته برقم: الملف اللي فيه صف فروع يبدأ من الصف السادس،
+  // واللي بلا فروع من الخامس — والتثبيت كان يسقط أول منتج.
+  let firstProductRow = 5;
+  for (let i = 2; i < Math.min(rows.length, 12); i++) {
+    if (/^\s*\[[^\]]+\]/.test(String(rows[i]?.[0] ?? ""))) { firstProductRow = i; break; }
+  }
+
   const periods = [];
 
   monthData.forEach(month => {
     const sales = {};
-    Object.values(month.branches).forEach(b => { sales[b] = {}; });
+    if (month.branchless) sales[NO_BRANCH] = {};
+    else Object.values(month.branches).forEach(b => { sales[b] = {}; });
 
     let totalUnits = 0;
 
-    for (let i = 5; i < rows.length; i++) {
+    for (let i = firstProductRow; i < rows.length; i++) {
       const row    = rows[i];
       const rawKey = String(row[0] ?? "").trim();
       if (!rawKey || rawKey === "الإجمالي" || rawKey === "Total") continue;
@@ -393,6 +428,27 @@ export function parseMonthlyFile(buffer) {
       if (!barcode) continue;
 
       const salesName = rawKey.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
+
+      // بلا فروع: خليتان فقط لكل تاريخ
+      if (month.branchless) {
+        const qty        = toNum(row[month.qtyCol]);
+        const totalPrice = toNum(row[month.priceCol]);
+        if (qty === 0 && totalPrice === 0) continue;
+
+        const cell = sales[NO_BRANCH][barcode];
+        if (cell) {
+          cell.qty += qty;
+          cell.totalPrice += totalPrice;
+          if (salesName && !cell.salesNames?.includes(salesName)) {
+            cell.salesNames = cell.salesNames ?? [];
+            cell.salesNames.push(salesName);
+          }
+        } else {
+          sales[NO_BRANCH][barcode] = { qty, totalPrice, salesNames: salesName ? [salesName] : [] };
+        }
+        totalUnits += qty;
+        continue;
+      }
 
       Object.entries(month.branches).forEach(([colStr, branchName]) => {
         const col        = parseInt(colStr);
