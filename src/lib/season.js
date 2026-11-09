@@ -160,13 +160,18 @@ export function rankProducts(products, periods, settings, branch = null, years =
 
   (products ?? []).forEach(p => {
     let qty = 0, rev = 0, allQty = 0;
+    // ذروة المنتج: أقوى فترة باع فيها، وعدد الفترات اللي تحرّك فيها
+    let peakQty = -Infinity, peakLabel = "", activeCount = 0;
     ord.forEach(per => {
       const c = cellOf(per, p.barcode, branch);
       qty += c.qty; rev += c.rev;
+      if (c.qty > 0) activeCount++;
+      if (c.qty > peakQty) { peakQty = c.qty; peakLabel = per.label ?? ""; }
       // المبيع في كل الفروع — نحتاجه للدوران حتى لو كنا نحسب فرعًا واحدًا
       if (branch) allQty += cellOf(per, p.barcode, null).qty;
     });
     if (!branch) allQty = qty;
+    if (!Number.isFinite(peakQty)) peakQty = 0;
 
     // نستبعد اللي ما له أي حركة فقط. الصافي السالب (مرتجعات أكثر من مبيعات)
     // نبقيه عشان مجاميع الفروع تطابق الإجمالي العام — ترتيب "الأفضل مبيعًا"
@@ -194,6 +199,8 @@ export function rankProducts(products, periods, settings, branch = null, years =
       sellPrice: num(p.sellPrice),
       qty, rev, profit,
       allQty,              // المبيع في كل الفروع (للمقارنة ونسبة الفرع)
+      peakQty, peakLabel,  // أقوى فترة لهذا المنتج
+      activeCount,         // كم فترة تحرّك فيها
       buyPrice: buy,
       bought,
       turnPct:  turn,
@@ -230,6 +237,48 @@ export function rankCategories(rows) {
     map[k].barcodes.push(r.barcode);
   });
   return Object.values(map);
+}
+
+/**
+ * تجميع كامل على مستوى الفئة — وحدة القرار عند الشراء.
+ * لكل فئة: أرقامها، خطها الزمني، ذروتها، ومنتجاتها مرتبة.
+ * recs = خريطة باركود → التوصية، عشان كل منتج يحمل "نجيب" معه.
+ */
+export function categoryReport(rows, periods, grandQty, recByBarcode = {}) {
+  const map = {};
+  rows.forEach(r => {
+    const k = r.cat;
+    if (!map[k]) map[k] = {
+      cat: k, catName: r.catName,
+      qty: 0, rev: 0, profit: 0, items: [], barcodes: [],
+    };
+    map[k].qty    += r.qty;
+    map[k].rev    += r.rev;
+    map[k].profit += r.profit;
+    map[k].barcodes.push(r.barcode);
+    map[k].items.push({ ...r, ...(recByBarcode[r.barcode] ?? {}) });
+  });
+
+  return Object.values(map)
+    .map(c => {
+      const tl   = timelineFor(periods, c.barcodes, null);
+      const best = tl.length ? tl.reduce((m,p)=> p.qty > m.qty ? p : m, tl[0]) : null;
+      const avg  = tl.length ? tl.reduce((s,p)=>s+p.qty,0) / tl.length : 0;
+      const items = [...c.items].sort((a,b)=> b.qty - a.qty);
+      return {
+        ...c,
+        items,
+        timeline:  tl,
+        peakLabel: best?.label ?? "",
+        peakQty:   best?.qty ?? 0,
+        avg,
+        sharePct:  grandQty > 0 ? (c.qty / grandQty) * 100 : 0,
+        // المقترح شراؤه لهذي الفئة
+        suggest:   items.reduce((s,x)=> s + (num(x.suggest) || 0), 0),
+        dead:      items.filter(x => x.qty <= 0).length,
+      };
+    })
+    .sort((a,b) => b.qty - a.qty);
 }
 
 // ─── الخط الزمني: متى انتعشت ومتى هبطت ─────────────────────
@@ -672,6 +721,24 @@ export function seasonAnalysis(products, periodsRaw, settings, opts = {}) {
   // التوصيات — تستخدم دورة الحياة عشان تعوّض النفاد
   const recs = byBranchA.map(b => recommendForBranch(b, opts, lifecycles));
 
+  // خريطة التوصية بالباركود: نجمع "نجيب" عبر كل الفروع لكل منتج
+  const recByBarcode = {};
+  recs.forEach(rc => rc.all.forEach(r => {
+    const cur = recByBarcode[r.barcode];
+    if (cur) {
+      cur.suggest += r.suggest;
+      cur.delta   += r.delta;
+    } else {
+      recByBarcode[r.barcode] = {
+        suggest: r.suggest, delta: r.delta,
+        tier: r.tier, color: r.color, why: r.why,
+      };
+    }
+  }));
+
+  // تقرير الفئات — وحدة القرار عند الشراء
+  const catReport = categoryReport(rows, periods, grandQty, recByBarcode);
+
   return {
     periods,
     periodCount: periods.length,
@@ -696,6 +763,9 @@ export function seasonAnalysis(products, periodsRaw, settings, opts = {}) {
     // فروع + قرار
     branches: byBranchA,
     recs,
+    recByBarcode,
+    catReport,                              // الفئات بمنتجاتها وخطها الزمني
+    singleSource: byBranchA.length <= 1,    // ملف بلا تقسيم فروع
 
     // حالة المنتجات
     lifecycles,
