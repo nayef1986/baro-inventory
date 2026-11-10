@@ -3,7 +3,8 @@
 --
 -- يُرفع ملف كشف البنك (xls من الأهلي) فتُحفظ كل حركة مرة واحدة
 -- (dedup = التاريخ|المبلغ|النوع|الوصف، فرفع نفس الكشف مرتين لا يكرّر).
--- ثم تُصنَّف كل حركة: كونتينر، مبيعات فروع، راتب، إيجار، أهل، أخرى.
+-- ثم تُصنَّف كل حركة: كونتينر، مبيعات فروع، استرداد مصاريف (طيران، إعلان،
+-- فاتورة دفعتها عن الشركة)، راتب، إيجار، أهل، أخرى.
 -- تصنيف «كونتينر» أو «مبيعات فروع» يُنشئ استلاماً في الدفتر المقابل
 -- مربوطاً بالحركة (bank_txn_id) — فلا يُحسب مرتين.
 -- نفس القفل: كل صف لصاحبه، و anon بلا صلاحية.
@@ -19,7 +20,7 @@ create table if not exists public.pa_bank_txns (
   note        text not null default '',
   amount      numeric(14,2) not null,
   category    text not null default ''
-              check (category in ('', 'containers', 'branches', 'salary', 'rent', 'family', 'other')),
+              check (category in ('', 'containers', 'branches', 'reimburse', 'salary', 'rent', 'family', 'other')),
   dedup       text not null,
   created_at  timestamptz not null default now(),
   unique (user_id, dedup)
