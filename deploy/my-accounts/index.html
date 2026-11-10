@@ -216,6 +216,7 @@ async function run(promise) {
 // ---------- العرض ----------
 function render() {
   const app = $('#app')
+  if (state.recovery) return (app.innerHTML = recoveryView())
   if (!state.user) return (app.innerHTML = loginView())
   const acc = state.accounts.find((a) => a.id === state.accountId)
   if (state.view === 'account' && !acc) state.view = 'home'
@@ -355,7 +356,21 @@ function loginView() {
       <div class="field"><label>كلمة المرور</label><input type="password" name="password" required minlength="6" autocomplete="current-password"></div>
       <div class="row"><button class="btn primary grow" name="mode" value="in">دخول</button>
         <button class="btn" name="mode" value="up">حساب جديد</button></div>
+      <div style="text-align:center;margin-top:10px"><button class="btn ghost small" name="mode" value="forgot" formnovalidate>نسيت كلمة المرور؟</button></div>
       <div class="err" id="loginErr">${esc(state.error)}</div>
+    </form></div></div>`
+}
+
+/** بعد الضغط على رابط «نسيت كلمة المرور» في البريد: اختيار كلمة جديدة */
+function recoveryView() {
+  return `<div class="wrap center"><div class="card login">
+    <h1 style="margin:0 0 4px">كلمة مرور جديدة</h1>
+    <p class="muted small" style="margin:0 0 16px">اختر كلمة مرور جديدة (٦ أحرف أو أكثر) واحفظها عندك.</p>
+    <form id="recoveryForm">
+      <div class="field"><label>كلمة المرور الجديدة</label><input type="password" name="password" required minlength="6" autocomplete="new-password"></div>
+      <div class="field"><label>أعدها مرة ثانية</label><input type="password" name="again" required minlength="6" autocomplete="new-password"></div>
+      <button class="btn primary" style="width:100%">احفظ وادخل</button>
+      <div class="err" id="recErr"></div>
     </form></div></div>`
 }
 
@@ -545,23 +560,49 @@ document.addEventListener('input', (ev) => {
 })
 
 document.addEventListener('submit', async (ev) => {
+  if (ev.target.id === 'recoveryForm') {
+    ev.preventDefault()
+    const f = new FormData(ev.target), err = $('#recErr')
+    if (f.get('password') !== f.get('again')) return (err.textContent = 'الكلمتين مو متطابقتين.')
+    ev.submitter.disabled = true
+    const { error } = await db.auth.updateUser({ password: f.get('password') })
+    ev.submitter.disabled = false
+    if (error) return (err.textContent = error.message)
+    state.recovery = false
+    history.replaceState(null, '', location.pathname)
+    return load()
+  }
   if (ev.target.id !== 'loginForm') return
   ev.preventDefault()
   const f = new FormData(ev.target), mode = ev.submitter?.value
   const creds = { email: f.get('email').trim(), password: f.get('password') }
   const err = $('#loginErr'); err.textContent = ''
+  if (mode === 'forgot') {
+    if (!creds.email) return (err.textContent = 'اكتب بريدك أولاً، ثم اضغط «نسيت كلمة المرور».')
+    ev.submitter.disabled = true
+    const { error } = await db.auth.resetPasswordForEmail(creds.email, { redirectTo: location.origin + location.pathname })
+    ev.submitter.disabled = false
+    err.style.color = error ? '' : 'var(--in)'
+    err.textContent = error ? error.message : 'أرسلنا لك رابط على بريدك. افتحه من نفس الجهاز واختر كلمة مرور جديدة.'
+    return
+  }
+  err.style.color = ''
   ev.submitter.disabled = true
   const { data, error } = mode === 'up' ? await db.auth.signUp(creds) : await db.auth.signInWithPassword(creds)
   ev.submitter.disabled = false
   if (error) {
     err.textContent = /Invalid login/i.test(error.message) ? 'البريد أو كلمة المرور غلط.'
       : /not confirmed/i.test(error.message) ? 'أكّد بريدك أولاً من الرسالة اللي وصلتك.' : error.message
+  } else if (mode === 'up' && data.user && !data.user.identities?.length) {
+    // Supabase يردّ بلا خطأ على بريد مسجّل من قبل (حتى لا يكشف وجوده)
+    err.textContent = 'هذا البريد مسجّل من قبل. اضغط «دخول»، وإذا نسيت كلمة المرور اضغط «نسيت كلمة المرور؟».'
   } else if (mode === 'up' && !data.session) {
     err.textContent = 'تم إنشاء الحساب. افتح الرسالة في بريدك وأكّد، ثم ادخل.'
   }
 })
 
-db.auth.onAuthStateChange((_event, session) => {
+db.auth.onAuthStateChange((event, session) => {
+  if (event === 'PASSWORD_RECOVERY') { state.recovery = true; state.user = session?.user ?? null; return render() }
   const was = state.user?.id
   state.user = session?.user ?? null
   if (!state.user) { state.accounts = []; state.entries = []; state.invoices = []; state.receipts = []; state.view = 'cont'; return render() }
