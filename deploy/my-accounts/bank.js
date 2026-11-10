@@ -39,13 +39,15 @@ function bankAccount(type, desc) {
 /** الملاحظة المفهومة من الوصف: سبب التحويل ونصّه الحر */
 function bankNote(desc) {
   const parts = []
-  const reason = desc.match(/^\w\w:(\S[^0-9]*?)\s*\d{10,}/)
-  if (reason) parts.push(reason[1].trim())
+  // سبب التحويل: النص قبل رقم الحساب، مع أو بلا رمز مثل «BW:»
+  const reason = desc.match(/^(?:\w\w:)?(\S[^0-9]*?)\s*\d{10,}/)
+  if (reason && !/^تحويل الى الاهل والاصدقاء$/.test(reason[1].trim())) parts.push(reason[1].trim())
+  else if (reason) parts.push('أهل وأصدقاء')
+  // النص الحر بعد بيانات القناة أو رقم الإيداع (مثل «نسبة مشتريات بضائع الصين»)
   const tail = desc.split('CHNL:')[1]
-  if (tail) {
-    const free = tail.split(' ').slice(1).join(' ').replace(/^(Payment )?Systems\s*/, '').trim()
-    if (free) parts.push(free)
-  }
+  const free = tail ? tail.split(' ').slice(1).join(' ').replace(/^(Payment )?Systems\s*/, '')
+    : (desc.split(/DEP ID:\d+/)[1] || '')
+  if (free.trim()) parts.push(free.trim())
   return parts.join(' — ')
 }
 
