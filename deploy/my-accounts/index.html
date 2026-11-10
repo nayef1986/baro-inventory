@@ -76,6 +76,11 @@
   .seg input:checked+span{font-weight:800}
   .seg label:has(input[value=in]:checked){background:color-mix(in srgb,var(--in) 15%,transparent)}
   .seg label:has(input[value=out]:checked){background:color-mix(in srgb,var(--out) 15%,transparent)}
+  .seg label:has(input:checked){background:var(--soft)}
+  .seg label:has(input[value=out]:checked){background:color-mix(in srgb,var(--out) 15%,transparent)}
+  .seg label:has(input[value=in]:checked){background:color-mix(in srgb,var(--in) 15%,transparent)}
+  textarea{resize:vertical}
+  td bdi{white-space:nowrap}
   .center{min-height:80vh;display:grid;place-items:center}
   .login{width:min(380px,100%)}
   #print{display:none}
@@ -109,6 +114,7 @@
 
 <dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
 
+<script src="containers.js"></script>
 <script>
 // ============================================================
 // حساباتي — حسابات شخصية: حسابات، نسب، حركات وارد/صادر،
@@ -129,7 +135,10 @@ const state = {
   user: null,
   accounts: [],
   entries: [],
-  view: 'home',      // home | account | split
+  invoices: [],      // فواتير الحاويات
+  receipts: [],      // استلامات النسبة
+  view: 'cont',      // cont | home | account | split
+  contTab: 'statement', // statement | invoices | receipts
   accountId: null,
   from: '', to: '',
   loading: true,
@@ -181,15 +190,20 @@ function periodLabel() {
 // ---------- البيانات ----------
 async function load() {
   state.loading = true; render()
-  const [a, e] = await Promise.all([
+  const [a, e, ci, cr] = await Promise.all([
     db.from('pa_accounts').select('*').order('sort').order('created_at'),
     db.from('pa_entries').select('*'),
+    db.from('pa_container_invoices').select('*'),
+    db.from('pa_commission_receipts').select('*'),
   ])
   state.loading = false
-  if (a.error || e.error) { state.error = (a.error || e.error).message; return render() }
+  const bad = [a, e, ci, cr].find((r) => r.error)
+  if (bad) { state.error = bad.error.message; return render() }
   state.error = ''
   state.accounts = a.data
   state.entries = e.data
+  state.invoices = ci.data
+  state.receipts = cr.data
   render()
 }
 async function run(promise) {
@@ -215,7 +229,8 @@ function render() {
       </div>
     </header>
     ${state.error ? `<div class="card err">${esc(state.error)}</div>` : ''}
-    ${state.loading && !state.accounts.length ? '<div class="empty">جاري التحميل…</div>' : state.view === 'account' ? accountView(acc) : homeView()}
+    ${state.loading && !state.accounts.length && !state.invoices.length ? '<div class="empty">جاري التحميل…</div>'
+      : state.view === 'account' ? accountView(acc) : state.view === 'cont' ? mainTabs() + contView() : homeView()}
   </div>`
 }
 
@@ -227,11 +242,16 @@ function periodBar() {
   </div>`
 }
 
-function homeView() {
-  const tabs = `<div class="tabs">
+function mainTabs() {
+  return `<div class="tabs">
+    <button class="btn ${state.view === 'cont' ? 'on' : ''}" data-act="cont">الحاويات ٢٫٥٪</button>
     <button class="btn ${state.view === 'home' ? 'on' : ''}" data-act="home">الحسابات</button>
     <button class="btn ${state.view === 'split' ? 'on' : ''}" data-act="split">توزيع بالنسب</button>
   </div>`
+}
+
+function homeView() {
+  const tabs = mainTabs()
   if (state.view === 'split') return tabs + splitView()
 
   const all = state.entries.filter(inRange)
@@ -481,6 +501,7 @@ function exportPdf() {
 document.addEventListener('click', async (ev) => {
   const t = ev.target.closest('[data-act],[data-open],[data-edit]')
   if (!t) return
+  if (contClick(t)) return
   if (t.dataset.open) { state.view = 'account'; state.accountId = t.dataset.open; return render() }
   if (t.dataset.edit) return entryDialog(state.entries.find((e) => e.id === t.dataset.edit))
   const act = t.dataset.act
@@ -492,8 +513,8 @@ document.addEventListener('click', async (ev) => {
     case 'editAccount': return accountDialog(acc)
     case 'newEntry': return entryDialog(null)
     case 'clearPeriod': state.from = state.to = ''; return render()
-    case 'xlsx': return exportXlsx()
-    case 'pdf': return exportPdf()
+    case 'xlsx': return state.view === 'cont' ? contXlsx() : exportXlsx()
+    case 'pdf': return state.view === 'cont' ? contPdf() : exportPdf()
     case 'logout': await db.auth.signOut(); return
     case 'applySplit': {
       const amount = num(state.splitAmount)
@@ -543,7 +564,7 @@ document.addEventListener('submit', async (ev) => {
 db.auth.onAuthStateChange((_event, session) => {
   const was = state.user?.id
   state.user = session?.user ?? null
-  if (!state.user) { state.accounts = []; state.entries = []; state.view = 'home'; return render() }
+  if (!state.user) { state.accounts = []; state.entries = []; state.invoices = []; state.receipts = []; state.view = 'cont'; return render() }
   if (was !== state.user.id) load()
 })
 db.auth.getSession().then(({ data }) => { if (!data.session) render() })
