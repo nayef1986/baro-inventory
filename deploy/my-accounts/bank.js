@@ -181,12 +181,24 @@ function splitDialog(t) {
 
 // ---------- العرض ----------
 
+/**
+ * رقم ثابت لكل حوالة حسب تاريخها (الأقدم ١) — مستقل عن الفلتر، فالحوالة
+ * تحتفظ برقمها في القائمة وExcel، وتقدر تقول «الحوالة ٢٣» وتلقاها.
+ */
+function bankSeq() {
+  const map = new Map()
+  ;[...state.bank].sort((a, b) => a.txn_date.localeCompare(b.txn_date) || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+    .forEach((t, n) => map.set(t.id, n + 1))
+  return map
+}
+
 function bankFiltered() {
-  const q = (state.bankQ || '').trim()
+  const q = (state.bankQ || '').trim(), seq = bankSeq()
   return state.bank.filter((t) => dateIn(t.txn_date)
     && (!state.bankAcc || t.account === state.bankAcc)
     && (state.bankCat === undefined || state.bankCat === 'all' || partsOf(t).some((p) => p.cat === state.bankCat))
-    && (!q || `${t.note} ${t.description} ${t.txn_type} ${money(t.amount)}`.includes(q)))
+    && (!q || (/^#?\d{1,4}$/.test(q) ? seq.get(t.id) === Number(q.replace('#', '')) || money(t.amount).includes(q)
+      : `${t.note} ${t.description} ${t.txn_type} ${money(t.amount)}`.includes(q))))
     .sort((a, b) => b.txn_date.localeCompare(a.txn_date) || num(b.amount) - num(a.amount))
 }
 
@@ -214,9 +226,10 @@ function bankView() {
       <span class="big" style="font-size:24px">${money(sums[k].v)}</span>
       <span class="foot">${sums[k].n} حوالة</span></button>`).join('')
 
+  const seq = bankSeq()
   const rows = list.map((t) => `<div class="item" style="flex-direction:column;gap:8px">
       <div style="display:flex;justify-content:space-between;gap:12px">
-        <div><div class="t">${esc(t.note) || esc(t.txn_type)}</div>
+        <div><div class="t"><span class="seq">${seq.get(t.id)}</span>${esc(t.note) || esc(t.txn_type)}</div>
           <div class="s">${dt(t.txn_date)} · ${esc(t.txn_type)}${t.account !== t.txn_type ? ' · ' + esc(t.account) : ''}</div></div>
         <div class="v"><b class="${t.amount < 0 ? 'out' : 'in'}">${money(t.amount)}</b></div>
       </div>
@@ -238,7 +251,7 @@ function bankView() {
           <option value="">كل الحسابات (${state.bank.length})</option>
           ${accounts.map(([a, n]) => `<option value="${esc(a)}" ${state.bankAcc === a ? 'selected' : ''}>${esc(a)} (${n})</option>`).join('')}
         </select></div>
-        <div><label>بحث في الملاحظة</label><input data-bank="q" value="${esc(state.bankQ || '')}" placeholder="مثلاً: ايجار، نسبة، مكافآت"></div>
+        <div><label>بحث في الملاحظة</label><input data-bank="q" value="${esc(state.bankQ || '')}" placeholder="رقم الحوالة، أو: ايجار، رواتب"></div>
       </div>
     </div>
     ${periodBar()}
@@ -264,7 +277,8 @@ function bulkCatDialog() {
 function bankXlsx() {
   const list = bankFiltered().slice().reverse()
   const label = (t) => (t.category === 'split' ? partsOf(t).map((p) => `${catLabel(p.cat)} ${money(p.amount)}`).join(' + ') : catLabel(t.category))
-  const rows = list.map((t, n) => [n + 1, t.txn_date, num(t.amount), label(t), t.account, t.note || t.txn_type])
+  const seq = bankSeq()
+  const rows = list.map((t) => [seq.get(t.id), t.txn_date, num(t.amount), label(t), t.account, t.note || t.txn_type])
   rows.push({ kind: 'total', cells: ['', 'المجموع', list.reduce((s, t) => s + num(t.amount), 0), `${list.length} حوالة`, '', ''] })
   const parts = list.flatMap(partsOf)
   const byCat = [...Object.keys(CATS), ''].map((k) => { const l = parts.filter((p) => p.cat === k); return [catLabel(k), l.length, l.reduce((s, p) => s + p.amount, 0)] }).filter((r) => r[1])
