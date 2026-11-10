@@ -53,14 +53,39 @@ function contStatement() {
   }
 }
 
-const describe = (m) => m.type === 'inv'
-  ? ['فاتورة', m.row.container_no && `حاوية ${m.row.container_no}`, m.row.invoice_no && `رقم ${m.row.invoice_no}`, m.row.note].filter(Boolean).join(' — ')
+/** رقم كل فاتورة حسب ترتيب إدخالها: الأولى ١، الثانية ٢… */
+function invoiceSeq() {
+  const map = new Map()
+  ;[...state.invoices].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+    .forEach((i, k) => map.set(i.id, k + 1))
+  return map
+}
+
+/** الفواتير مجمّعة بالسنة (الأحدث أولاً): عدد الحاويات ومجاميعها */
+function invoicesByYear(list) {
+  const years = new Map()
+  for (const i of list) {
+    const y = i.invoice_date.slice(0, 4)
+    if (!years.has(y)) years.set(y, { year: y, list: [], amount: 0, commission: 0, containers: new Set() })
+    const g = years.get(y)
+    g.list.push(i); g.amount += num(i.invoice_amount); g.commission += num(i.commission)
+    if (normCont(i.container_no)) g.containers.add(normCont(i.container_no))
+  }
+  return [...years.values()].sort((a, b) => b.year.localeCompare(a.year)).map((g) => ({
+    ...g, count: g.list.length, containerCount: g.containers.size || g.list.length,
+    list: g.list.sort((a, b) => a.invoice_date.localeCompare(b.invoice_date) || a.created_at.localeCompare(b.created_at)),
+  }))
+}
+
+const describe = (m, seq) => m.type === 'inv'
+  ? [`فاتورة ${seq?.get(m.id) ? '#' + seq.get(m.id) : ''}`.trim(), m.row.container_no && `حاوية ${m.row.container_no}`, m.row.invoice_no && `رقم ${m.row.invoice_no}`, m.row.note].filter(Boolean).join(' — ')
   : ['استلام', m.row.method, m.row.note].filter(Boolean).join(' — ')
 
 // ---------- العرض ----------
 function contView() {
   const s = contStatement()
   const dup = duplicates()
+  const seq = invoiceSeq()
   const tab = state.contTab
   const sub = `<div class="tabs">
     <button class="btn ${tab === 'statement' ? 'on' : ''}" data-act="ctab" data-tab="statement">كشف الحساب</button>
@@ -70,46 +95,47 @@ function contView() {
 
   let body = ''
   if (tab === 'invoices') {
-    const list = state.invoices.filter((i) => dateIn(i.invoice_date))
-      .sort((a, b) => b.invoice_date.localeCompare(a.invoice_date) || b.created_at.localeCompare(a.created_at))
-    body = `<div class="card tablewrap"><table>
-      <thead><tr><th>التاريخ</th><th>الحاوية / الفاتورة</th><th class="num hide-sm">مبلغ الفاتورة</th><th class="num hide-sm">النسبة</th><th class="num">نسبتي</th><th></th></tr></thead>
-      <tbody>${list.map((i) => `<tr>
-        <td>${dt(i.invoice_date)}</td>
-        <td>${dup.has(i.id) ? '<span class="warn" title="مكرّرة">⚠ </span>' : ''}<b>${esc(i.container_no) || '—'}</b>
+    const groups = invoicesByYear(state.invoices.filter((i) => dateIn(i.invoice_date)))
+    const yearCards = groups.map((g) => `<div class="stat"><span class="muted small">سنة ${g.year}</span>
+      <b>${g.containerCount} حاوية</b><span class="small in">نسبتي ${money(g.commission)}</span></div>`).join('')
+    const rows = groups.map((g) => `
+      <tr class="yr"><td colspan="4">${g.year} — ${g.containerCount} حاوية — نسبتي ${money(g.commission)}</td></tr>
+      ${g.list.map((i) => `<tr class="tap" data-act="editInv" data-id="${i.id}">
+        <td><span class="seq">${seq.get(i.id)}</span></td>
+        <td>${dup.has(i.id) ? '<span class="warn" title="مكرّرة">⚠ </span>' : ''}<b dir="ltr">${esc(i.container_no) || '—'}</b>
+          <div class="muted small">${dt(i.invoice_date)}</div>
           ${i.invoice_no ? `<div class="muted small">فاتورة ${esc(i.invoice_no)}</div>` : ''}${i.note ? `<div class="muted small">${esc(i.note)}</div>` : ''}</td>
         <td class="num hide-sm">${num(i.invoice_amount) ? money(i.invoice_amount) : '—'}</td>
-        <td class="num hide-sm">${pct(i.rate)}</td>
-        <td class="num in"><b>${money(i.commission)}</b></td>
-        <td class="num"><button class="btn ghost small" data-act="editInv" data-id="${i.id}" aria-label="تعديل">✎</button></td>
-      </tr>`).join('') || '<tr><td colspan="6" class="empty">ما فيه فواتير في هذه الفترة.</td></tr>'}</tbody>
-      ${list.length ? `<tfoot><tr><td></td><td><b>المجموع (${list.length})</b></td><td class="num hide-sm"><b>${money(s.invTotal)}</b></td><td class="hide-sm"></td><td class="num in"><b>${money(s.due)}</b></td><td></td></tr></tfoot>` : ''}
+        <td class="num in"><b>${money(i.commission)}</b><div class="muted small">${pct(i.rate)}</div></td>
+      </tr>`).join('')}`).join('')
+    body = `${groups.length ? `<div class="years">${yearCards}</div>` : ''}
+    <div class="card tablewrap"><table>
+      <thead><tr><th>#</th><th>الحاوية / التاريخ</th><th class="num hide-sm">مبلغ الفاتورة</th><th class="num">نسبتي</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" class="empty">ما فيه فواتير في هذه الفترة.</td></tr>'}</tbody>
+      ${groups.length ? `<tfoot><tr class="sub"><td></td><td><b>المجموع — ${s.count} فاتورة</b></td><td class="num hide-sm"><b>${money(s.invTotal)}</b></td><td class="num in"><b>${money(s.due)}</b></td></tr></tfoot>` : ''}
     </table></div>`
   } else if (tab === 'receipts') {
     const list = state.receipts.filter((r) => dateIn(r.receipt_date))
       .sort((a, b) => b.receipt_date.localeCompare(a.receipt_date) || b.created_at.localeCompare(a.created_at))
     body = `<div class="card tablewrap"><table>
-      <thead><tr><th>التاريخ</th><th>البيان</th><th class="num">المبلغ</th><th></th></tr></thead>
-      <tbody>${list.map((r) => `<tr>
-        <td>${dt(r.receipt_date)}</td>
-        <td>${esc([r.method, r.note].filter(Boolean).join(' — ')) || '<span class="muted">—</span>'}</td>
+      <thead><tr><th>البيان / التاريخ</th><th class="num">المبلغ</th></tr></thead>
+      <tbody>${list.map((r) => `<tr class="tap" data-act="editRec" data-id="${r.id}">
+        <td>${esc([r.method, r.note].filter(Boolean).join(' — ')) || 'استلام'}<div class="muted small">${dt(r.receipt_date)}</div></td>
         <td class="num out"><b>${money(r.amount)}</b></td>
-        <td class="num"><button class="btn ghost small" data-act="editRec" data-id="${r.id}" aria-label="تعديل">✎</button></td>
-      </tr>`).join('') || '<tr><td colspan="4" class="empty">ما فيه استلامات في هذه الفترة.</td></tr>'}</tbody>
-      ${list.length ? `<tfoot><tr><td></td><td><b>المجموع (${list.length})</b></td><td class="num out"><b>${money(s.paid)}</b></td><td></td></tr></tfoot>` : ''}
+      </tr>`).join('') || '<tr><td colspan="2" class="empty">ما فيه استلامات في هذه الفترة.</td></tr>'}</tbody>
+      ${list.length ? `<tfoot><tr class="sub"><td><b>المجموع (${list.length})</b></td><td class="num out"><b>${money(s.paid)}</b></td></tr></tfoot>` : ''}
     </table></div>`
   } else {
     body = `<div class="card tablewrap"><table>
-      <thead><tr><th>التاريخ</th><th>البيان</th><th class="num">لي (نسبة)</th><th class="num">استلمت</th><th class="num">الباقي</th></tr></thead>
+      <thead><tr><th>البيان / التاريخ</th><th class="num">لي (نسبة)</th><th class="num">استلمت</th><th class="num">الباقي</th></tr></thead>
       <tbody>
-        ${state.from ? `<tr><td></td><td class="muted">رصيد سابق</td><td></td><td></td><td class="num">${money(s.opening)}</td></tr>` : ''}
+        ${state.from ? `<tr class="sub"><td class="muted">رصيد سابق</td><td></td><td></td><td class="num">${money(s.opening)}</td></tr>` : ''}
         ${s.lines.map((m) => `<tr>
-          <td>${dt(m.date)}</td>
-          <td>${dup.has(m.id) ? '<span class="warn">⚠ </span>' : ''}${esc(describe(m))}</td>
+          <td>${dup.has(m.id) ? '<span class="warn">⚠ </span>' : ''}${esc(describe(m, seq))}<div class="muted small">${dt(m.date)}</div></td>
           <td class="num in">${m.due ? money(m.due) : ''}</td>
           <td class="num out">${m.paid ? money(m.paid) : ''}</td>
           <td class="num"><b>${money(m.run)}</b></td>
-        </tr>`).join('') || '<tr><td colspan="5" class="empty">ما فيه حركات بعد. ابدأ بإدخال الفواتير والاستلامات القديمة.</td></tr>'}
+        </tr>`).join('') || '<tr><td colspan="4" class="empty">ما فيه حركات بعد. ابدأ بإدخال الفواتير والاستلامات القديمة.</td></tr>'}
       </tbody>
     </table></div>`
   }
@@ -129,7 +155,7 @@ function contView() {
         <button class="btn primary" data-act="newInv">+ فاتورة حاوية</button>
       </div>
     </div>
-    ${sub}${body}`
+    ${sub}${tab !== 'statement' ? '<p class="muted small" style="margin:0 0 8px">اضغط على أي سطر لتعديله أو حذفه.</p>' : ''}${body}`
 }
 
 // ---------- النوافذ ----------
@@ -335,59 +361,79 @@ function bulkDialog() {
 }
 
 // ---------- التصدير ----------
-function contRows(s) {
-  return s.lines.map((m) => [m.date, describe(m), m.due || '', m.paid || '', m.run])
+const INV_HEAD = ['#', 'التاريخ', 'رقم الحاوية', 'رقم الفاتورة', 'مبلغ الفاتورة', 'النسبة', 'نسبتي', 'ملاحظة']
+
+/** صفوف الفواتير مجمّعة بالسنة مع مجموع لكل سنة ومجموع عام */
+function invoiceExportRows() {
+  const seq = invoiceSeq()
+  const groups = invoicesByYear(state.invoices.filter((i) => dateIn(i.invoice_date))).reverse()
+  const rows = []
+  let amount = 0, commission = 0, count = 0
+  for (const g of groups) {
+    rows.push({ kind: 'group', cells: [`سنة ${g.year} — ${g.containerCount} حاوية`] })
+    for (const i of g.list) rows.push([seq.get(i.id), i.invoice_date, i.container_no, i.invoice_no, num(i.invoice_amount) || '', pct(i.rate), num(i.commission), i.note])
+    rows.push({ kind: 'sub', cells: ['', '', `مجموع ${g.year}`, `${g.count} فاتورة`, g.amount, '', g.commission, ''] })
+    amount += g.amount; commission += g.commission; count += g.count
+  }
+  rows.push({ kind: 'total', cells: ['', '', 'المجموع الكلي', `${count} فاتورة`, amount, '', commission, ''] })
+  return { rows, groups }
+}
+
+function yearRows(groups) {
+  const rows = [...groups].reverse().map((g) => [g.year, g.containerCount, g.amount, g.commission])
+  rows.push({ kind: 'total', cells: ['المجموع', groups.reduce((x, g) => x + g.containerCount, 0), groups.reduce((x, g) => x + g.amount, 0), groups.reduce((x, g) => x + g.commission, 0)] })
+  return rows
+}
+
+function statementRows(s) {
+  const seq = invoiceSeq()
+  const rows = []
+  if (state.from) rows.push({ kind: 'sub', cells: ['', 'رصيد سابق', '', '', s.opening] })
+  for (const m of s.lines) rows.push([m.date, describe(m, seq), m.due || '', m.paid || '', m.run])
+  rows.push({ kind: 'total', cells: ['', 'المجموع', s.due, s.paid, s.closing] })
+  return rows
+}
+
+function receiptRows(s) {
+  const rec = state.receipts.filter((r) => dateIn(r.receipt_date)).sort((a, b) => a.receipt_date.localeCompare(b.receipt_date))
+  return [...rec.map((r, k) => [k + 1, r.receipt_date, num(r.amount), r.method, r.note]),
+    { kind: 'total', cells: ['', 'المجموع', s.paid, `${rec.length} دفعة`, ''] }]
 }
 
 function contXlsx() {
   const s = contStatement()
-  const wb = XLSX.utils.book_new()
-  wb.Workbook = { Views: [{ RTL: true }, { RTL: true }, { RTL: true }] }
-
-  const st = [['كشف حساب نسبة الحاويات'], [periodLabel()], [],
-    ['نسبتي المستحقة', s.due], ['استلمت', s.paid], ['الباقي لي', s.closing], [],
-    ['التاريخ', 'البيان', 'لي (نسبة)', 'استلمت', 'الباقي']]
-  if (state.from) st.push(['', 'رصيد سابق', '', '', s.opening])
-  st.push(...contRows(s), ['', 'المجموع', s.due, s.paid, s.closing])
-  const ws1 = XLSX.utils.aoa_to_sheet(st)
-  ws1['!cols'] = [{ wch: 12 }, { wch: 44 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]
-  XLSX.utils.book_append_sheet(wb, ws1, 'كشف الحساب')
-
-  const inv = state.invoices.filter((i) => dateIn(i.invoice_date)).sort((a, b) => a.invoice_date.localeCompare(b.invoice_date))
-  const ws2 = XLSX.utils.aoa_to_sheet([['التاريخ', 'رقم الحاوية', 'رقم الفاتورة', 'مبلغ الفاتورة', 'النسبة %', 'نسبتي', 'ملاحظة'],
-    ...inv.map((i) => [i.invoice_date, i.container_no, i.invoice_no, num(i.invoice_amount) || '', num(i.rate), num(i.commission), i.note]),
-    ['', 'المجموع', inv.length + ' فاتورة', s.invTotal, '', s.due, '']])
-  ws2['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 9 }, { wch: 12 }, { wch: 30 }]
-  XLSX.utils.book_append_sheet(wb, ws2, 'الفواتير')
-
-  const rec = state.receipts.filter((r) => dateIn(r.receipt_date)).sort((a, b) => a.receipt_date.localeCompare(b.receipt_date))
-  const ws3 = XLSX.utils.aoa_to_sheet([['التاريخ', 'المبلغ', 'الطريقة', 'ملاحظة'],
-    ...rec.map((r) => [r.receipt_date, num(r.amount), r.method, r.note]), ['المجموع', s.paid, '', '']])
-  ws3['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 36 }]
-  XLSX.utils.book_append_sheet(wb, ws3, 'الاستلامات')
-
-  XLSX.writeFile(wb, `نسبة الحاويات ${today()}.xlsx`)
+  const sub = `${periodLabel()} — طُبع ${today()}`
+  const stats = [['نسبتي المستحقة', s.due], ['استلمت', s.paid], ['الباقي لي', s.closing]]
+  const { rows, groups } = invoiceExportRows()
+  xlBook([
+    ['كشف الحساب', xlSheet({ title: 'كشف حساب نسبة الحاويات', subtitle: sub, stats,
+      headers: ['التاريخ', 'البيان', 'لي (نسبة)', 'استلمت', 'الباقي'], rows: statementRows(s),
+      widths: [13, 48, 16, 16, 16], money: [2, 3, 4], colors: { 2: 'green', 3: 'red' } })],
+    ['حسب السنة', xlSheet({ title: 'الحاويات حسب السنة', subtitle: sub,
+      headers: ['السنة', 'عدد الحاويات', 'مبلغ الفواتير', 'نسبتي'], rows: yearRows(groups),
+      widths: [12, 15, 20, 18], money: [2, 3], colors: { 3: 'green' } })],
+    ['الفواتير', xlSheet({ title: 'فواتير الحاويات', subtitle: sub,
+      headers: INV_HEAD, rows, widths: [6, 13, 18, 15, 17, 9, 15, 30], money: [4, 6], colors: { 6: 'green' } })],
+    ['الاستلامات', xlSheet({ title: 'الاستلامات', subtitle: sub,
+      headers: ['#', 'التاريخ', 'المبلغ', 'الطريقة', 'ملاحظة'], rows: receiptRows(s),
+      widths: [6, 13, 17, 12, 40], money: [2], colors: { 2: 'red' } })],
+  ], `نسبة الحاويات ${today()}.xlsx`)
 }
 
 function contPdf() {
   const s = contStatement()
-  const rows = s.lines.map((m) => `<tr><td>${dt(m.date)}</td><td>${esc(describe(m))}</td>
-    <td class="in">${m.due ? money(m.due) : ''}</td><td class="out">${m.paid ? money(m.paid) : ''}</td><td>${money(m.run)}</td></tr>`).join('')
-  $('#print').innerHTML = `<h1>كشف حساب نسبة الحاويات</h1>
-    <div class="meta">${esc(periodLabel())} — طُبع ${dt(today())} — المبالغ بـ${CURRENCY}</div>
-    <section><table><tbody>
-      <tr><td>عدد الفواتير</td><td>${s.count}</td><td>إجمالي الفواتير</td><td>${money(s.invTotal)}</td></tr>
-      <tr><td>نسبتي المستحقة</td><td class="in">${money(s.due)}</td><td>استلمت</td><td class="out">${money(s.paid)}</td></tr>
-      <tr><td><b>الباقي لي</b></td><td colspan="3"><b>${money(s.closing)}</b></td></tr>
-    </tbody></table></section>
-    <section><table><thead><tr><th>التاريخ</th><th>البيان</th><th>لي (نسبة)</th><th>استلمت</th><th>الباقي</th></tr></thead><tbody>
-      ${state.from ? `<tr><td></td><td>رصيد سابق</td><td></td><td></td><td>${money(s.opening)}</td></tr>` : ''}
-      ${rows || '<tr><td colspan="5">لا حركات</td></tr>'}</tbody>
-      <tfoot><tr><td></td><td>المجموع</td><td>${money(s.due)}</td><td>${money(s.paid)}</td><td>${money(s.closing)}</td></tr></tfoot></table></section>`
-  const title = document.title
-  document.title = 'نسبة الحاويات ' + today()
-  window.print()
-  document.title = title
+  const { rows, groups } = invoiceExportRows()
+  printDoc({
+    title: 'كشف حساب نسبة الحاويات', meta: periodLabel(),
+    stats: [['عدد الفواتير', String(s.count)], ['إجمالي الفواتير', money(s.invTotal)],
+      ['نسبتي المستحقة', money(s.due), 'g'], ['استلمت', money(s.paid), 'r'], ['الباقي لي', money(s.closing)]],
+    sections: [
+      { title: 'حسب السنة', headers: ['السنة', 'عدد الحاويات', 'مبلغ الفواتير', 'نسبتي'], rows: yearRows(groups), money: [2, 3], colors: { 3: 'green' } },
+      { title: 'كشف الحساب', headers: ['التاريخ', 'البيان', 'لي (نسبة)', 'استلمت', 'الباقي'], rows: statementRows(s), money: [2, 3, 4], colors: { 2: 'green', 3: 'red' }, dates: [0] },
+      { title: 'الفواتير', headers: INV_HEAD.slice(0, 7), rows: rows.map((r) => (Array.isArray(r) ? r.slice(0, 7) : { ...r, cells: r.cells.slice(0, 7) })), money: [4, 6], colors: { 6: 'green' }, dates: [1] },
+      { title: 'الاستلامات', headers: ['#', 'التاريخ', 'المبلغ', 'الطريقة', 'ملاحظة'], rows: receiptRows(s), money: [2], colors: { 2: 'red' }, dates: [1] },
+    ],
+  })
 }
 
 // ---------- النقرات ----------
