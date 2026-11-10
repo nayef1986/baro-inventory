@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#1e40af">
 <title>حساباتي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,89 +13,105 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
   :root{
-    --bg:#f5f6f4; --card:#fff; --ink:#1c2321; --muted:#68736f; --line:#e3e6e3;
-    --brand:#0f766e; --brand-ink:#fff; --in:#15803d; --out:#b91c1c; --warn:#b45309;
-    --soft:#ecf5f3; --radius:14px;
+    --bg:#f1f5f9; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --brand:#1e40af; --brand-ink:#fff; --soft:#dbeafe; --in:#15803d; --out:#b91c1c; --warn:#b45309;
+    --radius:16px;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#121615; --card:#1b2120; --ink:#e8eeec; --muted:#9aa6a2; --line:#2b3331;
-      --brand:#2dd4bf; --brand-ink:#06201d; --in:#4ade80; --out:#f87171; --warn:#fbbf24; --soft:#16302c;
+      --bg:#0b1120; --card:#151d2e; --ink:#e2e8f0; --muted:#94a3b8; --line:#26324a;
+      --brand:#60a5fa; --brand-ink:#0b1120; --soft:#1e2d4d; --in:#4ade80; --out:#f87171; --warn:#fbbf24;
     }
   }
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif;font-size:19px;line-height:1.55}
   button,input,select,textarea{font:inherit;color:inherit}
-  .wrap{max-width:880px;margin:0 auto;padding:16px 16px 96px}
-  header.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px}
-  header.top h1{font-size:28px;margin:0;font-weight:800}
+  .wrap{max-width:820px;margin:0 auto;padding:16px 16px 80px}
   .muted{color:var(--muted)} .small{font-size:16px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+  .in{color:var(--in)} .out{color:var(--out)} .warn{color:var(--warn)}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .between{justify-content:space-between}
-  .grow{flex:1 1 auto;min-width:0}
-  .btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 16px;cursor:pointer;white-space:nowrap}
+
+  /* الرأس */
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px}
+  header.top h1{font-size:27px;margin:0;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pill{display:inline-block;background:var(--soft);color:var(--brand);border-radius:99px;padding:2px 12px;font-size:16px;font-weight:800}
+
+  /* المربعات */
+  .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:14px}
+  .tiles.three{grid-template-columns:repeat(3,1fr)}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:4px;text-align:right;min-height:118px}
+  button.tile{cursor:pointer}
+  button.tile:hover{border-color:var(--brand)}
+  .tile .lbl{font-size:16px;color:var(--muted)}
+  .tile .big{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.25}
+  .tile .foot{margin-top:auto;font-size:15px;color:var(--muted)}
+  .tile.hero{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+  .tile.hero .lbl,.tile.hero .foot{color:inherit;opacity:.85}
+  .tile.ledger{min-height:170px}
+  .tile.ledger .name{font-size:21px;font-weight:800}
+  .tile.act{align-items:center;justify-content:center;text-align:center;min-height:96px;font-weight:700;font-size:18px}
+  .tile.act .ic{font-size:28px;line-height:1}
+  .tile.act.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+  .span2{grid-column:1/-1}
+
+  /* البطاقات والقوائم */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px}
+  .period{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+  .period>*{min-width:0} .period input{min-width:0}
+  .seg-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:5px;margin-bottom:12px}
+  .seg-tabs button{border:0;background:transparent;border-radius:10px;padding:10px 4px;cursor:pointer;font-weight:700;color:var(--muted)}
+  .seg-tabs button.on{background:var(--brand);color:var(--brand-ink)}
+  .list{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+  .item{display:flex;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:0}
+  .item.tap{cursor:pointer} .item.tap:hover{background:var(--soft)}
+  .item .t{font-weight:700;overflow-wrap:anywhere}
+  .item .s{font-size:16px;color:var(--muted)}
+  .item .v{text-align:left;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .item .v b{font-size:21px}
+  .item.head{background:var(--soft);color:var(--brand);font-weight:800;padding:10px 16px}
+  .item.sum{background:var(--soft);font-weight:800}
+  .seq{display:inline-block;min-width:2em;text-align:center;background:var(--soft);color:var(--brand);border-radius:8px;padding:0 6px;margin-left:6px;font-weight:800;font-size:16px}
+  .empty{text-align:center;padding:28px 12px;color:var(--muted)}
+  .note{font-size:16px;color:var(--muted);margin:0 4px 10px}
+
+  /* الأزرار والحقول */
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:10px 16px;cursor:pointer;white-space:nowrap}
   .btn:hover{border-color:var(--brand)}
   .btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink);font-weight:700}
   .btn.danger{color:var(--out)}
   .btn.ghost{border-color:transparent;background:transparent}
   .btn:disabled{opacity:.5;cursor:default}
-  input,select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 14px}
-  input:focus,select:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  input,select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 14px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:-1px}
   label{display:block;font-size:16px;color:var(--muted);margin-bottom:4px}
   .field{margin-bottom:12px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
-  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
-  .stat b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
-  .in{color:var(--in)} .out{color:var(--out)} .warn{color:var(--warn)}
-  .acc{cursor:pointer}
-  .acc:hover{border-color:var(--brand)}
-  .acc h3{margin:0;font-size:22px}
-  .bal{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
-  .bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:8px}
-  .bar>i{display:block;height:100%;background:var(--brand)}
-  .pill{display:inline-block;background:var(--soft);color:var(--brand);border-radius:99px;padding:3px 12px;font-size:16px;font-weight:700}
-  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-  th,td{text-align:right;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{font-size:16px;color:var(--muted);font-weight:700}
-  td.num,th.num{text-align:left;white-space:nowrap}
-  .tablewrap{overflow-x:auto}
-  .empty{text-align:center;padding:28px 8px;color:var(--muted)}
   .err{color:var(--out);font-size:17px;margin-top:8px}
-  .tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
-  .tabs .btn.on{background:var(--soft);border-color:var(--brand);color:var(--brand);font-weight:700}
-  dialog{border:none;border-radius:var(--radius);padding:0;width:min(520px,calc(100vw - 32px));background:var(--card);color:var(--ink)}
+  textarea{resize:vertical}
+  bdi{white-space:nowrap}
+
+  dialog{border:none;border-radius:var(--radius);padding:0;width:min(520px,calc(100vw - 24px));background:var(--card);color:var(--ink)}
   dialog::backdrop{background:rgba(0,0,0,.45)}
   dialog form{padding:18px}
   dialog h2{margin:0 0 14px;font-size:23px}
-  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .seg label{flex:1;margin:0;text-align:center;padding:8px;cursor:pointer;color:var(--ink);font-size:18px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .seg label{flex:1;margin:0;text-align:center;padding:9px;cursor:pointer;color:var(--ink);font-size:18px}
   .seg input{display:none}
-  .seg input:checked+span{font-weight:800}
-  .seg label:has(input[value=in]:checked){background:color-mix(in srgb,var(--in) 15%,transparent)}
-  .seg label:has(input[value=out]:checked){background:color-mix(in srgb,var(--out) 15%,transparent)}
-  .seg label:has(input:checked){background:var(--soft)}
-  .seg label:has(input[value=out]:checked){background:color-mix(in srgb,var(--out) 15%,transparent)}
-  .seg label:has(input[value=in]:checked){background:color-mix(in srgb,var(--in) 15%,transparent)}
-  textarea{resize:vertical}
-  td bdi{white-space:nowrap}
+  .seg label:has(input:checked){background:var(--soft);font-weight:800;color:var(--brand)}
   .center{min-height:80vh;display:grid;place-items:center}
-  .login{width:min(380px,100%)}
+  .login{width:min(400px,100%)}
   #print{display:none}
   @media (max-width:560px){
-    .stats{grid-template-columns:1fr 1fr}
-    .stats .stat:last-child{grid-column:1/-1}
+    .tiles.three{grid-template-columns:1fr 1fr}
+    .tiles.three .tile:last-child{grid-column:1/-1}
     .grid2{grid-template-columns:1fr}
-    .hide-sm{display:none}
+    .tile .big{font-size:23px}
+    .period{grid-template-columns:1fr 1fr}
+    .period .btn{grid-column:1/-1}
   }
-  tr.tap{cursor:pointer} tr.tap:hover td{background:var(--soft)}
-  tr.yr td{background:var(--soft);color:var(--brand);font-weight:800;font-size:18px}
-  tr.sub td{font-weight:700;border-bottom:2px solid var(--line)}
-  .seq{display:inline-block;min-width:2.2em;text-align:center;background:var(--soft);color:var(--brand);border-radius:8px;padding:0 6px;font-weight:800}
-  .years{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px}
-  .years .stat b{font-size:22px}
+
   /* الطباعة / PDF — بنفس شكل تقارير مستودع باروو */
   @media print{
     @page{size:A4;margin:12mm}
@@ -134,15 +150,15 @@
 <dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
 
 <script src="export.js"></script>
-<script src="containers.js"></script>
+<script src="ledger.js"></script>
 <script>
 // ============================================================
-// حساباتي — حسابات شخصية: حسابات، نسب، حركات وارد/صادر،
-// وتصدير Excel وطباعة PDF.
+// حساباتي — نسب العمولة: الحاويات (2.5%) ومبيعات الفروع (0.5%)
 //
-// القاعدة: مشروع Supabase نفسه الذي يستخدمه COCO CAKE، جدولا
-// pa_accounts و pa_entries (supabase/migrations/0009). كل صف مقفول
-// على صاحبه، والدخول بالبريد وكلمة المرور.
+// هذا الملف: الدخول، تحميل البيانات، الأدوات المشتركة والرسم.
+// منطق كل دفتر وكشفه وتصديره في ledger.js، والتنسيق في export.js.
+// القاعدة: جدولا pa_container_invoices و pa_commission_receipts
+// (migrations 0010 و0011) — كل صف مقفول على صاحبه.
 // ============================================================
 
 const SUPABASE_URL = 'https://tdlpikekpnxuzyfcvqzo.supabase.co'
@@ -153,16 +169,14 @@ const db = supabase.createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSessio
 
 const state = {
   user: null,
-  accounts: [],
-  entries: [],
-  invoices: [],      // فواتير الحاويات
-  receipts: [],      // استلامات النسبة
-  view: 'cont',      // cont | home | account | split
-  contTab: 'statement', // statement | invoices | receipts
-  accountId: null,
+  invoices: [],      // بنود العمولة (فواتير حاويات / مبيعات فروع)
+  receipts: [],      // الاستلامات
+  ledger: null,      // null = الرئيسية | 'containers' | 'branches'
+  tab: 'statement',  // statement | items | receipts
   from: '', to: '',
   loading: true,
   error: '',
+  recovery: false,
 }
 
 // ---------- أدوات ----------
@@ -170,37 +184,18 @@ const $ = (s, r = document) => r.querySelector(s)
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const num = (v) => Number(v) || 0
 const money = (v) => num(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const pct = (v) => num(v).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%'
+const pct = (v) => num(v).toLocaleString('en-US', { maximumFractionDigits: 3 }) + '%'
 const dt = (d) => `<bdi dir="ltr">${esc(d)}</bdi>`
 const today = () => new Date().toISOString().slice(0, 10)
-const signed = (e) => (e.kind === 'in' ? 1 : -1) * num(e.amount)
 
-function inRange(e) {
-  if (state.from && e.entry_date < state.from) return false
-  if (state.to && e.entry_date > state.to) return false
+function dateIn(d) {
+  if (state.from && d < state.from) return false
+  if (state.to && d > state.to) return false
   return true
-}
-function accountEntries(id) {
-  return state.entries.filter((e) => e.account_id === id)
-    .sort((a, b) => a.entry_date.localeCompare(b.entry_date) || a.created_at.localeCompare(b.created_at))
-}
-function totals(list) {
-  let inn = 0, out = 0
-  for (const e of list) e.kind === 'in' ? (inn += num(e.amount)) : (out += num(e.amount))
-  return { in: inn, out, balance: inn - out }
-}
-/** كشف حساب للفترة: رصيد افتتاحي (ما قبل «من») + حركات الفترة برصيد جارٍ */
-function statement(id) {
-  const all = accountEntries(id)
-  const opening = state.from ? all.filter((e) => e.entry_date < state.from).reduce((s, e) => s + signed(e), 0) : 0
-  let run = opening
-  const lines = all.filter(inRange).map((e) => ({ ...e, run: (run += signed(e)) }))
-  const t = totals(lines)
-  return { opening, lines, ...t, closing: opening + t.balance }
 }
 function periodLabel() {
   // ⁦…⁩ يعزل التاريخ اتجاهياً فلا ينقلب داخل النص العربي (في PDF وExcel)
-  const d = (v) => `\u2066${v}\u2069`
+  const d = (v) => `⁦${v}⁩`
   if (state.from && state.to) return `من ${d(state.from)} إلى ${d(state.to)}`
   if (state.from) return `من ${d(state.from)}`
   if (state.to) return `حتى ${d(state.to)}`
@@ -210,161 +205,53 @@ function periodLabel() {
 // ---------- البيانات ----------
 async function load() {
   state.loading = true; render()
-  const [a, e, ci, cr] = await Promise.all([
-    db.from('pa_accounts').select('*').order('sort').order('created_at'),
-    db.from('pa_entries').select('*'),
+  const [ci, cr] = await Promise.all([
     db.from('pa_container_invoices').select('*'),
     db.from('pa_commission_receipts').select('*'),
   ])
   state.loading = false
-  const bad = [a, e, ci, cr].find((r) => r.error)
+  const bad = [ci, cr].find((r) => r.error)
   if (bad) { state.error = bad.error.message; return render() }
   state.error = ''
-  state.accounts = a.data
-  state.entries = e.data
-  state.invoices = ci.data
-  state.receipts = cr.data
+  // صفوف ما قبل 0011 بلا عمود ledger: كانت كلها للحاويات
+  state.invoices = ci.data.map((r) => ({ ...r, ledger: r.ledger || 'containers' }))
+  state.receipts = cr.data.map((r) => ({ ...r, ledger: r.ledger || 'containers' }))
   render()
 }
 async function run(promise) {
   const { error } = await promise
-  if (error) { alert('تعذّر الحفظ: ' + error.message); return false }
+  if (error) {
+    alert(/ledger/.test(error.message)
+      ? 'قاعدة البيانات تحتاج تحديث بسيط (عمود ledger). شغّل ملف 0011 في Supabase ثم جرّب مرة ثانية.'
+      : 'تعذّر الحفظ: ' + error.message)
+    return false
+  }
   await load()
   return true
 }
 
-// ---------- العرض ----------
+// ---------- الرسم ----------
 function render() {
   const app = $('#app')
   if (state.recovery) return (app.innerHTML = recoveryView())
   if (!state.user) return (app.innerHTML = loginView())
-  const acc = state.accounts.find((a) => a.id === state.accountId)
-  if (state.view === 'account' && !acc) state.view = 'home'
+  const L = state.ledger && LEDGERS[state.ledger]
   app.innerHTML = `<div class="wrap">
     <header class="top">
-      <h1>${state.view === 'account' ? `<button class="btn ghost" data-act="home" aria-label="رجوع">→</button> ${esc(acc.name)}` : 'حساباتي'}</h1>
-      <div class="row">
-        <button class="btn" data-act="xlsx">Excel</button>
-        <button class="btn" data-act="pdf">PDF</button>
-        ${state.view === 'account' ? '' : '<button class="btn ghost small" data-act="logout">خروج</button>'}
-      </div>
+      <h1>${L ? `<button class="btn ghost" data-act="home" aria-label="رجوع">→</button>${esc(L.title)} <span class="pill">${pct(L.rate)}</span>` : 'حساباتي'}</h1>
+      ${L ? '' : '<button class="btn ghost small" data-act="logout">خروج</button>'}
     </header>
     ${state.error ? `<div class="card err">${esc(state.error)}</div>` : ''}
-    ${state.loading && !state.accounts.length && !state.invoices.length ? '<div class="empty">جاري التحميل…</div>'
-      : state.view === 'account' ? accountView(acc) : state.view === 'cont' ? mainTabs() + contView() : homeView()}
+    ${state.loading && !state.invoices.length && !state.receipts.length ? '<div class="empty">جاري التحميل…</div>' : L ? ledgerView(state.ledger) : homeView()}
   </div>`
 }
 
 function periodBar() {
-  return `<div class="card row">
-    <div class="grow"><label>من تاريخ</label><input type="date" data-period="from" value="${state.from}"></div>
-    <div class="grow"><label>إلى تاريخ</label><input type="date" data-period="to" value="${state.to}"></div>
-    ${state.from || state.to ? '<button class="btn ghost" data-act="clearPeriod" style="align-self:flex-end">مسح</button>' : ''}
+  return `<div class="card period">
+    <div><label>من تاريخ</label><input type="date" data-period="from" value="${state.from}"></div>
+    <div><label>إلى تاريخ</label><input type="date" data-period="to" value="${state.to}"></div>
+    <button class="btn ${state.from || state.to ? '' : 'ghost'}" data-act="clearPeriod" ${state.from || state.to ? '' : 'disabled'}>الكل</button>
   </div>`
-}
-
-function mainTabs() {
-  return `<div class="tabs">
-    <button class="btn ${state.view === 'cont' ? 'on' : ''}" data-act="cont">الحاويات ٢٫٥٪</button>
-    <button class="btn ${state.view === 'home' ? 'on' : ''}" data-act="home">الحسابات</button>
-    <button class="btn ${state.view === 'split' ? 'on' : ''}" data-act="split">توزيع بالنسب</button>
-  </div>`
-}
-
-function homeView() {
-  const tabs = mainTabs()
-  if (state.view === 'split') return tabs + splitView()
-
-  const all = state.entries.filter(inRange)
-  const t = totals(all)
-  const pctSum = state.accounts.reduce((s, a) => s + num(a.percent), 0)
-  const cards = state.accounts.map((a) => {
-    const s = statement(a.id)
-    return `<div class="card acc" data-open="${a.id}">
-      <div class="row between">
-        <div class="grow"><h3>${esc(a.name)}</h3>${a.note ? `<div class="muted small">${esc(a.note)}</div>` : ''}</div>
-        <div style="text-align:left">
-          <div class="bal ${s.closing < 0 ? 'out' : ''}">${money(s.closing)}</div>
-          <span class="pill">${pct(a.percent)}</span>
-        </div>
-      </div>
-      <div class="row between small muted" style="margin-top:6px">
-        <span>وارد <b class="in">${money(s.in)}</b></span>
-        <span>صادر <b class="out">${money(s.out)}</b></span>
-        <span>${s.lines.length} حركة</span>
-      </div>
-      <div class="bar"><i style="width:${Math.min(100, num(a.percent))}%"></i></div>
-    </div>`
-  }).join('')
-
-  return tabs + `
-    <div class="stats">
-      <div class="stat"><span class="muted small">إجمالي الوارد</span><b class="in">${money(t.in)}</b></div>
-      <div class="stat"><span class="muted small">إجمالي الصادر</span><b class="out">${money(t.out)}</b></div>
-      <div class="stat"><span class="muted small">الصافي</span><b>${money(t.balance)}</b></div>
-    </div>
-    ${periodBar()}
-    <div class="row between" style="margin:4px 0 10px">
-      <span class="small ${pctSum === 100 ? 'muted' : 'warn'}">مجموع النسب: <b>${pct(pctSum)}</b>${pctSum === 100 || !state.accounts.length ? '' : ' — المفروض 100%'}</span>
-      <button class="btn primary" data-act="newAccount">+ حساب جديد</button>
-    </div>
-    ${cards || '<div class="card empty">ما فيه حسابات بعد. اضغط «حساب جديد» وابدأ.</div>'}`
-}
-
-function accountView(a) {
-  const s = statement(a.id)
-  const rows = s.lines.map((e) => `<tr>
-      <td>${dt(e.entry_date)}</td>
-      <td class="grow">${esc(e.description) || '<span class="muted">—</span>'}</td>
-      <td class="num in">${e.kind === 'in' ? money(e.amount) : ''}</td>
-      <td class="num out">${e.kind === 'out' ? money(e.amount) : ''}</td>
-      <td class="num hide-sm">${money(e.run)}</td>
-      <td class="num"><button class="btn ghost small" data-edit="${e.id}" aria-label="تعديل">✎</button></td>
-    </tr>`).join('')
-  return `
-    <div class="stats">
-      <div class="stat"><span class="muted small">وارد</span><b class="in">${money(s.in)}</b></div>
-      <div class="stat"><span class="muted small">صادر</span><b class="out">${money(s.out)}</b></div>
-      <div class="stat"><span class="muted small">الرصيد</span><b>${money(s.closing)}</b></div>
-    </div>
-    ${periodBar()}
-    <div class="row between" style="margin:4px 0 10px">
-      <div class="row"><span class="pill">النسبة ${pct(a.percent)}</span>
-        <button class="btn ghost small" data-act="editAccount">تعديل الحساب</button></div>
-      <button class="btn primary" data-act="newEntry">+ حركة</button>
-    </div>
-    <div class="card tablewrap">
-      <table>
-        <thead><tr><th>التاريخ</th><th>البيان</th><th class="num">وارد</th><th class="num">صادر</th><th class="num hide-sm">الرصيد</th><th></th></tr></thead>
-        <tbody>
-          ${state.from ? `<tr><td></td><td class="muted">رصيد افتتاحي</td><td></td><td></td><td class="num hide-sm">${money(s.opening)}</td><td></td></tr>` : ''}
-          ${rows || '<tr><td colspan="6" class="empty">ما فيه حركات في هذه الفترة.</td></tr>'}
-        </tbody>
-      </table>
-    </div>`
-}
-
-function splitView() {
-  const amount = num(state.splitAmount)
-  const pctSum = state.accounts.reduce((s, a) => s + num(a.percent), 0)
-  const rows = state.accounts.map((a) => `<tr>
-      <td>${esc(a.name)}</td><td class="num">${pct(a.percent)}</td>
-      <td class="num"><b>${money(amount * num(a.percent) / 100)}</b></td></tr>`).join('')
-  return `<div class="card">
-      <div class="field"><label>المبلغ المراد توزيعه (مثلاً الراتب)</label>
-        <input type="number" inputmode="decimal" min="0" step="0.01" data-split value="${state.splitAmount ?? ''}" placeholder="0.00"></div>
-      <div class="field"><label>تاريخ القيد</label><input type="date" data-split-date value="${state.splitDate || today()}"></div>
-      <div class="field"><label>البيان</label><input data-split-desc value="${esc(state.splitDesc ?? 'توزيع دخل')}"></div>
-    </div>
-    <div class="card tablewrap"><table>
-      <thead><tr><th>الحساب</th><th class="num">النسبة</th><th class="num">نصيبه</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="3" class="empty">أضف حسابات بنسب أولاً.</td></tr>'}</tbody>
-      <tfoot><tr><td><b>المجموع</b></td><td class="num ${pctSum === 100 ? '' : 'warn'}"><b>${pct(pctSum)}</b></td><td class="num"><b>${money(amount * pctSum / 100)}</b></td></tr></tfoot>
-    </table></div>
-    <div class="row between">
-      <span class="small muted">«سجّل التوزيع» يضيف حركة وارد في كل حساب بنصيبه.</span>
-      <button class="btn primary" data-act="applySplit" ${amount > 0 && state.accounts.some((a) => num(a.percent) > 0) ? '' : 'disabled'}>سجّل التوزيع</button>
-    </div>`
 }
 
 function loginView() {
@@ -374,7 +261,7 @@ function loginView() {
     <form id="loginForm">
       <div class="field"><label>البريد</label><input type="email" name="email" required autocomplete="email"></div>
       <div class="field"><label>كلمة المرور</label><input type="password" name="password" required minlength="6" autocomplete="current-password"></div>
-      <div class="row"><button class="btn primary grow" name="mode" value="in">دخول</button>
+      <div class="row"><button class="btn primary" style="flex:1" name="mode" value="in">دخول</button>
         <button class="btn" name="mode" value="up">حساب جديد</button></div>
       <div style="text-align:center;margin-top:10px"><button class="btn ghost small" name="mode" value="forgot" formnovalidate>نسيت كلمة المرور؟</button></div>
       <div class="err" id="loginErr">${esc(state.error)}</div>
@@ -409,168 +296,24 @@ function openDialog(html, onSubmit) {
     if (ok !== false) dlg.close()
   }
   dlg.showModal()
-  form.querySelector('input:not([type=hidden]):not([type=radio])')?.focus()
-}
-
-function accountDialog(a) {
-  openDialog(`<h2>${a ? 'تعديل الحساب' : 'حساب جديد'}</h2>
-    <div class="field"><label>اسم الحساب</label><input name="name" required value="${esc(a?.name)}" placeholder="مثلاً: مصروف البيت"></div>
-    <div class="field"><label>النسبة من الدخل %</label><input name="percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" value="${a ? num(a.percent) : ''}" placeholder="0"></div>
-    <div class="field"><label>ملاحظة (اختياري)</label><input name="note" value="${esc(a?.note)}"></div>
-    <div class="row between">
-      ${a ? '<button class="btn danger" value="delete" formnovalidate>حذف</button>' : '<span></span>'}
-      <div class="row"><button class="btn" value="cancel" formnovalidate>إلغاء</button><button class="btn primary" value="save">حفظ</button></div>
-    </div>`, async (f, action) => {
-    if (action === 'delete') {
-      if (!confirm(`حذف «${a.name}» وكل حركاته؟ ما يمكن التراجع.`)) return false
-      state.view = 'home'
-      return run(db.from('pa_accounts').delete().eq('id', a.id))
-    }
-    const row = { name: f.get('name').trim(), percent: num(f.get('percent')), note: f.get('note').trim() || null }
-    return a ? run(db.from('pa_accounts').update(row).eq('id', a.id))
-             : run(db.from('pa_accounts').insert({ ...row, sort: state.accounts.length }))
-  })
-}
-
-function entryDialog(e) {
-  const kind = e?.kind || 'out'
-  openDialog(`<h2>${e ? 'تعديل حركة' : 'حركة جديدة'}</h2>
-    <div class="field seg">
-      <label><input type="radio" name="kind" value="in" ${kind === 'in' ? 'checked' : ''}><span>وارد (+)</span></label>
-      <label><input type="radio" name="kind" value="out" ${kind === 'out' ? 'checked' : ''}><span>صادر (−)</span></label>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>المبلغ</label><input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${e ? num(e.amount) : ''}"></div>
-      <div class="field"><label>التاريخ</label><input name="entry_date" type="date" required value="${e?.entry_date || today()}"></div>
-    </div>
-    <div class="field"><label>البيان</label><input name="description" value="${esc(e?.description)}" placeholder="وش الحركة؟"></div>
-    <div class="row between">
-      ${e ? '<button class="btn danger" value="delete" formnovalidate>حذف</button>' : '<span></span>'}
-      <div class="row"><button class="btn" value="cancel" formnovalidate>إلغاء</button><button class="btn primary" value="save">حفظ</button></div>
-    </div>`, async (f, action) => {
-    if (action === 'delete') {
-      if (!confirm('حذف هذه الحركة؟')) return false
-      return run(db.from('pa_entries').delete().eq('id', e.id))
-    }
-    const row = { kind: f.get('kind'), amount: num(f.get('amount')), entry_date: f.get('entry_date'), description: f.get('description').trim() }
-    return e ? run(db.from('pa_entries').update(row).eq('id', e.id))
-             : run(db.from('pa_entries').insert({ ...row, account_id: state.accountId }))
-  })
-}
-
-// ---------- التصدير ----------
-function exportTargets() {
-  return state.view === 'account' ? state.accounts.filter((a) => a.id === state.accountId) : state.accounts
-}
-
-/** صفوف كشف حساب واحد: رصيد افتتاحي + الحركات + المجموع */
-function accountRows(a) {
-  const s = statement(a.id)
-  const rows = []
-  if (state.from) rows.push({ kind: 'sub', cells: ['', '', 'رصيد افتتاحي', '', '', s.opening] })
-  s.lines.forEach((e, i) => rows.push([i + 1, e.entry_date, e.description, e.kind === 'in' ? num(e.amount) : '', e.kind === 'out' ? num(e.amount) : '', e.run]))
-  rows.push({ kind: 'total', cells: ['', '', 'المجموع', s.in, s.out, s.closing] })
-  return { s, rows }
-}
-const ACC_HEAD = ['#', 'التاريخ', 'البيان', 'وارد', 'صادر', 'الرصيد']
-const ACC_COLORS = { 3: 'green', 4: 'red' }
-
-function summaryRows(targets) {
-  let ti = 0, to = 0, tb = 0
-  const rows = targets.map((a) => { const s = statement(a.id); ti += s.in; to += s.out; tb += s.closing
-    return [a.name, pct(a.percent), s.in, s.out, s.closing] })
-  rows.push({ kind: 'total', cells: ['المجموع', pct(targets.reduce((x, a) => x + num(a.percent), 0)), ti, to, tb] })
-  return { rows, ti, to, tb }
-}
-
-function exportXlsx() {
-  if (!state.accounts.length) return alert('ما فيه حسابات للتصدير.')
-  const targets = exportTargets()
-  const sheets = []
-  const sub = `${periodLabel()} — طُبع ${today()}`
-  if (targets.length > 1) {
-    const sm = summaryRows(targets)
-    sheets.push(['الملخص', xlSheet({
-      title: 'ملخص الحسابات', subtitle: sub,
-      stats: [['إجمالي الوارد', sm.ti], ['إجمالي الصادر', sm.to], ['الصافي', sm.tb]],
-      headers: ['الحساب', 'النسبة', 'وارد', 'صادر', 'الرصيد'], rows: sm.rows,
-      widths: [26, 10, 16, 16, 16], money: [2, 3, 4], colors: { 2: 'green', 3: 'red' },
-    })])
-  }
-  for (const a of targets) {
-    const { s, rows } = accountRows(a)
-    sheets.push([a.name, xlSheet({
-      title: `كشف حساب: ${a.name}`, subtitle: `${sub} — النسبة ${pct(a.percent)}`,
-      stats: [['وارد', s.in], ['صادر', s.out], ['الرصيد', s.closing]],
-      headers: ACC_HEAD, rows, widths: [6, 13, 40, 15, 15, 15], money: [3, 4, 5], colors: ACC_COLORS,
-    })])
-  }
-  xlBook(sheets, `${targets.length === 1 ? targets[0].name : 'حساباتي'} ${today()}.xlsx`)
-}
-
-function exportPdf() {
-  if (!state.accounts.length) return alert('ما فيه حسابات للطباعة.')
-  const targets = exportTargets()
-  const sections = []
-  let stats
-  if (targets.length > 1) {
-    const sm = summaryRows(targets)
-    stats = [['إجمالي الوارد', money(sm.ti), 'g'], ['إجمالي الصادر', money(sm.to), 'r'], ['الصافي', money(sm.tb)], ['الحسابات', String(targets.length)]]
-    sections.push({ title: 'الملخص', headers: ['الحساب', 'النسبة', 'وارد', 'صادر', 'الرصيد'], rows: sm.rows, money: [2, 3, 4], colors: { 2: 'green', 3: 'red' } })
-  }
-  for (const a of targets) {
-    const { s, rows } = accountRows(a)
-    if (targets.length === 1) stats = [['وارد', money(s.in), 'g'], ['صادر', money(s.out), 'r'], ['الرصيد', money(s.closing)], ['النسبة', pct(a.percent)]]
-    sections.push({ title: targets.length > 1 ? `${a.name} — ${pct(a.percent)}` : '', headers: ACC_HEAD, rows, money: [3, 4, 5], colors: ACC_COLORS, dates: [1] })
-  }
-  printDoc({ title: targets.length === 1 ? 'كشف حساب: ' + targets[0].name : 'حساباتي', meta: periodLabel(), stats, sections })
+  form.querySelector('input:not([type=hidden]):not([type=radio]):not([type=file])')?.focus()
 }
 
 // ---------- الأحداث ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-act],[data-open],[data-edit]')
-  if (!t) return
-  if (contClick(t)) return
-  if (t.dataset.open) { state.view = 'account'; state.accountId = t.dataset.open; return render() }
-  if (t.dataset.edit) return entryDialog(state.entries.find((e) => e.id === t.dataset.edit))
-  const act = t.dataset.act
-  const acc = state.accounts.find((a) => a.id === state.accountId)
-  switch (act) {
-    case 'home': state.view = 'home'; return render()
-    case 'split': state.view = 'split'; return render()
-    case 'newAccount': return accountDialog(null)
-    case 'editAccount': return accountDialog(acc)
-    case 'newEntry': return entryDialog(null)
+  const t = ev.target.closest('[data-act]')
+  if (!t || t.disabled) return
+  switch (t.dataset.act) {
+    case 'home': state.ledger = null; return render()
     case 'clearPeriod': state.from = state.to = ''; return render()
-    case 'xlsx': return state.view === 'cont' ? contXlsx() : exportXlsx()
-    case 'pdf': return state.view === 'cont' ? contPdf() : exportPdf()
     case 'logout': await db.auth.signOut(); return
-    case 'applySplit': {
-      const amount = num(state.splitAmount)
-      const date = state.splitDate || today(), desc = (state.splitDesc ?? 'توزيع دخل').trim()
-      const rows = state.accounts.filter((a) => num(a.percent) > 0).map((a) => ({
-        account_id: a.id, kind: 'in', entry_date: date, description: desc,
-        amount: Math.round(amount * num(a.percent)) / 100,
-      })).filter((r) => r.amount > 0)
-      if (!confirm(`تسجيل ${money(amount)} موزّعة على ${rows.length} حساب؟`)) return
-      t.disabled = true
-      if (await run(db.from('pa_entries').insert(rows))) { state.splitAmount = ''; state.view = 'home'; render() }
-    }
+    default: ledgerClick(t)
   }
 })
 
 document.addEventListener('change', (ev) => {
   const p = ev.target.dataset.period
   if (p) { state[p] = ev.target.value; render() }
-})
-document.addEventListener('input', (ev) => {
-  const el = ev.target
-  if (el.hasAttribute('data-split')) {
-    state.splitAmount = el.value
-    // تحديث الجدول بلا فقد التركيز
-    const pos = el.selectionStart; render(); const n = $('[data-split]'); n.focus(); try { n.setSelectionRange(pos, pos) } catch {}
-  } else if (el.hasAttribute('data-split-date')) state.splitDate = el.value
-  else if (el.hasAttribute('data-split-desc')) state.splitDesc = el.value
 })
 
 document.addEventListener('submit', async (ev) => {
@@ -590,7 +333,7 @@ document.addEventListener('submit', async (ev) => {
   ev.preventDefault()
   const f = new FormData(ev.target), mode = ev.submitter?.value
   const creds = { email: f.get('email').trim(), password: f.get('password') }
-  const err = $('#loginErr'); err.textContent = ''
+  const err = $('#loginErr'); err.textContent = ''; err.style.color = ''
   if (mode === 'forgot') {
     if (!creds.email) return (err.textContent = 'اكتب بريدك أولاً، ثم اضغط «نسيت كلمة المرور».')
     ev.submitter.disabled = true
@@ -600,7 +343,6 @@ document.addEventListener('submit', async (ev) => {
     err.textContent = error ? error.message : 'أرسلنا لك رابط على بريدك. افتحه من نفس الجهاز واختر كلمة مرور جديدة.'
     return
   }
-  err.style.color = ''
   ev.submitter.disabled = true
   const { data, error } = mode === 'up' ? await db.auth.signUp(creds) : await db.auth.signInWithPassword(creds)
   ev.submitter.disabled = false
@@ -619,7 +361,7 @@ db.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') { state.recovery = true; state.user = session?.user ?? null; return render() }
   const was = state.user?.id
   state.user = session?.user ?? null
-  if (!state.user) { state.accounts = []; state.entries = []; state.invoices = []; state.receipts = []; state.view = 'cont'; return render() }
+  if (!state.user) { state.invoices = []; state.receipts = []; state.ledger = null; return render() }
   if (was !== state.user.id) load()
 })
 db.auth.getSession().then(({ data }) => { if (!data.session) render() })
