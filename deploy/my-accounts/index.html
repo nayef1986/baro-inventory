@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0f766e">
+<title>حساباتي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f6f4; --card:#fff; --ink:#1c2321; --muted:#68736f; --line:#e3e6e3;
+    --brand:#0f766e; --brand-ink:#fff; --in:#15803d; --out:#b91c1c; --warn:#b45309;
+    --soft:#ecf5f3; --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#121615; --card:#1b2120; --ink:#e8eeec; --muted:#9aa6a2; --line:#2b3331;
+      --brand:#2dd4bf; --brand-ink:#06201d; --in:#4ade80; --out:#f87171; --warn:#fbbf24; --soft:#16302c;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif;font-size:16px;line-height:1.5}
+  button,input,select,textarea{font:inherit;color:inherit}
+  .wrap{max-width:880px;margin:0 auto;padding:16px 16px 96px}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px}
+  header.top h1{font-size:22px;margin:0;font-weight:800}
+  .muted{color:var(--muted)} .small{font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .between{justify-content:space-between}
+  .grow{flex:1 1 auto;min-width:0}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--brand)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink);font-weight:700}
+  .btn.danger{color:var(--out)}
+  .btn.ghost{border-color:transparent;background:transparent}
+  .btn:disabled{opacity:.5;cursor:default}
+  input,select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 12px}
+  input:focus,select:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+  .field{margin-bottom:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  .stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .in{color:var(--in)} .out{color:var(--out)} .warn{color:var(--warn)}
+  .acc{cursor:pointer}
+  .acc:hover{border-color:var(--brand)}
+  .acc h3{margin:0;font-size:18px}
+  .bal{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+  .bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;background:var(--brand)}
+  .pill{display:inline-block;background:var(--soft);color:var(--brand);border-radius:99px;padding:2px 10px;font-size:13px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:13px;color:var(--muted);font-weight:500}
+  td.num,th.num{text-align:left;white-space:nowrap}
+  .tablewrap{overflow-x:auto}
+  .empty{text-align:center;padding:28px 8px;color:var(--muted)}
+  .err{color:var(--out);font-size:14px;margin-top:8px}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
+  .tabs .btn.on{background:var(--soft);border-color:var(--brand);color:var(--brand);font-weight:700}
+  dialog{border:none;border-radius:var(--radius);padding:0;width:min(460px,calc(100vw - 32px));background:var(--card);color:var(--ink)}
+  dialog::backdrop{background:rgba(0,0,0,.45)}
+  dialog form{padding:18px}
+  dialog h2{margin:0 0 14px;font-size:18px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg label{flex:1;margin:0;text-align:center;padding:8px;cursor:pointer;color:var(--ink);font-size:15px}
+  .seg input{display:none}
+  .seg input:checked+span{font-weight:800}
+  .seg label:has(input[value=in]:checked){background:color-mix(in srgb,var(--in) 15%,transparent)}
+  .seg label:has(input[value=out]:checked){background:color-mix(in srgb,var(--out) 15%,transparent)}
+  .seg label:has(input:checked){background:var(--soft)}
+  .seg label:has(input[value=out]:checked){background:color-mix(in srgb,var(--out) 15%,transparent)}
+  .seg label:has(input[value=in]:checked){background:color-mix(in srgb,var(--in) 15%,transparent)}
+  textarea{resize:vertical}
+  td bdi{white-space:nowrap}
+  .center{min-height:80vh;display:grid;place-items:center}
+  .login{width:min(380px,100%)}
+  #print{display:none}
+  @media (max-width:560px){
+    .stats{grid-template-columns:1fr 1fr}
+    .stats .stat:last-child{grid-column:1/-1}
+    .grid2{grid-template-columns:1fr}
+    .hide-sm{display:none}
+  }
+  /* الطباعة / PDF: تُطبع ورقة الكشف وحدها */
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{background:#fff;color:#000}
+    #app,dialog{display:none!important}
+    #print{display:block}
+    #print h1{font-size:20px;margin:0 0 2px}
+    #print .meta{font-size:12px;color:#444;margin-bottom:12px}
+    #print table{font-size:12px}
+    #print th,#print td{border:1px solid #bbb;padding:5px 6px}
+    #print th{background:#f0f0f0;color:#000}
+    #print tfoot td{font-weight:800;background:#f7f7f7}
+    #print .in{color:#166534} #print .out{color:#991b1b}
+    #print section{page-break-inside:avoid;margin-bottom:18px}
+    #print h2{font-size:15px;margin:14px 0 6px}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="print"></div>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+
+<script src="containers.js"></script>
+<script>
+// ============================================================
+// حساباتي — حسابات شخصية: حسابات، نسب، حركات وارد/صادر،
+// وتصدير Excel وطباعة PDF.
+//
+// القاعدة: مشروع Supabase نفسه الذي يستخدمه COCO CAKE، جدولا
+// pa_accounts و pa_entries (supabase/migrations/0009). كل صف مقفول
+// على صاحبه، والدخول بالبريد وكلمة المرور.
+// ============================================================
+
+const SUPABASE_URL = 'https://tdlpikekpnxuzyfcvqzo.supabase.co'
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkbHBpa2VrcG54dXp5ZmN2cXpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2ODg2NzIsImV4cCI6MjEwNTI2NDY3Mn0.jxKvvA_0ySwQVcRDAznZNwQwpwAOwjaj1M6CHY9F8uM'
+const CURRENCY = 'ر.س'
+
+const db = supabase.createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } })
+
+const state = {
+  user: null,
+  accounts: [],
+  entries: [],
+  invoices: [],      // فواتير الحاويات
+  receipts: [],      // استلامات النسبة
+  view: 'cont',      // cont | home | account | split
+  contTab: 'statement', // statement | invoices | receipts
+  accountId: null,
+  from: '', to: '',
+  loading: true,
+  error: '',
+}
+
+// ---------- أدوات ----------
+const $ = (s, r = document) => r.querySelector(s)
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const num = (v) => Number(v) || 0
+const money = (v) => num(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const pct = (v) => num(v).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%'
+const dt = (d) => `<bdi dir="ltr">${esc(d)}</bdi>`
+const today = () => new Date().toISOString().slice(0, 10)
+const signed = (e) => (e.kind === 'in' ? 1 : -1) * num(e.amount)
+
+function inRange(e) {
+  if (state.from && e.entry_date < state.from) return false
+  if (state.to && e.entry_date > state.to) return false
+  return true
+}
+function accountEntries(id) {
+  return state.entries.filter((e) => e.account_id === id)
+    .sort((a, b) => a.entry_date.localeCompare(b.entry_date) || a.created_at.localeCompare(b.created_at))
+}
+function totals(list) {
+  let inn = 0, out = 0
+  for (const e of list) e.kind === 'in' ? (inn += num(e.amount)) : (out += num(e.amount))
+  return { in: inn, out, balance: inn - out }
+}
+/** كشف حساب للفترة: رصيد افتتاحي (ما قبل «من») + حركات الفترة برصيد جارٍ */
+function statement(id) {
+  const all = accountEntries(id)
+  const opening = state.from ? all.filter((e) => e.entry_date < state.from).reduce((s, e) => s + signed(e), 0) : 0
+  let run = opening
+  const lines = all.filter(inRange).map((e) => ({ ...e, run: (run += signed(e)) }))
+  const t = totals(lines)
+  return { opening, lines, ...t, closing: opening + t.balance }
+}
+function periodLabel() {
+  // ⁦…⁩ يعزل التاريخ اتجاهياً فلا ينقلب داخل النص العربي (في PDF وExcel)
+  const d = (v) => `\u2066${v}\u2069`
+  if (state.from && state.to) return `من ${d(state.from)} إلى ${d(state.to)}`
+  if (state.from) return `من ${d(state.from)}`
+  if (state.to) return `حتى ${d(state.to)}`
+  return 'كل الفترات'
+}
+
+// ---------- البيانات ----------
+async function load() {
+  state.loading = true; render()
+  const [a, e, ci, cr] = await Promise.all([
+    db.from('pa_accounts').select('*').order('sort').order('created_at'),
+    db.from('pa_entries').select('*'),
+    db.from('pa_container_invoices').select('*'),
+    db.from('pa_commission_receipts').select('*'),
+  ])
+  state.loading = false
+  const bad = [a, e, ci, cr].find((r) => r.error)
+  if (bad) { state.error = bad.error.message; return render() }
+  state.error = ''
+  state.accounts = a.data
+  state.entries = e.data
+  state.invoices = ci.data
+  state.receipts = cr.data
+  render()
+}
+async function run(promise) {
+  const { error } = await promise
+  if (error) { alert('تعذّر الحفظ: ' + error.message); return false }
+  await load()
+  return true
+}
+
+// ---------- العرض ----------
+function render() {
+  const app = $('#app')
+  if (!state.user) return (app.innerHTML = loginView())
+  const acc = state.accounts.find((a) => a.id === state.accountId)
+  if (state.view === 'account' && !acc) state.view = 'home'
+  app.innerHTML = `<div class="wrap">
+    <header class="top">
+      <h1>${state.view === 'account' ? `<button class="btn ghost" data-act="home" aria-label="رجوع">→</button> ${esc(acc.name)}` : 'حساباتي'}</h1>
+      <div class="row">
+        <button class="btn" data-act="xlsx">Excel</button>
+        <button class="btn" data-act="pdf">PDF</button>
+        ${state.view === 'account' ? '' : '<button class="btn ghost small" data-act="logout">خروج</button>'}
+      </div>
+    </header>
+    ${state.error ? `<div class="card err">${esc(state.error)}</div>` : ''}
+    ${state.loading && !state.accounts.length && !state.invoices.length ? '<div class="empty">جاري التحميل…</div>'
+      : state.view === 'account' ? accountView(acc) : state.view === 'cont' ? mainTabs() + contView() : homeView()}
+  </div>`
+}
+
+function periodBar() {
+  return `<div class="card row">
+    <div class="grow"><label>من تاريخ</label><input type="date" data-period="from" value="${state.from}"></div>
+    <div class="grow"><label>إلى تاريخ</label><input type="date" data-period="to" value="${state.to}"></div>
+    ${state.from || state.to ? '<button class="btn ghost" data-act="clearPeriod" style="align-self:flex-end">مسح</button>' : ''}
+  </div>`
+}
+
+function mainTabs() {
+  return `<div class="tabs">
+    <button class="btn ${state.view === 'cont' ? 'on' : ''}" data-act="cont">الحاويات ٢٫٥٪</button>
+    <button class="btn ${state.view === 'home' ? 'on' : ''}" data-act="home">الحسابات</button>
+    <button class="btn ${state.view === 'split' ? 'on' : ''}" data-act="split">توزيع بالنسب</button>
+  </div>`
+}
+
+function homeView() {
+  const tabs = mainTabs()
+  if (state.view === 'split') return tabs + splitView()
+
+  const all = state.entries.filter(inRange)
+  const t = totals(all)
+  const pctSum = state.accounts.reduce((s, a) => s + num(a.percent), 0)
+  const cards = state.accounts.map((a) => {
+    const s = statement(a.id)
+    return `<div class="card acc" data-open="${a.id}">
+      <div class="row between">
+        <div class="grow"><h3>${esc(a.name)}</h3>${a.note ? `<div class="muted small">${esc(a.note)}</div>` : ''}</div>
+        <div style="text-align:left">
+          <div class="bal ${s.closing < 0 ? 'out' : ''}">${money(s.closing)}</div>
+          <span class="pill">${pct(a.percent)}</span>
+        </div>
+      </div>
+      <div class="row between small muted" style="margin-top:6px">
+        <span>وارد <b class="in">${money(s.in)}</b></span>
+        <span>صادر <b class="out">${money(s.out)}</b></span>
+        <span>${s.lines.length} حركة</span>
+      </div>
+      <div class="bar"><i style="width:${Math.min(100, num(a.percent))}%"></i></div>
+    </div>`
+  }).join('')
+
+  return tabs + `
+    <div class="stats">
+      <div class="stat"><span class="muted small">إجمالي الوارد</span><b class="in">${money(t.in)}</b></div>
+      <div class="stat"><span class="muted small">إجمالي الصادر</span><b class="out">${money(t.out)}</b></div>
+      <div class="stat"><span class="muted small">الصافي</span><b>${money(t.balance)}</b></div>
+    </div>
+    ${periodBar()}
+    <div class="row between" style="margin:4px 0 10px">
+      <span class="small ${pctSum === 100 ? 'muted' : 'warn'}">مجموع النسب: <b>${pct(pctSum)}</b>${pctSum === 100 || !state.accounts.length ? '' : ' — المفروض 100%'}</span>
+      <button class="btn primary" data-act="newAccount">+ حساب جديد</button>
+    </div>
+    ${cards || '<div class="card empty">ما فيه حسابات بعد. اضغط «حساب جديد» وابدأ.</div>'}`
+}
+
+function accountView(a) {
+  const s = statement(a.id)
+  const rows = s.lines.map((e) => `<tr>
+      <td>${dt(e.entry_date)}</td>
+      <td class="grow">${esc(e.description) || '<span class="muted">—</span>'}</td>
+      <td class="num in">${e.kind === 'in' ? money(e.amount) : ''}</td>
+      <td class="num out">${e.kind === 'out' ? money(e.amount) : ''}</td>
+      <td class="num hide-sm">${money(e.run)}</td>
+      <td class="num"><button class="btn ghost small" data-edit="${e.id}" aria-label="تعديل">✎</button></td>
+    </tr>`).join('')
+  return `
+    <div class="stats">
+      <div class="stat"><span class="muted small">وارد</span><b class="in">${money(s.in)}</b></div>
+      <div class="stat"><span class="muted small">صادر</span><b class="out">${money(s.out)}</b></div>
+      <div class="stat"><span class="muted small">الرصيد</span><b>${money(s.closing)}</b></div>
+    </div>
+    ${periodBar()}
+    <div class="row between" style="margin:4px 0 10px">
+      <div class="row"><span class="pill">النسبة ${pct(a.percent)}</span>
+        <button class="btn ghost small" data-act="editAccount">تعديل الحساب</button></div>
+      <button class="btn primary" data-act="newEntry">+ حركة</button>
+    </div>
+    <div class="card tablewrap">
+      <table>
+        <thead><tr><th>التاريخ</th><th>البيان</th><th class="num">وارد</th><th class="num">صادر</th><th class="num hide-sm">الرصيد</th><th></th></tr></thead>
+        <tbody>
+          ${state.from ? `<tr><td></td><td class="muted">رصيد افتتاحي</td><td></td><td></td><td class="num hide-sm">${money(s.opening)}</td><td></td></tr>` : ''}
+          ${rows || '<tr><td colspan="6" class="empty">ما فيه حركات في هذه الفترة.</td></tr>'}
+        </tbody>
+      </table>
+    </div>`
+}
+
+function splitView() {
+  const amount = num(state.splitAmount)
+  const pctSum = state.accounts.reduce((s, a) => s + num(a.percent), 0)
+  const rows = state.accounts.map((a) => `<tr>
+      <td>${esc(a.name)}</td><td class="num">${pct(a.percent)}</td>
+      <td class="num"><b>${money(amount * num(a.percent) / 100)}</b></td></tr>`).join('')
+  return `<div class="card">
+      <div class="field"><label>المبلغ المراد توزيعه (مثلاً الراتب)</label>
+        <input type="number" inputmode="decimal" min="0" step="0.01" data-split value="${state.splitAmount ?? ''}" placeholder="0.00"></div>
+      <div class="field"><label>تاريخ القيد</label><input type="date" data-split-date value="${state.splitDate || today()}"></div>
+      <div class="field"><label>البيان</label><input data-split-desc value="${esc(state.splitDesc ?? 'توزيع دخل')}"></div>
+    </div>
+    <div class="card tablewrap"><table>
+      <thead><tr><th>الحساب</th><th class="num">النسبة</th><th class="num">نصيبه</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="3" class="empty">أضف حسابات بنسب أولاً.</td></tr>'}</tbody>
+      <tfoot><tr><td><b>المجموع</b></td><td class="num ${pctSum === 100 ? '' : 'warn'}"><b>${pct(pctSum)}</b></td><td class="num"><b>${money(amount * pctSum / 100)}</b></td></tr></tfoot>
+    </table></div>
+    <div class="row between">
+      <span class="small muted">«سجّل التوزيع» يضيف حركة وارد في كل حساب بنصيبه.</span>
+      <button class="btn primary" data-act="applySplit" ${amount > 0 && state.accounts.some((a) => num(a.percent) > 0) ? '' : 'disabled'}>سجّل التوزيع</button>
+    </div>`
+}
+
+function loginView() {
+  return `<div class="wrap center"><div class="card login">
+    <h1 style="margin:0 0 4px">حساباتي</h1>
+    <p class="muted small" style="margin:0 0 16px">ادخل بحسابك — بياناتك لا يشوفها غيرك.</p>
+    <form id="loginForm">
+      <div class="field"><label>البريد</label><input type="email" name="email" required autocomplete="email"></div>
+      <div class="field"><label>كلمة المرور</label><input type="password" name="password" required minlength="6" autocomplete="current-password"></div>
+      <div class="row"><button class="btn primary grow" name="mode" value="in">دخول</button>
+        <button class="btn" name="mode" value="up">حساب جديد</button></div>
+      <div class="err" id="loginErr">${esc(state.error)}</div>
+    </form></div></div>`
+}
+
+// ---------- النوافذ ----------
+function openDialog(html, onSubmit) {
+  const dlg = $('#dlg'), form = $('#dlgForm')
+  // زر حفظ مخفي أولاً: Enter يحفظ ولا يضغط «حذف» صدفة
+  form.innerHTML = '<button value="save" style="display:none" aria-hidden="true" tabindex="-1"></button>' + html
+  form.onsubmit = async (ev) => {
+    const btn = ev.submitter
+    if (btn?.value === 'cancel') return
+    ev.preventDefault()
+    btn.disabled = true
+    const ok = await onSubmit(new FormData(form), btn?.value)
+    btn.disabled = false
+    if (ok !== false) dlg.close()
+  }
+  dlg.showModal()
+  form.querySelector('input:not([type=hidden]):not([type=radio])')?.focus()
+}
+
+function accountDialog(a) {
+  openDialog(`<h2>${a ? 'تعديل الحساب' : 'حساب جديد'}</h2>
+    <div class="field"><label>اسم الحساب</label><input name="name" required value="${esc(a?.name)}" placeholder="مثلاً: مصروف البيت"></div>
+    <div class="field"><label>النسبة من الدخل %</label><input name="percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" value="${a ? num(a.percent) : ''}" placeholder="0"></div>
+    <div class="field"><label>ملاحظة (اختياري)</label><input name="note" value="${esc(a?.note)}"></div>
+    <div class="row between">
+      ${a ? '<button class="btn danger" value="delete" formnovalidate>حذف</button>' : '<span></span>'}
+      <div class="row"><button class="btn" value="cancel" formnovalidate>إلغاء</button><button class="btn primary" value="save">حفظ</button></div>
+    </div>`, async (f, action) => {
+    if (action === 'delete') {
+      if (!confirm(`حذف «${a.name}» وكل حركاته؟ ما يمكن التراجع.`)) return false
+      state.view = 'home'
+      return run(db.from('pa_accounts').delete().eq('id', a.id))
+    }
+    const row = { name: f.get('name').trim(), percent: num(f.get('percent')), note: f.get('note').trim() || null }
+    return a ? run(db.from('pa_accounts').update(row).eq('id', a.id))
+             : run(db.from('pa_accounts').insert({ ...row, sort: state.accounts.length }))
+  })
+}
+
+function entryDialog(e) {
+  const kind = e?.kind || 'out'
+  openDialog(`<h2>${e ? 'تعديل حركة' : 'حركة جديدة'}</h2>
+    <div class="field seg">
+      <label><input type="radio" name="kind" value="in" ${kind === 'in' ? 'checked' : ''}><span>وارد (+)</span></label>
+      <label><input type="radio" name="kind" value="out" ${kind === 'out' ? 'checked' : ''}><span>صادر (−)</span></label>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>المبلغ</label><input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${e ? num(e.amount) : ''}"></div>
+      <div class="field"><label>التاريخ</label><input name="entry_date" type="date" required value="${e?.entry_date || today()}"></div>
+    </div>
+    <div class="field"><label>البيان</label><input name="description" value="${esc(e?.description)}" placeholder="وش الحركة؟"></div>
+    <div class="row between">
+      ${e ? '<button class="btn danger" value="delete" formnovalidate>حذف</button>' : '<span></span>'}
+      <div class="row"><button class="btn" value="cancel" formnovalidate>إلغاء</button><button class="btn primary" value="save">حفظ</button></div>
+    </div>`, async (f, action) => {
+    if (action === 'delete') {
+      if (!confirm('حذف هذه الحركة؟')) return false
+      return run(db.from('pa_entries').delete().eq('id', e.id))
+    }
+    const row = { kind: f.get('kind'), amount: num(f.get('amount')), entry_date: f.get('entry_date'), description: f.get('description').trim() }
+    return e ? run(db.from('pa_entries').update(row).eq('id', e.id))
+             : run(db.from('pa_entries').insert({ ...row, account_id: state.accountId }))
+  })
+}
+
+// ---------- التصدير ----------
+function exportTargets() {
+  return state.view === 'account' ? state.accounts.filter((a) => a.id === state.accountId) : state.accounts
+}
+
+function exportXlsx() {
+  if (!state.accounts.length) return alert('ما فيه حسابات للتصدير.')
+  const wb = XLSX.utils.book_new()
+  wb.Workbook = { Views: [{ RTL: true }] }
+  const targets = exportTargets()
+
+  if (targets.length > 1) {
+    const summary = [['الحساب', 'النسبة %', 'وارد', 'صادر', 'الرصيد']]
+    let ti = 0, to = 0, tb = 0
+    for (const a of targets) {
+      const s = statement(a.id)
+      summary.push([a.name, num(a.percent), s.in, s.out, s.closing])
+      ti += s.in; to += s.out; tb += s.closing
+    }
+    summary.push(['المجموع', targets.reduce((x, a) => x + num(a.percent), 0), ti, to, tb])
+    const ws = XLSX.utils.aoa_to_sheet([['ملخص الحسابات — ' + periodLabel()], [], ...summary])
+    ws['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]
+    XLSX.utils.book_append_sheet(wb, ws, 'الملخص')
+  }
+
+  const used = new Set(['الملخص'])
+  for (const a of targets) {
+    const s = statement(a.id)
+    const rows = [[`كشف حساب: ${a.name}`], [periodLabel() + ` — النسبة ${pct(a.percent)}`], [],
+      ['التاريخ', 'البيان', 'وارد', 'صادر', 'الرصيد']]
+    if (state.from) rows.push(['', 'رصيد افتتاحي', '', '', s.opening])
+    for (const e of s.lines) rows.push([e.entry_date, e.description, e.kind === 'in' ? num(e.amount) : '', e.kind === 'out' ? num(e.amount) : '', e.run])
+    rows.push(['', 'المجموع', s.in, s.out, s.closing])
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]
+    // اسم الورقة: 31 حرفاً كحد أقصى، بلا رموز ممنوعة، ولا تكرار
+    let name = a.name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 28).trim() || 'حساب', n = name, i = 2
+    while (used.has(n)) n = `${name} ${i++}`
+    used.add(n)
+    XLSX.utils.book_append_sheet(wb, ws, n)
+  }
+  const base = targets.length === 1 ? targets[0].name : 'حساباتي'
+  XLSX.writeFile(wb, `${base} ${today()}.xlsx`)
+}
+
+function exportPdf() {
+  if (!state.accounts.length) return alert('ما فيه حسابات للطباعة.')
+  const targets = exportTargets()
+  let html = `<h1>${targets.length === 1 ? 'كشف حساب: ' + esc(targets[0].name) : 'حساباتي'}</h1>
+    <div class="meta">${esc(periodLabel())} — طُبع ${dt(today())} — المبالغ بـ${CURRENCY}</div>`
+  if (targets.length > 1) {
+    let ti = 0, to = 0, tb = 0
+    const rows = targets.map((a) => { const s = statement(a.id); ti += s.in; to += s.out; tb += s.closing
+      return `<tr><td>${esc(a.name)}</td><td>${pct(a.percent)}</td><td class="in">${money(s.in)}</td><td class="out">${money(s.out)}</td><td>${money(s.closing)}</td></tr>` }).join('')
+    html += `<section><h2>الملخص</h2><table><thead><tr><th>الحساب</th><th>النسبة</th><th>وارد</th><th>صادر</th><th>الرصيد</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td>المجموع</td><td>${pct(targets.reduce((x, a) => x + num(a.percent), 0))}</td><td>${money(ti)}</td><td>${money(to)}</td><td>${money(tb)}</td></tr></tfoot></table></section>`
+  }
+  for (const a of targets) {
+    const s = statement(a.id)
+    const rows = s.lines.map((e) => `<tr><td>${dt(e.entry_date)}</td><td>${esc(e.description)}</td>
+      <td class="in">${e.kind === 'in' ? money(e.amount) : ''}</td><td class="out">${e.kind === 'out' ? money(e.amount) : ''}</td><td>${money(e.run)}</td></tr>`).join('')
+    html += `<section>${targets.length > 1 ? `<h2>${esc(a.name)} — ${pct(a.percent)}</h2>` : ''}
+      <table><thead><tr><th>التاريخ</th><th>البيان</th><th>وارد</th><th>صادر</th><th>الرصيد</th></tr></thead><tbody>
+      ${state.from ? `<tr><td></td><td>رصيد افتتاحي</td><td></td><td></td><td>${money(s.opening)}</td></tr>` : ''}
+      ${rows || '<tr><td colspan="5">لا حركات</td></tr>'}</tbody>
+      <tfoot><tr><td></td><td>المجموع</td><td>${money(s.in)}</td><td>${money(s.out)}</td><td>${money(s.closing)}</td></tr></tfoot></table></section>`
+  }
+  $('#print').innerHTML = html
+  const title = document.title
+  document.title = (targets.length === 1 ? targets[0].name : 'حساباتي') + ' ' + today()
+  window.print()
+  document.title = title
+}
+
+// ---------- الأحداث ----------
+document.addEventListener('click', async (ev) => {
+  const t = ev.target.closest('[data-act],[data-open],[data-edit]')
+  if (!t) return
+  if (contClick(t)) return
+  if (t.dataset.open) { state.view = 'account'; state.accountId = t.dataset.open; return render() }
+  if (t.dataset.edit) return entryDialog(state.entries.find((e) => e.id === t.dataset.edit))
+  const act = t.dataset.act
+  const acc = state.accounts.find((a) => a.id === state.accountId)
+  switch (act) {
+    case 'home': state.view = 'home'; return render()
+    case 'split': state.view = 'split'; return render()
+    case 'newAccount': return accountDialog(null)
+    case 'editAccount': return accountDialog(acc)
+    case 'newEntry': return entryDialog(null)
+    case 'clearPeriod': state.from = state.to = ''; return render()
+    case 'xlsx': return state.view === 'cont' ? contXlsx() : exportXlsx()
+    case 'pdf': return state.view === 'cont' ? contPdf() : exportPdf()
+    case 'logout': await db.auth.signOut(); return
+    case 'applySplit': {
+      const amount = num(state.splitAmount)
+      const date = state.splitDate || today(), desc = (state.splitDesc ?? 'توزيع دخل').trim()
+      const rows = state.accounts.filter((a) => num(a.percent) > 0).map((a) => ({
+        account_id: a.id, kind: 'in', entry_date: date, description: desc,
+        amount: Math.round(amount * num(a.percent)) / 100,
+      })).filter((r) => r.amount > 0)
+      if (!confirm(`تسجيل ${money(amount)} موزّعة على ${rows.length} حساب؟`)) return
+      t.disabled = true
+      if (await run(db.from('pa_entries').insert(rows))) { state.splitAmount = ''; state.view = 'home'; render() }
+    }
+  }
+})
+
+document.addEventListener('change', (ev) => {
+  const p = ev.target.dataset.period
+  if (p) { state[p] = ev.target.value; render() }
+})
+document.addEventListener('input', (ev) => {
+  const el = ev.target
+  if (el.hasAttribute('data-split')) {
+    state.splitAmount = el.value
+    // تحديث الجدول بلا فقد التركيز
+    const pos = el.selectionStart; render(); const n = $('[data-split]'); n.focus(); try { n.setSelectionRange(pos, pos) } catch {}
+  } else if (el.hasAttribute('data-split-date')) state.splitDate = el.value
+  else if (el.hasAttribute('data-split-desc')) state.splitDesc = el.value
+})
+
+document.addEventListener('submit', async (ev) => {
+  if (ev.target.id !== 'loginForm') return
+  ev.preventDefault()
+  const f = new FormData(ev.target), mode = ev.submitter?.value
+  const creds = { email: f.get('email').trim(), password: f.get('password') }
+  const err = $('#loginErr'); err.textContent = ''
+  ev.submitter.disabled = true
+  const { data, error } = mode === 'up' ? await db.auth.signUp(creds) : await db.auth.signInWithPassword(creds)
+  ev.submitter.disabled = false
+  if (error) {
+    err.textContent = /Invalid login/i.test(error.message) ? 'البريد أو كلمة المرور غلط.'
+      : /not confirmed/i.test(error.message) ? 'أكّد بريدك أولاً من الرسالة اللي وصلتك.' : error.message
+  } else if (mode === 'up' && !data.session) {
+    err.textContent = 'تم إنشاء الحساب. افتح الرسالة في بريدك وأكّد، ثم ادخل.'
+  }
+})
+
+db.auth.onAuthStateChange((_event, session) => {
+  const was = state.user?.id
+  state.user = session?.user ?? null
+  if (!state.user) { state.accounts = []; state.entries = []; state.invoices = []; state.receipts = []; state.view = 'cont'; return render() }
+  if (was !== state.user.id) load()
+})
+db.auth.getSession().then(({ data }) => { if (!data.session) render() })
+</script>
+</body>
+</html>
