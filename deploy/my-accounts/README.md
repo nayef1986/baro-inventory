@@ -4,7 +4,7 @@
 على الحسابات بالنسب، وتصدير **Excel** وطباعة **PDF** (للكل أو لحساب واحد،
 مع فلتر فترة ورصيد افتتاحي).
 
-ثلاثة ملفات `index.html` و`export.js` و`containers.js` بلا بناء — المكتبات من CDN بإصدارات مثبّتة.
+ثلاثة ملفات `index.html` و`export.js` و`ledger.js` بلا بناء — المكتبات من CDN بإصدارات مثبّتة.
 
 ## إعدادات مشروع Vercel
 
@@ -44,3 +44,10 @@ Output Directory:  .
 
 الجدولان: `pa_container_invoices` و`pa_commission_receipts` — انظر
 `supabase/migrations/0010_container_commissions.sql`.
+
+## دفاتر العمولة (من 0011)
+
+الصفحة صارت دفترين بمربعات: **الحاويات 2.5%** و**مبيعات الفروع 0.5%**،
+ومربع للإجمالي. نفس الجدولين يفرّقهما عمود `ledger`
+(`supabase/migrations/0011_commission_ledgers.sql`). أُزيل قسما «الحسابات»
+و«توزيع بالنسب» من الواجهة (جداولهما `pa_accounts`/`pa_entries` باقية بلا استخدام).
