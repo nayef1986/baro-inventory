@@ -13,7 +13,7 @@
 // ============================================================
 
 const CATS = {
-  containers: { label: 'كونتينر', ledger: 'containers', color: '#1e40af' },
+  containers: { label: 'كونتينر', ledger: 'containers', color: '#556b2f' },
   branches: { label: 'مبيعات فروع', ledger: 'branches', color: '#7c3aed' },
   reimburse: { label: 'استرداد مصاريف', color: '#0891b2' },
   salary: { label: 'راتب', color: '#0f766e' },
@@ -21,7 +21,7 @@ const CATS = {
   family: { label: 'أهل وأصدقاء', color: '#be185d' },
   other: { label: 'أخرى', color: '#475569' },
 }
-const catLabel = (c) => CATS[c]?.label || 'بدون تصنيف'
+const catLabel = (c) => (c === 'split' ? 'مقسّمة' : CATS[c]?.label || 'بدون تصنيف')
 
 // ---------- قراءة كشف البنك ----------
 
@@ -92,28 +92,89 @@ async function importBankFile(file) {
 
 // ---------- التصنيف ----------
 
-/** يغيّر تصنيف حوالة، وينشئ/ينقل/يحذف الاستلام المربوط بها */
-async function setCategory(ids, cat) {
-  const txns = state.bank.filter((t) => ids.includes(t.id))
-  const ledger = CATS[cat]?.ledger
-  const { error } = await db.from('pa_bank_txns').update({ category: cat }).in('id', ids)
-  if (error) return alert('تعذّر الحفظ: ' + error.message)
-  const linked = new Map(state.receipts.filter((r) => r.bank_txn_id).map((r) => [r.bank_txn_id, r]))
-  const toDelete = [], toMove = [], toCreate = []
+/**
+ * أجزاء الحوالة: حوالة غير مقسّمة = جزء واحد بكامل المبلغ وتصنيفها،
+ * والمقسّمة = أجزاؤها [{cat, amount, note}].
+ */
+function partsOf(t) {
+  if (t.category === 'split') return (t.splits || []).map((p) => ({ cat: p.cat || '', amount: num(p.amount), note: p.note || '' }))
+  return [{ cat: t.category || '', amount: num(t.amount), note: '' }]
+}
+
+/**
+ * يجعل استلامات الدفاتر مطابقة لأجزاء الحوالات: لكل دفتر (كونتينر/فروع)
+ * استلام واحد بمجموع أجزائه — يُنشأ أو يُعدَّل أو يُحذف.
+ */
+async function syncReceipts(txns) {
+  const ops = [], toCreate = []
   for (const t of txns) {
-    const r = linked.get(t.id)
-    if (!ledger) { if (r) toDelete.push(r.id) }
-    else if (r) { if (r.ledger !== ledger) toMove.push(r.id) }
-    else if (t.amount > 0) toCreate.push({ ledger, bank_txn_id: t.id, receipt_date: t.txn_date, amount: t.amount, method: 'تحويل', note: ['من البنك', t.note].filter(Boolean).join(' — ') })
+    const want = {}
+    for (const p of partsOf(t)) {
+      const ledger = CATS[p.cat]?.ledger
+      if (ledger && p.amount > 0) want[ledger] = (want[ledger] || 0) + p.amount
+    }
+    const have = state.receipts.filter((r) => r.bank_txn_id === t.id)
+    for (const r of have) {
+      if (!want[r.ledger]) ops.push(db.from('pa_commission_receipts').delete().eq('id', r.id))
+      else if (Math.abs(num(r.amount) - want[r.ledger]) > 0.001) ops.push(db.from('pa_commission_receipts').update({ amount: want[r.ledger] }).eq('id', r.id))
+    }
+    for (const [ledger, amount] of Object.entries(want)) {
+      if (!have.some((r) => r.ledger === ledger)) toCreate.push({ ledger, bank_txn_id: t.id, receipt_date: t.txn_date, amount, method: 'تحويل', note: ['من البنك', t.note].filter(Boolean).join(' — ') })
+    }
   }
-  const ops = []
-  if (toDelete.length) ops.push(db.from('pa_commission_receipts').delete().in('id', toDelete))
-  if (toMove.length) ops.push(db.from('pa_commission_receipts').update({ ledger }).in('id', toMove))
   if (toCreate.length) ops.push(db.from('pa_commission_receipts').insert(toCreate))
-  const res = await Promise.all(ops)
-  const bad = res.find((r) => r.error)
+  const bad = (await Promise.all(ops)).find((r) => r.error)
   if (bad) alert('تعذّر تحديث الاستلامات: ' + bad.error.message)
+}
+
+/** يغيّر تصنيف حوالات كاملة (يلغي أي تقسيم سابق) */
+async function setCategory(ids, cat) {
+  const { error } = await db.from('pa_bank_txns').update({ category: cat, splits: [] }).in('id', ids)
+  if (error) return alert('تعذّر الحفظ: ' + error.message)
+  await syncReceipts(state.bank.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, category: cat, splits: [] })))
   await load()
+}
+
+/** تقسيم حوالة على أكثر من تصنيف: مثلاً إيجار 10,000 + استرداد مصاريف 2,500 */
+function splitDialog(t) {
+  const parts = t.category === 'split' ? partsOf(t) : [{ cat: t.category || '', amount: num(t.amount), note: '' }, { cat: '', amount: '', note: '' }]
+  const opts = (sel) => `<option value="">— اختر —</option>${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${c.label}</option>`).join('')}`
+  const row = (p) => `<div class="split-row">
+      <select name="cat">${opts(p.cat)}</select>
+      <input name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="المبلغ" value="${p.amount === '' ? '' : num(p.amount)}">
+      <input name="note" placeholder="ملاحظة (مثلاً: تذكرة طيران)" value="${esc(p.note)}">
+    </div>`
+  openDialog(`<h2>✂ تقسيم الحوالة</h2>
+    <p class="small" style="margin:0 0 10px"><b>${money(t.amount)}</b> · ${dt(t.txn_date)} · ${esc(t.note || t.txn_type)}</p>
+    <div id="splitRows">${parts.map(row).join('')}</div>
+    <button class="btn" type="button" data-split-add style="width:100%;margin-bottom:10px">＋ جزء آخر</button>
+    <p class="small" id="splitLeft"></p>
+    <div class="row" style="justify-content:space-between">
+      ${t.category === 'split' ? '<button class="btn danger" value="delete" formnovalidate>إلغاء التقسيم</button>' : '<span></span>'}
+      <div class="row"><button class="btn" value="cancel" formnovalidate>إلغاء</button><button class="btn primary" value="save">حفظ</button></div>
+    </div>`, async (f, action) => {
+    if (action === 'delete') return setCategory([t.id], '')
+    const cats = f.getAll('cat'), amounts = f.getAll('amount'), notes = f.getAll('note')
+    const splits = cats.map((c, n) => ({ cat: c, amount: num(amounts[n]), note: notes[n].trim() })).filter((p) => p.amount > 0)
+    const sum = splits.reduce((x, p) => x + p.amount, 0)
+    if (splits.some((p) => !p.cat)) { alert('اختر تصنيف لكل جزء.'); return false }
+    if (Math.abs(sum - num(t.amount)) > 0.009) { alert(`مجموع الأجزاء ${money(sum)} لازم يساوي مبلغ الحوالة ${money(t.amount)}.`); return false }
+    // جزء واحد فقط = تصنيف عادي
+    if (splits.length === 1) return setCategory([t.id], splits[0].cat)
+    const { error } = await db.from('pa_bank_txns').update({ category: 'split', splits }).eq('id', t.id)
+    if (error) { alert('تعذّر الحفظ: ' + error.message); return false }
+    await syncReceipts([{ ...t, category: 'split', splits }])
+    await load()
+  })
+  const box = $('#splitRows'), left = () => {
+    const sum = [...box.querySelectorAll('[name=amount]')].reduce((x, i) => x + num(i.value), 0)
+    const rest = num(t.amount) - sum
+    $('#splitLeft').innerHTML = Math.abs(rest) < 0.009 ? '<span class="in">✓ المجموع مطابق</span>'
+      : `<span class="warn">المتبقي ${money(rest)}</span>`
+  }
+  box.addEventListener('input', left)
+  $('[data-split-add]').onclick = () => { box.insertAdjacentHTML('beforeend', row({ cat: '', amount: '', note: '' })); left() }
+  left()
 }
 
 // ---------- العرض ----------
@@ -122,7 +183,7 @@ function bankFiltered() {
   const q = (state.bankQ || '').trim()
   return state.bank.filter((t) => dateIn(t.txn_date)
     && (!state.bankAcc || t.account === state.bankAcc)
-    && (state.bankCat === undefined || state.bankCat === 'all' || t.category === state.bankCat)
+    && (state.bankCat === undefined || state.bankCat === 'all' || partsOf(t).some((p) => p.cat === state.bankCat))
     && (!q || `${t.note} ${t.description} ${t.txn_type} ${money(t.amount)}`.includes(q)))
     .sort((a, b) => b.txn_date.localeCompare(a.txn_date) || num(b.amount) - num(a.amount))
 }
@@ -144,11 +205,11 @@ function bankView() {
   // مجاميع كل تصنيف للمعروض حالياً (قبل فلتر التصنيف)
   const base = state.bank.filter((t) => dateIn(t.txn_date) && (!state.bankAcc || t.account === state.bankAcc))
   const sums = {}
-  for (const t of base) { const k = t.category || ''; sums[k] = sums[k] || { n: 0, v: 0 }; sums[k].n++; sums[k].v += num(t.amount) }
+  for (const t of base) for (const p of partsOf(t)) { const k = p.cat; sums[k] = sums[k] || { n: 0, v: 0 }; sums[k].n++; sums[k].v += p.amount }
   const catTiles = [...Object.keys(CATS), ''].filter((k) => sums[k]).map((k) => `
     <button class="tile" data-act="bankCat" data-cat="${k}" style="min-height:96px;${cat === k ? 'border-color:var(--brand);border-width:2px' : ''}">
       <span class="lbl" style="color:${CATS[k]?.color || 'var(--warn)'};font-weight:800">${catLabel(k)}</span>
-      <span class="big" style="font-size:21px">${money(sums[k].v)}</span>
+      <span class="big" style="font-size:24px">${money(sums[k].v)}</span>
       <span class="foot">${sums[k].n} حوالة</span></button>`).join('')
 
   const rows = list.map((t) => `<div class="item" style="flex-direction:column;gap:8px">
@@ -157,7 +218,9 @@ function bankView() {
           <div class="s">${dt(t.txn_date)} · ${esc(t.txn_type)}${t.account !== t.txn_type ? ' · ' + esc(t.account) : ''}</div></div>
         <div class="v"><b class="${t.amount < 0 ? 'out' : 'in'}">${money(t.amount)}</b></div>
       </div>
-      <div class="chips">${Object.entries(CATS).map(([k, c]) => `<button class="chip ${t.category === k ? 'on' : ''}" style="--c:${c.color}" data-act="setCat" data-id="${t.id}" data-cat="${t.category === k ? '' : k}">${c.label}</button>`).join('')}</div>
+      <div class="chips">${Object.entries(CATS).map(([k, c]) => `<button class="chip ${t.category === k ? 'on' : ''}" style="--c:${c.color}" data-act="setCat" data-id="${t.id}" data-cat="${t.category === k ? '' : k}">${c.label}</button>`).join('')}
+        <button class="chip ${t.category === 'split' ? 'on' : ''}" style="--c:#57534e" data-act="split" data-id="${t.id}">✂ تقسيم</button></div>
+      ${t.category === 'split' ? `<div class="split-sum">${partsOf(t).map((p) => `<span style="color:${CATS[p.cat]?.color || 'inherit'}"><b>${catLabel(p.cat)}</b> ${money(p.amount)}${p.note ? ` (${esc(p.note)})` : ''}</span>`).join(' + ')}</div>` : ''}
     </div>`).join('')
 
   return `
@@ -182,7 +245,7 @@ function bankView() {
       <span class="small"><b>${list.length}</b> حوالة · <b>${money(total)}</b>${cat !== 'all' ? ` · <button class="btn ghost small" data-act="bankCat" data-cat="all">عرض الكل</button>` : ''}</span>
       ${list.length ? '<button class="btn small" data-act="bulkCat">صنّف المعروض كله…</button>' : ''}
     </div>
-    <p class="note">اضغط التصنيف تحت كل حوالة. «كونتينر» و«مبيعات فروع» تنضاف تلقائياً كاستلام في دفترها. اضغطه مرة ثانية للإلغاء.</p>
+    <p class="note">اضغط التصنيف تحت كل حوالة، واضغطه مرة ثانية للإلغاء. إذا الحوالة فيها أكثر من شي (مثلاً إيجار + استرداد مصاريف) اضغط «✂ تقسيم». «كونتينر» و«مبيعات فروع» تنضاف تلقائياً كاستلام في دفترها.</p>
     <div class="list">${rows || '<div class="empty">ما فيه حوالات بهذا الفلتر.</div>'}</div>`
     : '<div class="card empty">ارفع ملف كشف الحساب من تطبيق البنك (xls) كما هو، وأنا أقرأ الحوالات.</div>'}`
 }
@@ -198,14 +261,16 @@ function bulkCatDialog() {
 
 function bankXlsx() {
   const list = bankFiltered().slice().reverse()
-  const rows = list.map((t, n) => [n + 1, t.txn_date, num(t.amount), catLabel(t.category), t.account, t.note || t.txn_type])
+  const label = (t) => (t.category === 'split' ? partsOf(t).map((p) => `${catLabel(p.cat)} ${money(p.amount)}`).join(' + ') : catLabel(t.category))
+  const rows = list.map((t, n) => [n + 1, t.txn_date, num(t.amount), label(t), t.account, t.note || t.txn_type])
   rows.push({ kind: 'total', cells: ['', 'المجموع', list.reduce((s, t) => s + num(t.amount), 0), `${list.length} حوالة`, '', ''] })
-  const byCat = [...Object.keys(CATS), ''].map((k) => { const l = list.filter((t) => (t.category || '') === k); return [catLabel(k), l.length, l.reduce((s, t) => s + num(t.amount), 0)] }).filter((r) => r[1])
-  byCat.push({ kind: 'total', cells: ['المجموع', list.length, list.reduce((s, t) => s + num(t.amount), 0)] })
+  const parts = list.flatMap(partsOf)
+  const byCat = [...Object.keys(CATS), ''].map((k) => { const l = parts.filter((p) => p.cat === k); return [catLabel(k), l.length, l.reduce((s, p) => s + p.amount, 0)] }).filter((r) => r[1])
+  byCat.push({ kind: 'total', cells: ['المجموع', parts.length, parts.reduce((s, p) => s + p.amount, 0)] })
   const sub = `${state.bankAcc ? 'الحساب ' + state.bankAcc + ' — ' : ''}${periodLabel()} — طُبع ${today()}`
   xlBook([
     ['الحوالات', xlSheet({ title: 'تحويلات البنك', subtitle: sub, headers: ['#', 'التاريخ', 'المبلغ', 'التصنيف', 'الحساب / الجهة', 'الملاحظة'],
-      rows, widths: [6, 13, 15, 15, 22, 46], money: [2], colors: { 2: 'green' } })],
+      rows, widths: [6, 13, 15, 30, 22, 46], money: [2], colors: { 2: 'green' } })],
     ['حسب التصنيف', xlSheet({ title: 'التحويلات حسب التصنيف', subtitle: sub, headers: ['التصنيف', 'العدد', 'المجموع'],
       rows: byCat, widths: [20, 10, 18], money: [2] })],
   ], `تحويلات البنك ${today()}.xlsx`)
@@ -220,6 +285,7 @@ function bankClick(t) {
     case 'bankCat': state.bankCat = state.bankCat === t.dataset.cat ? 'all' : t.dataset.cat; render(); return true
     case 'setCat': t.disabled = true; setCategory([t.dataset.id], t.dataset.cat); return true
     case 'bulkCat': bulkCatDialog(); return true
+    case 'split': splitDialog(state.bank.find((x) => x.id === t.dataset.id)); return true
   }
   return false
 }

@@ -110,7 +110,7 @@ function homeView() {
     <div class="tiles">
       <div class="tile hero span2">
         <span class="lbl">الباقي لي — كل النسب</span>
-        <span class="big" style="font-size:34px">${money(total.closing)}</span>
+        <span class="big" style="font-size:40px">${money(total.closing)}</span>
         <span class="foot">مستحق ${money(total.due)} · مستلم ${money(total.paid)}</span>
       </div>
       ${Object.entries(LEDGERS).map(([k, L]) => `
@@ -268,7 +268,7 @@ function receiptDialog(k, r) {
     if (action === 'delete') {
       if (!confirm(r.bank_txn_id ? 'هذا الاستلام من كشف البنك. حذفه يلغي تصنيف الحوالة. متأكد؟' : 'حذف هذا الاستلام؟')) return false
       // استلام من البنك: يلغي تصنيف الحوالة فيرجع «بدون تصنيف»
-      if (r.bank_txn_id) await db.from('pa_bank_txns').update({ category: '' }).eq('id', r.bank_txn_id)
+      if (r.bank_txn_id) await db.from('pa_bank_txns').update({ category: '', splits: [] }).eq('id', r.bank_txn_id)
       return run(db.from('pa_commission_receipts').delete().eq('id', r.id))
     }
     const row = { ledger: k, amount: num(f.get('amount')), receipt_date: f.get('date'), method: f.get('method'), note: f.get('note').trim() }
