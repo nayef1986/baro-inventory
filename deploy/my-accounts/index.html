@@ -73,6 +73,11 @@
   .item.head{background:var(--soft);color:var(--brand);font-weight:800;padding:10px 16px}
   .item.sum{background:var(--soft);font-weight:800}
   .seq{display:inline-block;min-width:2em;text-align:center;background:var(--soft);color:var(--brand);border-radius:8px;padding:0 6px;margin-left:6px;font-weight:800;font-size:16px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{border:1.5px solid var(--line);background:var(--card);border-radius:99px;padding:5px 12px;font-size:16px;cursor:pointer;color:var(--muted)}
+  .chip:hover{border-color:var(--c)}
+  .chip.on{background:var(--c);border-color:var(--c);color:#fff;font-weight:800}
+  .chip:disabled{opacity:.5}
   .empty{text-align:center;padding:28px 12px;color:var(--muted)}
   .note{font-size:16px;color:var(--muted);margin:0 4px 10px}
 
@@ -151,6 +156,7 @@
 
 <script src="export.js"></script>
 <script src="ledger.js"></script>
+<script src="bank.js"></script>
 <script>
 // ============================================================
 // حساباتي — نسب العمولة: الحاويات (2.5%) ومبيعات الفروع (0.5%)
@@ -171,7 +177,8 @@ const state = {
   user: null,
   invoices: [],      // بنود العمولة (فواتير حاويات / مبيعات فروع)
   receipts: [],      // الاستلامات
-  ledger: null,      // null = الرئيسية | 'containers' | 'branches'
+  bank: [],          // حوالات كشف البنك
+  ledger: null,      // null = الرئيسية | 'containers' | 'branches' | 'bank'
   tab: 'statement',  // statement | items | receipts
   from: '', to: '',
   loading: true,
@@ -205,10 +212,13 @@ function periodLabel() {
 // ---------- البيانات ----------
 async function load() {
   state.loading = true; render()
-  const [ci, cr] = await Promise.all([
+  const [ci, cr, bk] = await Promise.all([
     db.from('pa_container_invoices').select('*'),
     db.from('pa_commission_receipts').select('*'),
+    db.from('pa_bank_txns').select('*').range(0, 9999),
   ])
+  // جدول البنك يأتي مع 0012 — قبله تعمل الصفحة بدونه
+  state.bank = bk.error ? [] : bk.data.map((t) => ({ ...t, amount: num(t.amount) }))
   state.loading = false
   const bad = [ci, cr].find((r) => r.error)
   if (bad) { state.error = bad.error.message; return render() }
@@ -235,14 +245,16 @@ function render() {
   const app = $('#app')
   if (state.recovery) return (app.innerHTML = recoveryView())
   if (!state.user) return (app.innerHTML = loginView())
-  const L = state.ledger && LEDGERS[state.ledger]
+  const L = state.ledger && LEDGERS[state.ledger], isBank = state.ledger === 'bank'
+  const back = '<button class="btn ghost" data-act="home" aria-label="رجوع">→</button>'
   app.innerHTML = `<div class="wrap">
     <header class="top">
-      <h1>${L ? `<button class="btn ghost" data-act="home" aria-label="رجوع">→</button>${esc(L.title)} <span class="pill">${pct(L.rate)}</span>` : 'حساباتي'}</h1>
-      ${L ? '' : '<button class="btn ghost small" data-act="logout">خروج</button>'}
+      <h1>${L ? `${back}${esc(L.title)} <span class="pill">${pct(L.rate)}</span>` : isBank ? `${back}تحويلات البنك` : 'حساباتي'}</h1>
+      ${L || isBank ? '' : '<button class="btn ghost small" data-act="logout">خروج</button>'}
     </header>
     ${state.error ? `<div class="card err">${esc(state.error)}</div>` : ''}
-    ${state.loading && !state.invoices.length && !state.receipts.length ? '<div class="empty">جاري التحميل…</div>' : L ? ledgerView(state.ledger) : homeView()}
+    ${state.loading && !state.invoices.length && !state.receipts.length && !state.bank.length ? '<div class="empty">جاري التحميل…</div>'
+      : isBank ? bankView() : L ? ledgerView(state.ledger) : homeView()}
   </div>`
 }
 
@@ -307,7 +319,7 @@ document.addEventListener('click', async (ev) => {
     case 'home': state.ledger = null; return render()
     case 'clearPeriod': state.from = state.to = ''; return render()
     case 'logout': await db.auth.signOut(); return
-    default: ledgerClick(t)
+    default: if (!bankClick(t)) ledgerClick(t)
   }
 })
 
@@ -361,7 +373,7 @@ db.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') { state.recovery = true; state.user = session?.user ?? null; return render() }
   const was = state.user?.id
   state.user = session?.user ?? null
-  if (!state.user) { state.invoices = []; state.receipts = []; state.ledger = null; return render() }
+  if (!state.user) { state.invoices = []; state.receipts = []; state.bank = []; state.ledger = null; return render() }
   if (was !== state.user.id) load()
 })
 db.auth.getSession().then(({ data }) => { if (!data.session) render() })

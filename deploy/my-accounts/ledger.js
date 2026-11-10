@@ -119,9 +119,10 @@ function homeView() {
           <span class="pill" style="align-self:flex-start">${pct(L.rate)}</span>
           <span class="lbl" style="margin-top:6px">الباقي لي</span>
           <span class="big">${money(s[k].closing)}</span>
-          <span class="foot">${s[k].count} ${k === 'containers' ? 'فاتورة' : 'قيد'} · ${s[k].receipts} استلام</span>
+          <span class="foot">${s[k].count} ${k === 'containers' ? 'فاتورة' : 'قيد'}، ${s[k].receipts} استلام</span>
         </button>`).join('')}
     </div>
+    <div class="tiles">${bankTile()}</div>
     ${periodBar()}
     <div class="tiles">
       <button class="tile act" data-act="pdfAll"><span class="ic">📄</span>كشف شامل PDF</button>
@@ -265,7 +266,9 @@ function receiptDialog(k, r) {
     <div class="field"><label>ملاحظة</label><input name="note" value="${esc(r?.note)}"></div>
     ${saveBtns(r)}`, async (f, action) => {
     if (action === 'delete') {
-      if (!confirm('حذف هذا الاستلام؟')) return false
+      if (!confirm(r.bank_txn_id ? 'هذا الاستلام من كشف البنك. حذفه يلغي تصنيف الحوالة. متأكد؟' : 'حذف هذا الاستلام؟')) return false
+      // استلام من البنك: يلغي تصنيف الحوالة فيرجع «بدون تصنيف»
+      if (r.bank_txn_id) await db.from('pa_bank_txns').update({ category: '' }).eq('id', r.bank_txn_id)
       return run(db.from('pa_commission_receipts').delete().eq('id', r.id))
     }
     const row = { ledger: k, amount: num(f.get('amount')), receipt_date: f.get('date'), method: f.get('method'), note: f.get('note').trim() }
