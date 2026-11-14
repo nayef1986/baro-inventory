@@ -1719,12 +1719,14 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     const t = setTimeout(() => setSearchDebounced(searchQuery), 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
-  // بحث جديد = نرجع لأول دفعة
-  useEffect(() => { setSearchVisible(60); }, [searchDebounced, searchSort]);
   const [searchScan, setSearchScan] = useState(false);
   const [searchVisible, setSearchVisible] = useState(60);   // كم بطاقة نرسم
 
   const [searchSort, setSearchSort] = useState("none");  // none | best | worst
+  // بحث جديد = نرجع لأول دفعة
+  // لازم تبقى بعد تعريف searchSort — مصفوفة الاعتماديات تُقرأ أثناء الرسم،
+  // ولو جت قبله يطلع خطأ Cannot access before initialization ويطيح التبويب.
+  useEffect(() => { setSearchVisible(60); }, [searchDebounced, searchSort]);
   const [starred, setStarred] = useState(settings?.starred ?? []);
 
   const toggleStar = async (barcode) => {
