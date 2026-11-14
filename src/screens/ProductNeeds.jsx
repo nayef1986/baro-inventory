@@ -1719,7 +1719,11 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     const t = setTimeout(() => setSearchDebounced(searchQuery), 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
+  // بحث جديد = نرجع لأول دفعة
+  useEffect(() => { setSearchVisible(60); }, [searchDebounced, searchSort]);
   const [searchScan, setSearchScan] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(60);   // كم بطاقة نرسم
+
   const [searchSort, setSearchSort] = useState("none");  // none | best | worst
   const [starred, setStarred] = useState(settings?.starred ?? []);
 
@@ -1739,13 +1743,57 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
     if (onSaveSettings) await onSaveSettings({ ...settings, categories });
   };
 
+  // calcItem تمشي على كل الفترات لكل منتج — غالية.
+  // بدون ذاكرة مؤقتة كانت تتكرر لكل بطاقة وكل مقارنة ترتيب وكل إعادة رسم،
+  // فالبحث بحرف واحد (آلاف النتائج) يجمّد الصفحة ويقفل التبويب.
+  const calcCache = useRef(new Map());
+  useEffect(() => { calcCache.current = new Map(); }, [products, periods]);
+
   const calcItem = (p) => {
+    if (!p?.barcode) return { p, bought:0, sold:0, closing:0, soldPct:0 };
+    const hit = calcCache.current.get(p.barcode);
+    if (hit) return hit;
     const bought  = totalPurchases(p);
     const sold    = soldAllPeriods(p.barcode, periods);
     const closing = Math.max(0, bought - sold);
     const soldPct = bought > 0 ? (sold/bought)*100 : 0;
-    return { p, bought, sold, closing, soldPct };
+    const out = { p, bought, sold, closing, soldPct };
+    calcCache.current.set(p.barcode, out);
+    return out;
   };
+
+  // نتائج البحث — تُحسب مرة عند تغيّر النص أو الترتيب، مو في كل إعادة رسم
+  const searchResults = useMemo(() => {
+    const q = searchDebounced.trim().toLowerCase();
+    if (!q) return [];
+
+    const hit = products.filter(p => {
+      const fac = getFactoryCode(p.barcode);
+      const facName = settings?.factories?.[fac] ?? "";
+      return p.barcode.toLowerCase().includes(q)
+          || arabicIncludes(p.name, searchDebounced)
+          || fac.includes(q)                            // رقم المصنع
+          || arabicIncludes(facName, searchDebounced);  // اسم المصنع
+    });
+
+    if (searchSort === "none" || hit.length < 2) return hit;
+
+    // نحسب نسبة البيع مرة لكل منتج ثم نرتب بالمفتاح.
+    // الحساب داخل المقارنة كان ينادي calcItem مرتين لكل مقارنة
+    // (عشرات الآلاف من النداءات) ويعلّق الصفحة نصف دقيقة.
+    const keyed = hit.map(p => {
+      const x = calcItem(p);
+      return { p, pct: x.bought > 0 ? (x.sold / x.bought) * 100 : null };
+    });
+    keyed.sort((a, b) => {
+      // اللي ما له مشتريات ينزل آخر القائمة دايماً (نسبته غير معروفة)
+      if (a.pct === null && b.pct === null) return 0;
+      if (a.pct === null) return 1;
+      if (b.pct === null) return -1;
+      return searchSort === "best" ? b.pct - a.pct : a.pct - b.pct;
+    });
+    return keyed.map(k => k.p);
+  }, [products, periods, settings, searchDebounced, searchSort]);
 
   const containers = useMemo(() => allContainers(products), [products]);
   const years = useMemo(() => {
@@ -1895,31 +1943,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
 
   if (showSearch) {
     const q = searchDebounced.trim().toLowerCase();
-    let results = q
-      ? products.filter(p => {
-          const fac = getFactoryCode(p.barcode);
-          const facName = settings?.factories?.[fac] ?? "";
-          return p.barcode.toLowerCase().includes(q)
-              || arabicIncludes(p.name, searchDebounced)
-              || fac.includes(q)                        // رقم المصنع
-              || arabicIncludes(facName, searchDebounced);  // اسم المصنع
-        })
-      : [];
-    // فلتر الترتيب: الأفضل مبيعاً أو الأسوأ مبيعاً (حسب نسبة البيع)
-    if (searchSort !== "none" && results.length > 1) {
-      const pctOf = (p) => {
-        const x = calcItem(p);
-        return x.bought > 0 ? (x.sold / x.bought) * 100 : null;  // null = ما له مشتريات
-      };
-      results = [...results].sort((a, b) => {
-        const pa = pctOf(a), pb = pctOf(b);
-        // اللي ما له مشتريات ينزل آخر القائمة دايماً (نسبته غير معروفة)
-        if (pa === null && pb === null) return 0;
-        if (pa === null) return 1;
-        if (pb === null) return -1;
-        return searchSort === "best" ? pb - pa : pa - pb;
-      });
-    }
+    const results = searchResults;
     return (
       <div className="space-y-3">
         {heroViewImg && <ImageViewer src={heroViewImg.src} name={heroViewImg.name} onClose={()=>setHeroViewImg(null)} />}
@@ -1989,7 +2013,7 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
           );
         })()}
         <div className="space-y-2">
-          {results.map(p => {
+          {results.slice(0, searchVisible).map(p => {
             const x = calcItem(p);
             const sell = num(p.sellPrice);
             const whole = num(p.purchases?.slice(-1)[0]?.buyPrice ?? 0);
@@ -2057,6 +2081,12 @@ export default function ProductNeedsScreen({ products = [], periods = [], images
               </div>
             );
           })}
+          {results.length > searchVisible && (
+            <button onClick={()=>setSearchVisible(v=>v+60)}
+              className="w-full bg-slate-700 text-slate-200 py-3 rounded-xl text-sm font-bold">
+              عرض المزيد ({results.length - searchVisible})
+            </button>
+          )}
           {q && results.length === 0 && <div className="text-center text-slate-500 py-12">لا نتائج لـ "{searchQuery}"</div>}
           {!q && <div className="text-center text-slate-500 py-12">اكتب باركود أو اسم، أو امسح 📷</div>}
         </div>
