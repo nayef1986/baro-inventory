@@ -3,6 +3,7 @@
 // عام · الفروع · الزمن · القرار
 // ============================================================
 
+import TimingTab from "./TimingTab.jsx";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { SectionHeader, BackBtn, fmtN, fmtM, fmtPct } from "../components/UI.jsx";
 import { seasonAnalysis, timelineFor } from "../lib/season.js";
@@ -741,6 +742,7 @@ export function SeasonReport({ products = [], settings = {},
     ["branches", "الفروع"],
     ["status",   "الحالة"],
     ["decide",   "القرار"],
+    ["timing",   "التوقيت"],
   ];
 
   const bA = branch ? A.branches.find(b=>b.branch===branch) : null;
@@ -969,6 +971,10 @@ export function SeasonReport({ products = [], settings = {},
           </button>
         ))}
       </div>
+
+      {tab === "timing" && (
+        <TimingTab periods={periods} metric={metric==="profit"?"rev":"qty"} />
+      )}
 
       {/* ══ عام ══ */}
       {tab === "overall" && (
