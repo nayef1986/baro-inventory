@@ -170,6 +170,7 @@ const NAV_ITEMS = [
   { key: "branches",   icon: "🏪", label: "الفروع" },
   { key: "needs",      icon: "🔍", label: "احتياج" },
   { key: "reports",    icon: "📋", label: "تقارير" },
+  { key: "liquidation", icon: "🏷️", label: "تصفية" },
 ];
 
 export const NavBar = memo(({ active, onChange }) => (

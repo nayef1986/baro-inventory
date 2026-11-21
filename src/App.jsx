@@ -16,6 +16,7 @@ import IdeasScreen      from "./screens/Ideas/index.jsx";
 import ProductNeedsScreen from "./screens/ProductNeeds.jsx";
 import ReportsScreen    from "./screens/Reports.jsx";
 import SettingsScreen   from "./screens/Settings.jsx";
+import LiquidationScreen from "./screens/Liquidation.jsx";
 import AIChat           from "./components/AIChat.jsx";
 import { LoadingSpinner, NavBar } from "./components/UI.jsx";
 
@@ -272,6 +273,7 @@ export default function App() {
     needs:      <ProductNeedsScreen products={state.products} periods={state.periods} images={state.images} settings={state.settings} onSaveSettings={handleSaveSettings} />,
     compare:    <CompareScreen     {...screenProps} images={state.images} onSaveImage={handleSaveImage} onRemoveImage={handleRemoveImage} />,
     reports:    <ReportsScreen     {...screenProps} />,
+    liquidation: <LiquidationScreen images={state.images} />,
   };
 
   return (
